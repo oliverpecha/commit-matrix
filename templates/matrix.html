@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}CommitMatrix Telemetry{% endblock %}
+
+{% block content %}
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/matrix.css">
+
+<div id="info-tt"></div>
+<div id="cm-tt"></div>
+
+<div class="cm-wrap">
+  <div class="cm-kpi-row">
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_tot">Total Commits</div><div class="cm-kpi-val" id="cm-kp">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg CIRSD Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_crit">Critical</div><div class="cm-kpi-val cm-kv-crit" id="cm-kc">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_sig">Significant</div><div class="cm-kpi-val cm-kv-sig" id="cm-ks">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_rout">Routine</div><div class="cm-kpi-val cm-kv-rout" id="cm-kr">—</div></div>
+  </div>
+
+  <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);height:240px;">
+    <div class="cm-card">
+      <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="tierDist">Tier Distribution</div></div>
+      <div class="cm-chart-body">
+        <div style="height:150px; width:100%; position:relative;"><canvas id="cm-c-tier"></canvas></div>
+      </div>
+    </div>
+    <div class="cm-card">
+      <div class="cm-card-hd" style="display:flex;justify-content:space-between;">
+        <div class="cm-card-title info-hover" data-key="cirsdAxis">CIRSD Axis Breakdown</div>
+        <button class="cm-fbtn" id="btn-stack" data-action="toggleChron" data-target="stack">📅 Temporal</button>
+      </div>
+      <div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div>
+    </div>
+    <div class="cm-card">
+      <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="commitTypes">Commit Types</div></div>
+      <div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div>
+    </div>
+  </div>
+
+  <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:260px;">
+    <div class="cm-card">
+      <div class="cm-card-hd" style="display:flex;justify-content:space-between;">
+        <div class="cm-card-title info-hover" data-key="scoreTrend">Score Trend</div>
+        <div style="display:flex;gap:12px;">
+          <button class="cm-fbtn active info-hover" id="btn-trend-avg" data-action="cycleAvg" data-target="trend">📊 Avg: Daily Peak</button>
+          <button class="cm-fbtn active" id="btn-trend" data-action="toggleChron" data-target="trend">📅 Temporal</button>
+        </div>
+      </div>
+      <div class="cm-chart-body"><canvas id="cm-c-trend"></canvas></div>
+    </div>
+    <div class="cm-card">
+      <div class="cm-card-hd" style="display:flex;justify-content:space-between;">
+        <div class="cm-card-title info-hover" data-key="heatmap">Service Touch Heatmap</div>
+        <button class="cm-fbtn" id="btn-heat" data-action="toggleChron" data-target="heat">📅 Temporal</button>
+      </div>
+      <div id="cm-heat-body" style="flex:1;position:relative;overflow:hidden;">
+        <svg id="cm-heat-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;"></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cm-card" style="flex:none">
+    <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="table_all">Architectural Ledger</div></div>
+    <div class="cm-tbl-wrap">
+      <table id="cm-table">
+        <thead id="cm-thead"></thead>
+        <tbody id="cm-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.MATRIX_PAYLOAD = {{ commits_data | default('[]', true) | safe }};
+</script>
+<script type="module" src="/static/js/app.js"></script>
+{% endblock %}

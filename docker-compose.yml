@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  commit-matrix:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: commit-matrix-core
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MATRIX_TOKEN=mochi
+      - TZ=Europe/Madrid
+      - LANG=es_ES.UTF-8
+    volumes:
+      - ./data:/app/data:ro
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
