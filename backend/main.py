@@ -1,6 +1,4 @@
-import os
-import csv
-import json
+import os, csv, json
 from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -11,30 +9,31 @@ app = FastAPI(title="CommitMatrix Telemetry")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+# Pulls securely from the .env file
 METRICS_KEY = os.environ.get("MATRIX_TOKEN", "mochi")
 
-def safe_int(val, fallback=0):
-    try: return int(float(val))
-    except: return fallback
-
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, repo: str = "commit-matrix", token: str = None):
+async def dashboard_home(request: Request, repo: str = "example-repo", token: str = None):
     if token != METRICS_KEY:
         return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
     
     commits = []
-    # DYNAMIC REPO ROUTING
+    # Dynamically routes to the requested repository's ledger
     csv_path = f"/app/data/{repo}/matrix_ledger.csv"
             
     if not os.path.exists(csv_path):
-        print(f"MATRIX SYSTEM WARNING: {csv_path} not found.")
+        print(f"MATRIX WARNING: {csv_path} not found.")
     else:
+        def safe_int(val):
+            try: return int(float(val))
+            except: return 0
+        
         try:
             with open(csv_path, "r", encoding="utf-8-sig", errors="replace") as f:
                 reader = csv.DictReader(f)
                 for idx, row in enumerate(reader):
-                    if row.get("map_type") == "dropped" or not row.get("hash_new"):
-                        continue
+                    if row.get("map_type") == "dropped" or not row.get("hash_new"): continue
+                    
                     date_str = (row.get("author_date") or "").strip()
                     ts = 0
                     if date_str:
@@ -42,8 +41,8 @@ async def dashboard(request: Request, repo: str = "commit-matrix", token: str = 
                             try:
                                 ts = int(datetime.strptime(date_str, fmt).timestamp())
                                 break
-                            except ValueError: continue
-
+                            except: continue
+                            
                     h = row.get("hash_new") or row.get("hash_short") or ""
                     s = row.get("subject_v2") or row.get("subject_v1") or ""
                     tier_raw = (row.get("tier") or "Routine").strip()
@@ -51,19 +50,12 @@ async def dashboard(request: Request, repo: str = "commit-matrix", token: str = 
                     
                     commits.append({
                         "n": safe_int(row.get("new_order", idx + 1)),
-                        "h": h.strip()[:7],
-                        "s": s.strip(),
-                        "fc": safe_int(row.get("files_changed_exact")),
-                        "la": safe_int(row.get("lines_added_exact")),
-                        "ld": safe_int(row.get("lines_deleted_exact")),
-                        "C": safe_int(row.get("C_complexity")),
-                        "I": safe_int(row.get("I_impact")),
-                        "R": safe_int(row.get("R_risk")),
-                        "S": safe_int(row.get("S_scope")),
-                        "D": safe_int(row.get("D_doc_quality")),
-                        "tot": safe_int(row.get("total_score")),
-                        "tier": tier,
-                        "ts": ts,
+                        "h": h.strip()[:7], "s": s.strip(),
+                        "C": safe_int(row.get("C_complexity")), "I": safe_int(row.get("I_impact")),
+                        "R": safe_int(row.get("R_risk")), "S": safe_int(row.get("S_scope")),
+                        "D": safe_int(row.get("D_doc_quality")), "tot": safe_int(row.get("total_score")),
+                        "la": safe_int(row.get("lines_added_exact")), "ld": safe_int(row.get("lines_deleted_exact")),
+                        "tier": tier, "ts": ts,
                         "t_proxy": row.get("touches_proxy") == "True",
                         "t_scripts": row.get("touches_scripts") == "True",
                         "t_config": row.get("touches_config") == "True",
@@ -74,7 +66,7 @@ async def dashboard(request: Request, repo: str = "commit-matrix", token: str = 
                         "t_metrics": row.get("touches_metrics") == "True",
                         "t_core": row.get("touches_critical") == "True"
                     })
-        except Exception as e:
-            print(f"MATRIX SYSTEM ERROR: {e}")
-        
-    return templates.TemplateResponse("matrix.html", {"request": request, "token": token, "repo": repo, "commits_data": json.dumps(commits)})
+        except Exception as e: 
+            print(f"MATRIX PARSER ERROR: {e}")
+    
+    return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": json.dumps(commits)})
