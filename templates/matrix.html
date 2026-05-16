@@ -1,14 +1,17 @@
 {% extends "layout.html" %}
 {% block title %}CommitMatrix Telemetry{% endblock %}
-
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/static/css/matrix.css">
-
-<div id="info-tt"></div>
-<div id="cm-tt"></div>
-
+<style>
+  .info-hover{cursor:help;border-bottom:1px dotted rgba(255,255,255,0.4);transition:color 0.15s;} .info-hover:hover{color:#fff;border-color:rgba(255,255,255,0.8);}
+  #cm-tt{position:fixed;background:rgba(20,20,18,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px;pointer-events:none;z-index:9999;opacity:0;transition:opacity 0.2s;font-family:'Satoshi',sans-serif;box-shadow:0 8px 24px rgba(0,0,0,0.6);transform:translate(-50%,-110%);min-width:200px;}
+  #cm-tt.visible{opacity:1;} .cm-tt-hd{font-size:12px;font-weight:700;color:#d9d8d5;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;display:flex;gap:6px;}
+  .cm-tt-bd{display:flex;flex-direction:column;gap:6px;font-size:11px;} .cm-tt-row{display:flex;align-items:center;gap:10px;} .cm-tt-val{font-weight:700;color:#fff;}
+  .cm-tt-subj{font-size:11px;color:#9e9e9e;border-top:1px solid rgba(255,255,255,0.06);margin-top:8px;padding-top:8px;max-width:250px;}
+</style>
+<div id="info-tt"></div><div id="cm-tt"></div>
 <div class="cm-wrap">
   <div class="cm-kpi-row">
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_tot">Total Commits</div><div class="cm-kpi-val" id="cm-kp">—</div></div>
@@ -17,64 +20,25 @@
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_sig">Significant</div><div class="cm-kpi-val cm-kv-sig" id="cm-ks">—</div></div>
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_rout">Routine</div><div class="cm-kpi-val cm-kv-rout" id="cm-kr">—</div></div>
   </div>
-
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);height:240px;">
-    <div class="cm-card">
-      <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="tierDist">Tier Distribution</div></div>
-      <div class="cm-chart-body">
-        <div style="height:150px; width:100%; position:relative;"><canvas id="cm-c-tier"></canvas></div>
-      </div>
-    </div>
-    <div class="cm-card">
-      <div class="cm-card-hd" style="display:flex;justify-content:space-between;">
-        <div class="cm-card-title info-hover" data-key="cirsdAxis">CIRSD Axis Breakdown</div>
-        <button class="cm-fbtn" id="btn-stack" data-action="toggleChron" data-target="stack">📅 Temporal</button>
-      </div>
-      <div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div>
-    </div>
-    <div class="cm-card">
-      <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="commitTypes">Commit Types</div></div>
-      <div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div>
-    </div>
+    <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Tier Distribution</div></div><div class="cm-chart-body"><canvas id="cm-c-tier"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">CIRSD Axis Breakdown</div><button class="cm-fbtn" data-action="toggleChron" data-target="stack">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Commit Types</div></div><div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div></div>
   </div>
-
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:260px;">
-    <div class="cm-card">
-      <div class="cm-card-hd" style="display:flex;justify-content:space-between;">
-        <div class="cm-card-title info-hover" data-key="scoreTrend">Score Trend</div>
-        <div style="display:flex;gap:12px;">
-          <button class="cm-fbtn active info-hover" id="btn-trend-avg" data-action="cycleAvg" data-target="trend">📊 Avg: Daily Peak</button>
-          <button class="cm-fbtn active" id="btn-trend" data-action="toggleChron" data-target="trend">📅 Temporal</button>
-        </div>
-      </div>
-      <div class="cm-chart-body"><canvas id="cm-c-trend"></canvas></div>
-    </div>
-    <div class="cm-card">
-      <div class="cm-card-hd" style="display:flex;justify-content:space-between;">
-        <div class="cm-card-title info-hover" data-key="heatmap">Service Touch Heatmap</div>
-        <button class="cm-fbtn" id="btn-heat" data-action="toggleChron" data-target="heat">📅 Temporal</button>
-      </div>
-      <div id="cm-heat-body" style="flex:1;position:relative;overflow:hidden;">
-        <svg id="cm-heat-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;"></svg>
-      </div>
-    </div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Score Trend</div><div style="display:flex;gap:8px;"><button class="cm-fbtn active" data-action="cycleAvg" data-target="trend">📊 Avg: Daily Peak</button><button class="cm-fbtn" data-action="toggleChron" data-target="trend">📅 Temporal</button></div></div><div class="cm-chart-body"><canvas id="cm-c-trend"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Service Heatmap</div><button class="cm-fbtn" data-action="toggleChron" data-target="heat">📅 Temporal</button></div><div id="cm-heat-body" style="flex:1;position:relative;overflow:hidden;"><svg id="cm-heat-svg" style="position:absolute;width:100%;height:100%;"></svg></div></div>
   </div>
-
-  <div class="cm-card" style="flex:none">
-    <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="table_all">Architectural Ledger</div></div>
-    <div class="cm-tbl-wrap">
-      <table id="cm-table">
-        <thead id="cm-thead"></thead>
-        <tbody id="cm-tbody"></tbody>
-      </table>
-    </div>
+  <div class="cm-row" style="grid-template-columns:repeat(4, minmax(0,1fr));height:240px;">
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Fragility Index</div><button class="cm-fbtn" data-action="toggleChron" data-target="frag">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-frag"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Churn Rate</div><button class="cm-fbtn" data-action="toggleChron" data-target="churn">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-churn"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Blast Radius</div><button class="cm-fbtn" data-action="toggleChron" data-target="blast">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-blast"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Risk Convergence</div><button class="cm-fbtn" data-action="toggleChron" data-target="conv">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-conv"></canvas></div></div>
   </div>
+  <div class="cm-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table></div></div>
 </div>
 {% endblock %}
-
 {% block scripts %}
-<script>
-  window.MATRIX_PAYLOAD = {{ commits_data | default('[]', true) | safe }};
-</script>
-<script type="module" src="/static/js/app.js"></script>
+<script>window.MATRIX_PAYLOAD = {{ commits_data | default('[]', true) | safe }};</script>
+<script type="module" src="/static/js/app.js?v=999"></script>
 {% endblock %}

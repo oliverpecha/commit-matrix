@@ -18,12 +18,13 @@ def safe_int(val, fallback=0):
     except: return fallback
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = None):
+async def dashboard(request: Request, repo: str = "commit-matrix", token: str = None):
     if token != METRICS_KEY:
         return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
     
     commits = []
-    csv_path = "/app/data/commit_pulse/beo_git_commits_clean.csv"
+    # DYNAMIC REPO ROUTING
+    csv_path = f"/app/data/{repo}/matrix_ledger.csv"
             
     if not os.path.exists(csv_path):
         print(f"MATRIX SYSTEM WARNING: {csv_path} not found.")
@@ -76,4 +77,4 @@ async def dashboard(request: Request, token: str = None):
         except Exception as e:
             print(f"MATRIX SYSTEM ERROR: {e}")
         
-    return templates.TemplateResponse("matrix.html", {"request": request, "token": token, "commits_data": json.dumps(commits)})
+    return templates.TemplateResponse("matrix.html", {"request": request, "token": token, "repo": repo, "commits_data": json.dumps(commits)})

@@ -1,55 +1,30 @@
-import { processCommits } from './core/dataEngine.js';
-import { initGlobalTooltips } from './ui/tooltips.js';
-import { renderTable } from './ui/tableCtrl.js';
-import { renderTypesChart, renderStackChart, renderTrendChart } from './charts/chartCtrl.js';
-import { renderHeatmap } from './ui/heatmap.js';
-import { CM_COLORS } from './core/constants.js';
+import { processCommits } from './core/dataEngine.js?v=2';
+import { renderTable } from './ui/tableCtrl.js?v=2';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart } from './charts/chartCtrl.js?v=2';
+import { renderHeatmap } from './ui/heatmap.js?v=2';
+import { UI_STATE, AVG_NAMES } from './core/state.js?v=2';
 
 document.addEventListener('DOMContentLoaded', () => {
-    const rawCommits = window.MATRIX_PAYLOAD || [];
-    const processed = processCommits(rawCommits);
+    const p = processCommits(window.MATRIX_PAYLOAD || []);
+    if (p.length > 0) {
+        try {
+            document.getElementById('cm-kp').textContent = p.length;
+            document.getElementById('cm-ka').textContent = (p.reduce((a, c) => a + c.tot, 0) / p.length).toFixed(1);
+            document.getElementById('cm-kc').textContent = p.filter(c => c.tier === 'Critical').length;
+            document.getElementById('cm-ks').textContent = p.filter(c => c.tier === 'Significant').length;
+            document.getElementById('cm-kr').textContent = p.filter(c => c.tier === 'Routine').length;
+        } catch(e){}
 
-    if (processed.length > 0) {
-        // Render KPIs
-        document.getElementById('cm-kp').textContent = processed.length;
-        document.getElementById('cm-ka').textContent = (processed.reduce((a, c) => a + c.tot, 0) / processed.length).toFixed(1);
-        document.getElementById('cm-kc').textContent = processed.filter(c => c.tier === 'Critical').length;
-        document.getElementById('cm-ks').textContent = processed.filter(c => c.tier === 'Significant').length;
-        document.getElementById('cm-kr').textContent = processed.filter(c => c.tier === 'Routine').length;
+        renderTable(p);
+        const boot = () => { renderTypesChart(p); renderStackChart(p); renderTrendChart(p); renderAnalytics(p); renderConvergenceChart(p); renderHeatmap(p); };
+        requestAnimationFrame(() => requestAnimationFrame(boot));
 
-        // Render Base UI
-        initGlobalTooltips();
-        renderTable(processed);
-
-        // Render Charts & Vis
-        renderTypesChart(processed);
-        renderStackChart(processed);
-        renderTrendChart(processed);
-        
-        // Heatmap needs a slight delay to ensure the container is fully painted
-        setTimeout(() => renderHeatmap(processed), 100);
-
-        // Tier Doughnut
-        const tierCtx = document.getElementById('cm-c-tier');
-        if (tierCtx) {
-            new Chart(tierCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Critical', 'Significant', 'Routine'],
-                    datasets: [{
-                        data: [
-                            processed.filter(c => c.tier === 'Critical').length,
-                            processed.filter(c => c.tier === 'Significant').length,
-                            processed.filter(c => c.tier === 'Routine').length
-                        ],
-                        backgroundColor: [CM_COLORS.Critical, CM_COLORS.Significant, CM_COLORS.Routine],
-                        borderWidth: 2, borderColor: '#1e1d1b'
-                    }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
-            });
-        }
+        document.querySelectorAll('[data-action="toggleChron"]').forEach(b => b.addEventListener('click', e => {
+            const t = e.target.dataset.target; UI_STATE[t] = !UI_STATE[t]; e.target.classList.toggle('active', UI_STATE[t]); boot(); 
+        }));
+        document.querySelectorAll('[data-action="cycleAvg"]').forEach(b => b.addEventListener('click', e => {
+            const t = e.target.dataset.target; const k = t === 'trend' ? 'avgTrend' : 'avg' + t.charAt(0).toUpperCase() + t.slice(1);
+            UI_STATE[k] = (UI_STATE[k] + 1) % 6; e.target.textContent = `📊 Avg: ${AVG_NAMES[UI_STATE[k]]}`; e.target.classList.toggle('active', UI_STATE[k] !== 0); boot();
+        }));
     }
-    
-    console.log("⚡ CommitMatrix Engine: All visualization modules online.");
 });
