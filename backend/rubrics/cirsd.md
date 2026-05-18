@@ -9,7 +9,7 @@ Score the commit strictly across these five dimensions:
 
 Determine the Tier: "Critical" (Score 12-15), "Significant" (Score 8-11), or "Routine" (Score < 8). Calculate touched services (boolean) based on the architecture. You must respond STRICTLY in valid JSON. Do not include markdown formatting.
 {
-  "C": 2, "I": 3, "R": 1, "S": 2, "D": 2, "tot": 10, "tier": "Significant",
+  "C": 2, "I": 3, "R": 1, "S": 2, "D": 2, "tot": 10, "score_pct": 66.7, "tier": "Significant", "score_pct": 66.7,
   "touches_proxy": false, "touches_scripts": true, "touches_config": false,
   "touches_dashboard": false, "touches_docs": false, "touches_tests": false,
   "touches_preflight": false, "touches_metrics": false, "touches_critical": false

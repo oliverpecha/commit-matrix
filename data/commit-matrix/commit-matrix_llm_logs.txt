@@ -1,0 +1,595 @@
+
+[2026-05-18 14:18:43] [ARCHITECTURE_MAP_GENERATED]
+Map rebuilt.
+
+# Architecture Overview: Commit Matrix System
+
+## 1. System Overview
+The repository defines a client-server web application (likely named "Commit Matrix") designed to parse, analyze, and visualize structured data (presumably Git commits based on repository artifacts). It utilizes a Python-based backend for data processing/serving and a modular JavaScript frontend for stateful data visualization. 
+
+## 2. Core Modules
+
+### 2.1. Backend API & Processing Engine (`/backend`)
+*   **API Gateway/Router (`main.py`)**: The primary entry point for the backend service (likely Flask or FastAPI). Handles HTTP requests, static file routing, and serves base HTML templates.
+*   **Parsing Engine (`parser.py`)**: The core business logic module responsible for ingesting raw data, applying transformations, and formatting it for frontend consumption.
+*   **Business Rules/Rubrics (`rubrics/cirsd.md`)**: Externalized markdown-based rules or configurations used by the parser to categorize or evaluate data.
+
+### 2.2. Frontend Visualization Client (`/static`, `/templates`)
+*   **Core State & Data Management (`js/core/`)**:
+    *   `dataEngine.js`: Handles fetching, filtering, and transforming backend data payloads for UI consumption.
+    *   `state.js`: Centralized state management for the client session.
+    *   `constants.js`: Shared immutable application configurations.
+*   **Visualization Layer (`js/charts/`)**: Encapsulates graphing logic (`chartCtrl.js`) and third-party graphing integrations/extensions (`plugins.js`).
+*   **UI Components (`js/ui/`)**: Distinct presentation controllers for specific layout domains, including `heatmap.js`, `tableCtrl.js`, and contextual `tooltips.js`.
+*   **View Templates (`/templates`)**: Server-side injected base layouts (`layout.html`, `matrix.html`) that bootstrap the JavaScript application.
+
+### 2.3. Orchestration & Deployment (`/`)
+*   **Containerization (`docker-compose.yml`, `backend/Dockerfile`)**: Defines the infrastructure topology, networking, and volume bindings for local and deployed environments.
+*   **Lifecycle Scripts (`install.sh`, `uninstall.sh`)**: Imperative setup and teardown routines for host-level configuration.
+
+---
+
+## 3. Architectural Coupling
+
+*   **Client-Server Coupling (Moderate)**: The frontend and backend are decoupled at the data tier (communicating presumably via JSON over REST/HTTP), but are temporally coupled at the presentation tier since `main.py` likely serves the base Jinja/HTML files from `/templates`. 
+*   **Frontend Data-to-View Coupling (Loose)**: The UI components (`charts/`, `ui/`) subscribe to or read from the `core/state.js` and `core/dataEngine.js`. This unidirectional data flow pattern isolates view logic from data retrieval.
+*   **Backend Ingestion Coupling (Tight)**: `main.py` is tightly coupled to `parser.py`. The API layer acts as a direct proxy for the parser's output, meaning parser schema changes directly mutate the API contract.
+
+---
+
+## 4. Systemic Blast Radius
+
+### High Blast Radius
+*   **`backend/parser.py`**: Changes to the data structures generated here will cascade across the entire system. A schema mutation will break the API contract, causing cascading failures in `dataEngine.js`, `state.js`, and all downstream visualizations.
+*   **`static/js/core/state.js` & `dataEngine.js`**: Modifying state lifecycle or data transformation logic risks bringing down the entire frontend SPA, as all UI modules depend on these singletons.
+*   **`docker-compose.yml` & `.env`**: Infrastructure changes affect system availability, port bindings, and service discovery.
+
+### Medium Blast Radius
+*   **`backend/main.py`**: Changes to route definitions or middleware affect client-server connectivity. Bugs here result in localized 404/500 errors preventing specific views from loading.
+*   **`templates/layout.html`**: Altering the DOM structure, script load order, or CSS injection will affect the foundational rendering of all pages inheriting this layout.
+
+### Low Blast Radius
+*   **Specific UI Controllers (e.g., `heatmap.js`, `tableCtrl.js`)**: Isolated presentation logic. A bug in the heatmap will generally not corrupt the state or crash the table view, provided state immutability is respected.
+*   **`static/css/matrix.css`**: Purely aesthetic impact. Visual regressions are constrained to the browser's rendering engine without halting application logic.
+------------------------------------------------------------
+
+[2026-05-18 14:18:59] [LLM_SCORING_PAYLOAD | 6787906]
+--- SYSTEM ---
+# CommitMatrix Telemetry: CIRSD Scoring Engine
+You are the CommitMatrix Telemetry Engine. Analyze the provided `git diff` using the provided `ARCHITECTURE CONTEXT`. 
+Score the commit strictly across these five dimensions:
+* **[C] Complexity (1-3):** Logical branching, cyclomatic depth, and technical debt introduced.
+* **[I] Impact (1-3):** The breadth of the systemic functional effect and value delivered.
+* **[R] Risk (1-3):** The danger of regressions, breakages, or security vulnerabilities.
+* **[S] Scope (1-3):** The surface area of unique sub-services and modules touched.
+* **[D] Documentation (1-3):** The mitigating delta between code changes and inline comments/tests.
+
+Determine the Tier: "Critical" (Score 12-15), "Significant" (Score 8-11), or "Routine" (Score < 8). Calculate touched services (boolean) based on the architecture. You must respond STRICTLY in valid JSON. Do not include markdown formatting.
+{
+  "C": 2, "I": 3, "R": 1, "S": 2, "D": 2, "tot": 10, "tier": "Significant",
+  "touches_proxy": false, "touches_scripts": true, "touches_config": false,
+  "touches_dashboard": false, "touches_docs": false, "touches_tests": false,
+  "touches_preflight": false, "touches_metrics": false, "touches_critical": false
+}
+
+
+--- USER ---
+ARCHITECTURE CONTEXT:
+# Architecture Overview: Commit Matrix System
+
+## 1. System Overview
+The repository defines a client-server web application (likely named "Commit Matrix") designed to parse, analyze, and visualize structured data (presumably Git commits based on repository artifacts). It utilizes a Python-based backend for data processing/serving and a modular JavaScript frontend for stateful data visualization. 
+
+## 2. Core Modules
+
+### 2.1. Backend API & Processing Engine (`/backend`)
+*   **API Gateway/Router (`main.py`)**: The primary entry point for the backend service (likely Flask or FastAPI). Handles HTTP requests, static file routing, and serves base HTML templates.
+*   **Parsing Engine (`parser.py`)**: The core business logic module responsible for ingesting raw data, applying transformations, and formatting it for frontend consumption.
+*   **Business Rules/Rubrics (`rubrics/cirsd.md`)**: Externalized markdown-based rules or configurations used by the parser to categorize or evaluate data.
+
+### 2.2. Frontend Visualization Client (`/static`, `/templates`)
+*   **Core State & Data Management (`js/core/`)**:
+    *   `dataEngine.js`: Handles fetching, filtering, and transforming backend data payloads for UI consumption.
+    *   `state.js`: Centralized state management for the client session.
+    *   `constants.js`: Shared immutable application configurations.
+*   **Visualization Layer (`js/charts/`)**: Encapsulates graphing logic (`chartCtrl.js`) and third-party graphing integrations/extensions (`plugins.js`).
+*   **UI Components (`js/ui/`)**: Distinct presentation controllers for specific layout domains, including `heatmap.js`, `tableCtrl.js`, and contextual `tooltips.js`.
+*   **View Templates (`/templates`)**: Server-side injected base layouts (`layout.html`, `matrix.html`) that bootstrap the JavaScript application.
+
+### 2.3. Orchestration & Deployment (`/`)
+*   **Containerization (`docker-compose.yml`, `backend/Dockerfile`)**: Defines the infrastructure topology, networking, and volume bindings for local and deployed environments.
+*   **Lifecycle Scripts (`install.sh`, `uninstall.sh`)**: Imperative setup and teardown routines for host-level configuration.
+
+---
+
+## 3. Architectural Coupling
+
+*   **Client-Server Coupling (Moderate)**: The frontend and backend are decoupled at the data tier (communicating presumably via JSON over REST/HTTP), but are temporally coupled at the presentation tier since `main.py` likely serves the base Jinja/HTML files from `/templates`. 
+*   **Frontend Data-to-View Coupling (Loose)**: The UI components (`charts/`, `ui/`) subscribe to or read from the `core/state.js` and `core/dataEngine.js`. This unidirectional data flow pattern isolates view logic from data retrieval.
+*   **Backend Ingestion Coupling (Tight)**: `main.py` is tightly coupled to `parser.py`. The API layer acts as a direct proxy for the parser's output, meaning parser schema changes directly mutate the API contract.
+
+---
+
+## 4. Systemic Blast Radius
+
+### High Blast Radius
+*   **`backend/parser.py`**: Changes to the data structures generated here will cascade across the entire system. A schema mutation will break the API contract, causing cascading failures in `dataEngine.js`, `state.js`, and all downstream visualizations.
+*   **`static/js/core/state.js` & `dataEngine.js`**: Modifying state lifecycle or data transformation logic risks bringing down the entire frontend SPA, as all UI modules depend on these singletons.
+*   **`docker-compose.yml` & `.env`**: Infrastructure changes affect system availability, port bindings, and service discovery.
+
+### Medium Blast Radius
+*   **`backend/main.py`**: Changes to route definitions or middleware affect client-server connectivity. Bugs here result in localized 404/500 errors preventing specific views from loading.
+*   **`templates/layout.html`**: Altering the DOM structure, script load order, or CSS injection will affect the foundational rendering of all pages inheriting this layout.
+
+### Low Blast Radius
+*   **Specific UI Controllers (e.g., `heatmap.js`, `tableCtrl.js`)**: Isolated presentation logic. A bug in the heatmap will generally not corrupt the state or crash the table view, provided state immutability is respected.
+*   **`static/css/matrix.css`**: Purely aesthetic impact. Visual regressions are constrained to the browser's rendering engine without halting application logic.
+
+GIT DIFF:
+diff --git a/.env.example b/.env.example
+index a732f44..42e3fbf 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,4 +1,3 @@
+ # CommitMatrix Security Configuration
+ # Copy this file to .env and replace the token with a secure password
+-
+ MATRIX_TOKEN=your_secure_token_here
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..4c49bd7
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1 @@
++.env
+diff --git a/README.md b/README.md
+index 5197426..bc62455 100644
+--- a/README.md
++++ b/README.md
+@@ -2,53 +2,20 @@
+ 
+ **Architectural telemetry and systemic risk scoring for Git repositories.**
+ 
+-Stop measuring developer velocity by counting lines of code. CommitMatrix is a lightweight, high-performance telemetry engine that converts raw Git history into an interactive flight console. It exposes technical debt, visualizes architectural coupling, and highlights dangerous codebase mutations before they reach production.
+-
+----
+-
+-## 🧠 The CIRSD Framework
+-
+-CommitMatrix abandons raw line counts in favor of the **CIRSD** scoring algorithm. Every commit is evaluated across five dimensions, yielding a maximum score of 15 points:
+-
+-* **[ C ] Complexity (1-3):** Measures logical branching and cyclomatic depth. High complexity without high impact is technical debt.
+-* **[ I ] Impact (1-3):** The breadth of the systemic functional effect. The actual value delivered to the codebase.
+-* **[ R ] Risk (1-3):** The danger of regressions or catastrophic breakages.
+-* **[ S ] Scope (1-3):** The surface area of unique sub-services and modules touched. Massive scope demands integration testing.
+-* **[ D ] Documentation (1-3):** The mitigating factor. The delta between code changes and inline comments/tests.
+-
+-By cross-referencing these axes, CommitMatrix extracts advanced telemetry:
+-* **Fragility Index:** `(Complexity + Risk) / Documentation` (Highlights unmitigated danger)
+-* **Churn Rate:** `Complexity / Impact` (Highlights over-engineering and wasted energy)
+-* **Blast Radius:** `Scope × Risk` (The QA Siren)
+-
+-## 🚀 Features
+-
+-* **Systemic Risk Convergence:** An algorithmic overlay that flags "Convergence Nodes"—commits that simultaneously trigger the worst 25% of Fragility, Churn, and Blast Radius metrics.
+-* **Decoupled ES6 Frontend:** A blazing fast, dependency-free UI utilizing native Canvas and SVG rendering. 
+-* **Service Touch Heatmaps:** Visually detect tight architectural coupling by tracking which sub-services are touched chronologically.
+-* **Temporal & Averaging Modes:** Cycle between Daily Peak, Trailing Averages, and Volume-Weighted scoring algorithms to expose different development patterns.
++Stop measuring developer velocity by counting lines of code. CommitMatrix is a lightweight, high-performance telemetry engine that converts raw Git history into an interactive flight console.
+ 
+ ## ⚙️ 1-Minute Quickstart
+-
+-CommitMatrix is packaged as a zero-configuration Docker container. 
+-
+-1. **Clone the repository:**
++1. **Clone & Configure**
+    ```bash
+    git clone [https://github.com/yourusername/commit-matrix.git](https://github.com/yourusername/commit-matrix.git)
+    cd commit-matrix
+-Secure your environment:
++   cp .env.example .env
++Install
+ 
+ Bash
+-cp .env.example .env
+-# Edit .env to set your MATRIX_TOKEN
+-Boot the engine:
+-
+-Bash
+-docker compose up -d
+-Access the console:
+-Open your browser and navigate to http://localhost:8000/?repo=example-repo&token=your_secure_token_here.
+-
+-📂 Data Structure
+-CommitMatrix expects a matrix_ledger.csv file located in data/{repo_name}/. The Python FastAPI backend dynamically routes to the correct ledger based on the URL parameter, allowing you to monitor multiple repositories from a single dashboard instance.
++./install.sh
++Analyze
++Navigate to any Git repository on your machine and simply type: commit-matrix
+ 
+-Built for engineers who care about the blast radius.
++📂 Data Structure (Multi-Repo Tracking)
++CommitMatrix allows you to monitor an unlimited number of repositories from a single dashboard instance. The Python backend dynamically routes data based on the URL parameter. To view a tracked repository, access the dashboard at: /?repo=your-repo-name&token=YOUR_TOKEN.
+diff --git a/backend/Dockerfile b/backend/Dockerfile
+index 11753af..83a7628 100644
+--- a/backend/Dockerfile
++++ b/backend/Dockerfile
+@@ -1,16 +1,9 @@
+ FROM python:3.11-slim
+-
+ WORKDIR /app
+-
+-# Install dependencies layer
+ COPY backend/requirements.txt .
+ RUN pip install --no-cache-dir -r requirements.txt
+-
+-# Copy the core architecture
+ COPY backend/main.py ./backend/
+ COPY templates/ ./templates/
+ COPY static/ ./static/
+-
+-# Expose the port and boot the worker
+ EXPOSE 8000
+ CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+diff --git a/backend/main.py b/backend/main.py
+index ec0b2d9..bb2f1d3 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -9,64 +9,40 @@ app = FastAPI(title="CommitMatrix Telemetry")
+ app.mount("/static", StaticFiles(directory="static"), name="static")
+ templates = Jinja2Templates(directory="templates")
+ 
+-# Pulls securely from the .env file
+ METRICS_KEY = os.environ.get("MATRIX_TOKEN", "mochi")
+ 
+ @app.get("/", response_class=HTMLResponse)
+-async def dashboard_home(request: Request, repo: str = "example-repo", token: str = None):
+-    if token != METRICS_KEY:
+-        return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
++async def dashboard_home(request: Request, repo: str = "example-repo", token: str = None, rubric: str = "cirsd"):
++    if token != METRICS_KEY: return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
+     
+     commits = []
+-    # Dynamically routes to the requested repository's ledger
+-    csv_path = f"/app/data/{repo}/matrix_ledger.csv"
++    csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
+             
+-    if not os.path.exists(csv_path):
+-        print(f"MATRIX WARNING: {csv_path} not found.")
++    if not os.path.exists(csv_path): print(f"MATRIX WARNING: {csv_path} not found.")
+     else:
+-        def safe_int(val):
+-            try: return int(float(val))
+-            except: return 0
+-        
+         try:
+             with open(csv_path, "r", encoding="utf-8-sig", errors="replace") as f:
+                 reader = csv.DictReader(f)
+                 for idx, row in enumerate(reader):
+-                    if row.get("map_type") == "dropped" or not row.get("hash_new"): continue
+-                    
+-                    date_str = (row.get("author_date") or "").strip()
++                    if not row.get("hash_short"): continue
++                    commit_data = {}
++                    for key, val in row.items():
++                        if val == "True": commit_data[key] = True
++                        elif val == "False": commit_data[key] = False
++                        else:
++                            try: commit_data[key] = int(float(val))
++                            except: commit_data[key] = val.strip() if val else ""
++                    commit_data["n"] = idx + 1
++                    commit_data["h"] = commit_data.get("hash_short", "")
++                    commit_data["s"] = commit_data.get("subject", "")
++                    date_str = commit_data.get("author_date", "")
+                     ts = 0
+                     if date_str:
+                         for fmt in ["%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z"]:
+-                            try:
+-                                ts = int(datetime.strptime(date_str, fmt).timestamp())
+-                                break
++                            try: ts = int(datetime.strptime(date_str, fmt).timestamp()); break
+                             except: continue
+-                            
+-                    h = row.get("hash_new") or row.get("hash_short") or ""
+-                    s = row.get("subject_v2") or row.get("subject_v1") or ""
+-                    tier_raw = (row.get("tier") or "Routine").strip()
+-                    tier = tier_raw.split(" ")[-1] if " " in tier_raw else tier_raw
+-                    
+-                    commits.append({
+-                        "n": safe_int(row.get("new_order", idx + 1)),
+-                        "h": h.strip()[:7], "s": s.strip(),
+-                        "C": safe_int(row.get("C_complexity")), "I": safe_int(row.get("I_impact")),
+-                        "R": safe_int(row.get("R_risk")), "S": safe_int(row.get("S_scope")),
+-                        "D": safe_int(row.get("D_doc_quality")), "tot": safe_int(row.get("total_score")),
+-                        "la": safe_int(row.get("lines_added_exact")), "ld": safe_int(row.get("lines_deleted_exact")),
+-                        "tier": tier, "ts": ts,
+-                        "t_proxy": row.get("touches_proxy") == "True",
+-                        "t_scripts": row.get("touches_scripts") == "True",
+-                        "t_config": row.get("touches_config") == "True",
+-                        "t_dashboard": row.get("touches_dashboard") == "True",
+-                        "t_docs": row.get("touches_docs") == "True",
+-                        "t_tests": row.get("touches_tests") == "True",
+-                        "t_preflight": row.get("touches_preflight") == "True",
+-                        "t_metrics": row.get("touches_metrics") == "True",
+-                        "t_core": row.get("touches_critical") == "True"
+-                    })
+-        except Exception as e: 
+-            print(f"MATRIX PARSER ERROR: {e}")
++                    commit_data["ts"] = ts
++                    commits.append(commit_data)
++        except Exception as e: print(f"MATRIX PARSER ERROR: {e}")
+     
+-    return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": json.dumps(commits)})
++    return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": json.dumps(commits), "rubric": rubric})
+diff --git a/backend/parser.py b/backend/parser.py
+new file mode 100644
+index 0000000..3c3b403
+--- /dev/null
++++ b/backend/parser.py
+@@ -0,0 +1,96 @@
++import os, sys, json, argparse, subprocess, csv
++from datetime import datetime
++from litellm import completion
++
++parser = argparse.ArgumentParser(description="CommitMatrix LLM Parser")
++parser.add_argument("--repo", type=str, default=os.getcwd(), help="Absolute path to the target git repository")
++parser.add_argument("--remap", action="store_true", help="Force a repository architecture re-map")
++parser.add_argument("--rubric", type=str, default=os.path.join(os.getcwd(), "backend", "rubrics", "cirsd.md"), help="Path to the scoring rubric file")
++args = parser.parse_args()
++
++MODEL_NAME = "gemini/gemini-3.1-pro"
++REPO_PATH = os.path.abspath(args.repo)
++
++def run_cmd(cmd):
++    try: return subprocess.run(cmd, cwd=REPO_PATH, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True).stdout.strip()
++    except subprocess.CalledProcessError: return ""
++
++def get_project_identifier():
++    remote = run_cmd(["git", "config", "--get", "remote.origin.url"])
++    if remote:
++        clean = remote.split(":")[-1].replace(".git", "").replace("/", "_")
++        return clean if clean else os.path.basename(REPO_PATH)
++    return os.path.basename(REPO_PATH)
++
++IDENTIFIER = get_project_identifier()
++RUBRIC_NAME = "".join(e for e in os.path.splitext(os.path.basename(args.rubric))[0].lower() if e.isalnum())
++DATA_DIR = os.path.join(os.getcwd(), "data", IDENTIFIER)
++CSV_PATH = os.path.join(DATA_DIR, f"{IDENTIFIER}_ledger_{RUBRIC_NAME}.csv")
++LOG_PATH = os.path.join(DATA_DIR, f"{IDENTIFIER}_llm_logs.txt")
++ARCH_PATH = os.path.join(DATA_DIR, f"{IDENTIFIER}_architecture.md")
++
++os.makedirs(DATA_DIR, exist_ok=True)
++
++def write_log(event_type, content):
++    with open(LOG_PATH, "a", encoding="utf-8") as f:
++        f.write(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{event_type}]\n{content}\n{'-'*60}\n")
++
++def auto_map_architecture():
++    print(f"🧠 Mapping architecture for {IDENTIFIER}...")
++    tree_str = []
++    for root, dirs, files in os.walk(REPO_PATH):
++        dirs[:] = [d for d in dirs if d not in [".git", "node_modules", "venv", "__pycache__", "data"]]
++        level = root.replace(REPO_PATH, "").count(os.sep)
++        tree_str.append(f"{' ' * 4 * level}{os.path.basename(root)}/")
++        for f in files: tree_str.append(f"{' ' * 4 * (level + 1)}{f}")
++    repo_tree = "\n".join(tree_str)
++    
++    prompt = f"You are an expert Systems Architect. Analyze the following repository structure and output a concise 'architecture.md' file. Define the core modules, their architectural coupling, and their systemic blast radius. Do not output anything other than the raw markdown text.\n\nRepository Tree:\n{repo_tree}"
++    response = completion(model=MODEL_NAME, messages=[{"role": "user", "content": prompt}])
++    arch_content = response.choices[0].message.content
++    with open(ARCH_PATH, "w", encoding="utf-8") as f: f.write(arch_content)
++    write_log("ARCHITECTURE_MAP_GENERATED", f"Map rebuilt.\n\n{arch_content}")
++    print(f"✅ Architecture map saved to {ARCH_PATH}")
++    return arch_content
++
++if __name__ == "__main__":
++    if not os.path.exists(os.path.join(REPO_PATH, ".git")): print(f"❌ Error: {REPO_PATH} is not a valid git repository."); sys.exit(1)
++    
++    hash_long = run_cmd(["git", "log", "-1", "--format=%H"])
++    hash_short = run_cmd(["git", "log", "-1", "--format=%h"])
++    subject = run_cmd(["git", "log", "-1", "--format=%s"])
++    author_date = run_cmd(["git", "log", "-1", "--format=%cI"])
++    
++    if not hash_long: print("❌ No commits found in this repository."); sys.exit(1)
++
++    has_structural = any(line.startswith(("A", "D", "R")) for line in run_cmd(["git", "diff", "HEAD~1", "HEAD", "--name-status"]).split("\n"))
++    
++    if args.remap or not os.path.exists(ARCH_PATH) or has_structural: arch_context = auto_map_architecture()
++    else:
++        print("⚡ No structural changes detected. Loading cached architecture map.")
++        with open(ARCH_PATH, "r", encoding="utf-8") as f: arch_context = f.read()
++
++    diff = run_cmd(["git", "diff", "HEAD~1", "HEAD"])
++    if not diff.strip(): print("⚠️ Diff is empty. Nothing to score."); sys.exit(0)
++
++    try:
++        with open(args.rubric, "r", encoding="utf-8") as f: rubric_rules = f.read()
++        print("🔍 Analyzing diff and applying rubric...")
++        sys_prompt = f"{rubric_rules}"
++        usr_prompt = f"ARCHITECTURE CONTEXT:\n{arch_context}\n\nGIT DIFF:\n{diff}"
++        response = completion(model=MODEL_NAME, messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": usr_prompt}], response_format={ "type": "json_object" })
++        scores = json.loads(response.choices[0].message.content.strip())
++        write_log(f"LLM_SCORING_PAYLOAD | {hash_short}", f"--- SYSTEM ---\n{sys_prompt}\n\n--- USER ---\n{usr_prompt}\n\n--- RESPONSE ---\n{json.dumps(scores)}")
++        
++        print(f"💾 Appending to {IDENTIFIER}_ledger_{RUBRIC_NAME}.csv...")
++        file_exists = os.path.exists(CSV_PATH)
++        headers = ["hash_long", "hash_short", "subject", "author_date", "lines_added", "lines_deleted"] + list(scores.keys())
++        row = [hash_long, hash_short, subject, author_date, diff.count("\n+") - diff.count("\n+++"), diff.count("\n-") - diff.count("\n---")] + [scores[k] for k in scores.keys()]
++        
++        with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
++            writer = csv.writer(f)
++            if not file_exists: writer.writerow(headers)
++            writer.writerow(row)
++            
++        print(f"🚀 Telemetry captured for {hash_short}: {json.dumps(scores)}") 
++    except Exception as e: print(f"❌ Failed to parse commit: {e}")
+diff --git a/backend/rubrics/cirsd.md b/backend/rubrics/cirsd.md
+new file mode 100644
+index 0000000..1594bbc
+--- /dev/null
++++ b/backend/rubrics/cirsd.md
+@@ -0,0 +1,16 @@
++# CommitMatrix Telemetry: CIRSD Scoring Engine
++You are the CommitMatrix Telemetry Engine. Analyze the provided `git diff` using the provided `ARCHITECTURE CONTEXT`. 
++Score the commit strictly across these five dimensions:
++* **[C] Complexity (1-3):** Logical branching, cyclomatic depth, and technical debt introduced.
++* **[I] Impact (1-3):** The breadth of the systemic functional effect and value delivered.
++* **[R] Risk (1-3):** The danger of regressions, breakages, or security vulnerabilities.
++* **[S] Scope (1-3):** The surface area of unique sub-services and modules touched.
++* **[D] Documentation (1-3):** The mitigating delta between code changes and inline comments/tests.
++
++Determine the Tier: "Critical" (Score 12-15), "Significant" (Score 8-11), or "Routine" (Score < 8). Calculate touched services (boolean) based on the architecture. You must respond STRICTLY in valid JSON. Do not include markdown formatting.
++{
++  "C": 2, "I": 3, "R": 1, "S": 2, "D": 2, "tot": 10, "tier": "Significant",
++  "touches_proxy": false, "touches_scripts": true, "touches_config": false,
++  "touches_dashboard": false, "touches_docs": false, "touches_tests": false,
++  "touches_preflight": false, "touches_metrics": false, "touches_critical": false
++}
+diff --git a/docker-compose.yml b/docker-compose.yml
+index c6d805b..2c62e0d 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -10,5 +10,4 @@ services:
+     ports:
+       - "8000:8000"
+     volumes:
+-      # We ONLY mount the data layer. Code is baked into the image.
+       - ./data:/app/data
+diff --git a/install.sh b/install.sh
+new file mode 100755
+index 0000000..347ca6c
+--- /dev/null
++++ b/install.sh
+@@ -0,0 +1,29 @@
++#!/bin/bash
++echo "📦 Installing CommitMatrix..."
++if [ ! -f .env ]; then echo "❌ Error: .env file missing."; exit 1; fi
++MATRIX_DIR=$(pwd)
++
++echo "🐳 Building Docker environment..."
++docker compose build --quiet && docker compose up -d
++
++echo "🔗 Linking global 'commit-matrix' command..."
++cat << 'WRAPPER' > /tmp/commit-matrix
++#!/bin/bash
++TARGET_REPO="${1:-$(pwd)}"
++if [ ! -d "$TARGET_REPO/.git" ]; then echo "❌ Error: $TARGET_REPO is not a valid Git repository."; exit 1; fi
++REPO_NAME=$(basename "$TARGET_REPO")
++echo "🚀 Analyzing: $REPO_NAME"
++
++docker run --rm \
++  -v "$TARGET_REPO:/target_repo" \
++  -v "/root/commit-matrix/data:/app/data" \
++  -v "/root/commit-matrix/backend/rubrics:/app/backend/rubrics" \
++  --env-file "/root/commit-matrix/.env" \
++  commit-matrix-core:latest \
++  python /app/backend/parser.py --repo /target_repo
++echo "✅ Telemetry saved. View dashboard at: http://localhost:8000/?repo=$REPO_NAME"
++WRAPPER
++
++sudo mv /tmp/commit-matrix /usr/local/bin/commit-matrix
++sudo chmod +x /usr/local/bin/commit-matrix
++echo "✅ Installation Complete!"
+diff --git a/static/js/app.js b/static/js/app.js
+index 714a984..ab2dcbf 100644
+--- a/static/js/app.js
++++ b/static/js/app.js
+@@ -1,9 +1,5 @@
+-import { processCommits } from './core/dataEngine.js?v=2';
+-import { renderTable } from './ui/tableCtrl.js?v=2';
+-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart } from './charts/chartCtrl.js?v=2';
+-import { renderHeatmap } from './ui/heatmap.js?v=2';
+-import { UI_STATE, AVG_NAMES } from './core/state.js?v=2';
+-
++import { processCommits } from './core/dataEngine.js';
++import { UI_STATE, AVG_NAMES } from './core/state.js';
+ document.addEventListener('DOMContentLoaded', () => {
+     const p = processCommits(window.MATRIX_PAYLOAD || []);
+     if (p.length > 0) {
+@@ -14,17 +10,5 @@ document.addEventListener('DOMContentLoaded', () => {
+             document.getElementById('cm-ks').textContent = p.filter(c => c.tier === 'Significant').length;
+             document.getElementById('cm-kr').textContent = p.filter(c => c.tier === 'Routine').length;
+         } catch(e){}
+-
+-        renderTable(p);
+-        const boot = () => { renderTypesChart(p); renderStackChart(p); renderTrendChart(p); renderAnalytics(p); renderConvergenceChart(p); renderHeatmap(p); };
+-        requestAnimationFrame(() => requestAnimationFrame(boot));
+-
+-        document.querySelectorAll('[data-action="toggleChron"]').forEach(b => b.addEventListener('click', e => {
+-            const t = e.target.dataset.target; UI_STATE[t] = !UI_STATE[t]; e.target.classList.toggle('active', UI_STATE[t]); boot(); 
+-        }));
+-        document.querySelectorAll('[data-action="cycleAvg"]').forEach(b => b.addEventListener('click', e => {
+-            const t = e.target.dataset.target; const k = t === 'trend' ? 'avgTrend' : 'avg' + t.charAt(0).toUpperCase() + t.slice(1);
+-            UI_STATE[k] = (UI_STATE[k] + 1) % 6; e.target.textContent = `📊 Avg: ${AVG_NAMES[UI_STATE[k]]}`; e.target.classList.toggle('active', UI_STATE[k] !== 0); boot();
+-        }));
+     }
+ });
+diff --git a/static/js/core/constants.js b/static/js/core/constants.js
+index a14b77f..66a3119 100644
+--- a/static/js/core/constants.js
++++ b/static/js/core/constants.js
+@@ -2,11 +2,5 @@ export const CM_COLORS = { Critical: '#ff4b4b', Significant: '#ffb84d', Routine:
+ export const BP_AX = ['C','I','R','S','D'];
+ export const BP_AXC = ['#8ab4f0','#c99ef0','#ef8a8a','#8ed068','#f0b876'];
+ export const BP_AXC_BASE = ['rgba(138,180,240,0.3)','rgba(201,158,240,0.3)','rgba(239,138,138,0.3)','rgba(142,208,104,0.3)','rgba(240,184,118,0.3)'];
+-export const SC_COLORS = {
+-    't_core': '#ff4b4b', 't_proxy': '#00e676', 't_scripts': '#ffeb3b', 't_config': '#29b6f6',
+-    't_dashboard': '#ab47bc', 't_docs': '#ffa726', 't_tests': '#00bcd4', 't_preflight': '#ec407a', 't_metrics': '#69f0ae'
+-};
+-export const SC_CLASSES = {
+-    'core': 'sc-core', 'proxy': 'sc-proxy', 'scripts': 'sc-scripts', 'config': 'sc-config',
+-    'dashboard': 'sc-dashboard', 'docs': 'sc-docs', 'tests': 'sc-tests', 'preflight': 'sc-preflight', 'metrics': 'sc-metrics', 'global': 'sc-docs'
+-};
++export const SC_COLORS = { 't_core': '#ff4b4b', 't_proxy': '#00e676', 't_scripts': '#ffeb3b', 't_config': '#29b6f6', 't_dashboard': '#ab47bc', 't_docs': '#ffa726', 't_tests': '#00bcd4', 't_preflight': '#ec407a', 't_metrics': '#69f0ae' };
++export const SC_CLASSES = { 'core': 'sc-core', 'proxy': 'sc-proxy', 'scripts': 'sc-scripts', 'config': 'sc-config', 'dashboard': 'sc-dashboard', 'docs': 'sc-docs', 'tests': 'sc-tests', 'preflight': 'sc-preflight', 'metrics': 'sc-metrics', 'global': 'sc-docs' };
+diff --git a/static/js/core/dataEngine.js b/static/js/core/dataEngine.js
+index 819c356..1580e90 100644
+--- a/static/js/core/dataEngine.js
++++ b/static/js/core/dataEngine.js
+@@ -1,3 +1,4 @@
++export function extractDynamicAxes(commits) { if (!commits || !commits.length) return []; const ex = ['hash_long', 'hash_short', 'subject', 'author_date', 'lines_added', 'lines_deleted', 'n', 'h', 's', 'ts', 'tot', 'tier']; return Object.keys(commits[0]).filter(k => !ex.includes(k) && !k.startsWith('touches_') && typeof commits[0][k] === 'number'); }
+ export function processCommits(r) { return r.map(c=>{ const m=(c.s||"").match(/^([a-zA-Z_-]+)(?:\(([^)]+)\))?:\s*(.*)$/); if(m){c.t=m[1].toLowerCase();c.scope=m[2]||'global';c.clean_s=m[3];}else{c.t='chore';c.scope='global';c.clean_s=c.s;} return c; }); }
+ export function fmtCD(ts){ const d=new Date(ts*1000); const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${m[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}`; }
+ export function fmtTableDate(ts){ const d=new Date(ts*1000); const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${m[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}, '${String(d.getFullYear()).slice(-2)}`; }
+diff --git a/templates/matrix.html b/templates/matrix.html
+index e1d9d1c..0ecb7a6 100644
+--- a/templates/matrix.html
++++ b/templates/matrix.html
+@@ -15,14 +15,14 @@
+ <div class="cm-wrap">
+   <div class="cm-kpi-row">
+     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_tot">Total Commits</div><div class="cm-kpi-val" id="cm-kp">—</div></div>
+-    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg CIRSD Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
++    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
+     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_crit">Critical</div><div class="cm-kpi-val cm-kv-crit" id="cm-kc">—</div></div>
+     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_sig">Significant</div><div class="cm-kpi-val cm-kv-sig" id="cm-ks">—</div></div>
+     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_rout">Routine</div><div class="cm-kpi-val cm-kv-rout" id="cm-kr">—</div></div>
+   </div>
+   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);height:240px;">
+     <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Tier Distribution</div></div><div class="cm-chart-body"><canvas id="cm-c-tier"></canvas></div></div>
+-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">CIRSD Axis Breakdown</div><button class="cm-fbtn" data-action="toggleChron" data-target="stack">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
++    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Axis Breakdown</div><button class="cm-fbtn" data-action="toggleChron" data-target="stack">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
+     <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Commit Types</div></div><div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div></div>
+   </div>
+   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:260px;">
+@@ -40,5 +40,5 @@
+ {% endblock %}
+ {% block scripts %}
+ <script>window.MATRIX_PAYLOAD = {{ commits_data | default('[]', true) | safe }};</script>
+-<script type="module" src="/static/js/app.js?v=999"></script>
++<script type="module" src="/static/js/app.js?v=3"></script>
+ {% endblock %}
+diff --git a/uninstall.sh b/uninstall.sh
+new file mode 100755
+index 0000000..748e1af
+--- /dev/null
++++ b/uninstall.sh
+@@ -0,0 +1,5 @@
++#!/bin/bash
++echo "🗑️ Uninstalling CommitMatrix..."
++docker compose down
++sudo rm -f /usr/local/bin/commit-matrix
++echo "✅ Uninstall Complete. Data in ./data/ has been preserved."
+
+--- RESPONSE ---
+{"C": 3, "I": 3, "R": 3, "S": 3, "D": 2, "tot": 14, "tier": "Critical", "touches_proxy": false, "touches_scripts": true, "touches_config": true, "touches_dashboard": true, "touches_docs": true, "touches_tests": false, "touches_preflight": false, "touches_metrics": true, "touches_critical": true}
+------------------------------------------------------------

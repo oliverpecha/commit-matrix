@@ -1,0 +1,2 @@
+hash_long,hash_short,subject,author_date,lines_added,lines_deleted,C,I,R,S,D,tot,tier,touches_proxy,touches_scripts,touches_config,touches_dashboard,touches_docs,touches_tests,touches_preflight,touches_metrics,touches_critical
+6787906c1a95e5ea05e4ef390f407ecef80be34b,6787906,"feat(core): implement dynamic LLM parsing, multi-repo support, and isolated rubrics",2026-05-18T13:39:34Z,185,124,3,3,3,3,2,14,Critical,False,True,True,True,True,False,False,True,True
