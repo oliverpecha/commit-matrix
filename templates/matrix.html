@@ -15,14 +15,14 @@
 <div class="cm-wrap">
   <div class="cm-kpi-row">
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_tot">Total Commits</div><div class="cm-kpi-val" id="cm-kp">—</div></div>
-    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg CIRSD Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_crit">Critical</div><div class="cm-kpi-val cm-kv-crit" id="cm-kc">—</div></div>
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_sig">Significant</div><div class="cm-kpi-val cm-kv-sig" id="cm-ks">—</div></div>
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_rout">Routine</div><div class="cm-kpi-val cm-kv-rout" id="cm-kr">—</div></div>
   </div>
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);height:240px;">
     <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Tier Distribution</div></div><div class="cm-chart-body"><canvas id="cm-c-tier"></canvas></div></div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">CIRSD Axis Breakdown</div><button class="cm-fbtn" data-action="toggleChron" data-target="stack">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Axis Breakdown</div><button class="cm-fbtn" data-action="toggleChron" data-target="stack">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
     <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Commit Types</div></div><div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div></div>
   </div>
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:260px;">
@@ -40,5 +40,5 @@
 {% endblock %}
 {% block scripts %}
 <script>window.MATRIX_PAYLOAD = {{ commits_data | default('[]', true) | safe }};</script>
-<script type="module" src="/static/js/app.js?v=999"></script>
+<script type="module" src="/static/js/app.js?v=3"></script>
 {% endblock %}

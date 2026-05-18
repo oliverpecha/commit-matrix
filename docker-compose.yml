@@ -10,5 +10,4 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # We ONLY mount the data layer. Code is baked into the image.
       - ./data:/app/data
