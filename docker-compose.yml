@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    image: commit-matrix-core:latest
     container_name: commit-matrix-core
     restart: unless-stopped
     env_file:
