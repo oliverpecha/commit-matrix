@@ -1,5 +1,6 @@
 #!/bin/bash
-echo "🗑️ Uninstalling CommitMatrix..."
-docker compose down
+echo "🗑️  Uninstalling CommitMatrix..."
+docker compose down --rmi all
 sudo rm -f /usr/local/bin/commit-matrix
-echo "✅ Uninstall Complete. Data in ./data/ has been preserved."
+sudo rm -f /usr/local/bin/calibrate-matrix
+echo "✅ Uninstallation Complete."
