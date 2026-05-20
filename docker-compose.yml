@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    image: commit-matrix-core:latest
     container_name: commit-matrix-core
     restart: unless-stopped
     env_file:
@@ -10,5 +11,4 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # We ONLY mount the data layer. Code is baked into the image.
       - ./data:/app/data

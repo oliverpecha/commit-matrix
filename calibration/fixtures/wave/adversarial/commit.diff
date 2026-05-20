@@ -1,0 +1,10 @@
+diff --git a/src/styles/theme.css b/src/styles/theme.css
+index aabbcc..ddeeff 100644
+--- a/src/styles/theme.css
++++ b/src/styles/theme.css
+@@ -4,5 +4,5 @@ :root {
+-  --color-text: #1a1a2e;
++  --color-text: #f0f0f0;
+   --color-bg-primary: #ffffff;
+   --color-bg-secondary: #f5f5f5;
+ }

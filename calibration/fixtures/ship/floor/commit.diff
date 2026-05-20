@@ -1,0 +1,8 @@
+diff --git a/src/screens/HomeScreen.tsx b/src/screens/HomeScreen.tsx
+index 111aaa..222bbb 100644
+--- a/src/screens/HomeScreen.tsx
++++ b/src/screens/HomeScreen.tsx
+@@ -12,3 +12,3 @@ export function HomeScreen() {
+-  const greeting = "Welcome"
++  const greeting = "Welcome back"
+   return <Text>{greeting}</Text>

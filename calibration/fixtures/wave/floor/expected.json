@@ -1,0 +1,18 @@
+{
+  "W": 1,
+  "A": 2,
+  "V": 1,
+  "E": 2,
+  "tot": 6,
+  "score_pct": 50.0,
+  "tier": "Routine",
+  "danger_flag": false,
+  "debt_direction": "neutral",
+  "touches_components": false,
+  "touches_state": false,
+  "touches_routing": false,
+  "touches_styles": false,
+  "touches_design_system": false,
+  "touches_tests": false,
+  "touches_critical": false
+}

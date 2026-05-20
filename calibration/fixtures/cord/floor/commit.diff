@@ -1,0 +1,8 @@
+diff --git a/frontend/src/pages/About.tsx b/frontend/src/pages/About.tsx
+index 111aaa..222bbb 100644
+--- a/frontend/src/pages/About.tsx
++++ b/frontend/src/pages/About.tsx
+@@ -3,3 +3,3 @@ export function About() {
+-  return <h1>About Us</h1>
++  return <h1>About CommitMatrix</h1>
+ }

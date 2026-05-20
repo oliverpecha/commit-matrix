@@ -1,0 +1,17 @@
+{
+  "G": 3,
+  "R": 2,
+  "I": 2,
+  "D": 3,
+  "tot": 10,
+  "score_pct": 83.3,
+  "tier": "Critical",
+  "danger_flag": false,
+  "debt_direction": "reduces",
+  "touches_config": true,
+  "touches_scripts": false,
+  "touches_proxy": false,
+  "touches_docs": false,
+  "touches_tests": false,
+  "touches_critical": true
+}

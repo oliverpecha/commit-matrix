@@ -1,0 +1,7 @@
+diff --git a/pipeline/config.py b/pipeline/config.py
+index 111aaa..222bbb 100644
+--- a/pipeline/config.py
++++ b/pipeline/config.py
+@@ -3,3 +3,4 @@ S3_BUCKET = "data-raw"
+ OUTPUT_TABLE = "events_clean"
++LOG_LEVEL = "INFO"

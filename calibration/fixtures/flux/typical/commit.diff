@@ -1,0 +1,72 @@
+diff --git a/pipeline/transforms/clean_user_events.py b/pipeline/transforms/clean_user_events.py
+index aaa..bbb 100644
+--- a/pipeline/transforms/clean_user_events.py
++++ b/pipeline/transforms/clean_user_events.py
+@@ -8,18 +8,45 @@ import pandas as pd
++from pipeline.validation import EventSchema, ValidationError
++from pipeline.monitoring import track_data_quality
+ 
+ def transform_user_events(df: pd.DataFrame) -> pd.DataFrame:
++    # Critical: Revenue pipeline depends on this transform
++    # Invalid data here cascades to billing, analytics, and ML models
++    
++    # Validate input schema before transformation
++    schema = EventSchema(
++        required_columns=['user_id', 'event_type', 'timestamp', 'properties'],
++        types={'user_id': int, 'event_type': str, 'timestamp': 'datetime64[ns]'}
++    )
++    violations = schema.validate(df)
++    if violations:
++        track_data_quality("user_events_input", violations)
++        raise ValidationError(f"Input schema violations: {violations}")
++    
+     # Deduplicate events within 5-second window
+     df = df.sort_values('timestamp')
+     df['prev_timestamp'] = df.groupby('user_id')['timestamp'].shift(1)
+     df['time_delta'] = (df['timestamp'] - df['prev_timestamp']).dt.total_seconds()
+     df = df[~((df['time_delta'] < 5) & (df['event_type'] == df['event_type'].shift(1)))]
+     df = df.drop(columns=['prev_timestamp', 'time_delta'])
+     
++    # Parse and validate properties JSON field
++    def parse_properties(prop_str):
++        try:
++            parsed = json.loads(prop_str)
++            if parsed.get('event_type') == 'purchase':
++                required = {'product_id', 'amount', 'currency'}
++                if not required.issubset(parsed.keys()):
++                    raise ValidationError(f"Missing required purchase fields: {required - parsed.keys()}")
++            return parsed
++        except json.JSONDecodeError as e:
++            track_data_quality("properties_parse_error", str(e))
++            return {}
++    
++    df['properties'] = df['properties'].apply(parse_properties)
++    
+     # Normalize event types to lowercase
+     df['event_type'] = df['event_type'].str.lower().str.strip()
+     
++    # Post-transform validation: ensure no nulls in critical columns
++    critical_cols = ['user_id', 'event_type', 'timestamp']
++    null_counts = df[critical_cols].isnull().sum()
++    if null_counts.any():
++        raise ValidationError(f"Null values in: {null_counts[null_counts > 0].to_dict()}")
++    
++    track_data_quality("user_events_output", {"row_count": len(df), "valid": True})
+     return df
+diff --git a/pipeline/validation.py b/pipeline/validation.py
+new file mode 100644
+--- /dev/null
++++ b/pipeline/validation.py
+@@ -0,0 +1,11 @@
++class EventSchema:
++    def __init__(self, required_columns, types):
++        self.required_columns = required_columns
++        self.types = types
++    def validate(self, df):
++        violations = []
++        missing = set(self.required_columns) - set(df.columns)
++        if missing:
++            violations.append(f"Missing columns: {missing}")
++        return violations
++class ValidationError(Exception):
++    pass

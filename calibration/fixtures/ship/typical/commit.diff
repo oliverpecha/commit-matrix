@@ -1,0 +1,20 @@
+diff --git a/ios/CommitMatrix/MediaPickerManager.swift b/ios/CommitMatrix/MediaPickerManager.swift
+index aaa..bbb 100644
+--- a/ios/CommitMatrix/MediaPickerManager.swift
++++ b/ios/CommitMatrix/MediaPickerManager.swift
+@@ -22,8 +22,15 @@ class MediaPickerManager: NSObject {
+   func setupPhotoLibraryObserver() {
+-    PHPhotoLibrary.shared().register(self)
++    if #available(iOS 16.0, *) {
++      PHPhotoLibrary.shared().register(self)
++    }
++    // iOS 14/15: PHPhotoLibraryChangeObserver not available.
++    // User must exit to system picker to update limited selection.
+   }
+
+   func requestAccess(completion: @escaping (Bool) -> Void) {
+     PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+       completion(status == .authorized || status == .limited)
+     }
+   }
+

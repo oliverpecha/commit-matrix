@@ -1,0 +1,18 @@
+{
+  "F": 1,
+  "O": 2,
+  "R": 1,
+  "M": 1,
+  "tot": 5,
+  "score_pct": 41.7,
+  "tier": "Routine",
+  "danger_flag": false,
+  "debt_direction": "neutral",
+  "touches_public_api": false,
+  "touches_cli": false,
+  "touches_types": false,
+  "touches_tests": false,
+  "touches_docs": false,
+  "touches_changelog": false,
+  "touches_critical": false
+}

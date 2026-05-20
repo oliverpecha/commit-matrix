@@ -1,0 +1,8 @@
+diff --git a/src/pages/Dashboard.tsx b/src/pages/Dashboard.tsx
+index aaabbb..cccddd 100644
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -8,3 +8,3 @@ export function Dashboard() {
+-  const title = "Overview"
++  const title = "Dashboard Overview"
+   return <PageHeader title={title} />
