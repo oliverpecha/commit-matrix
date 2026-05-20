@@ -1,0 +1,12 @@
+diff --git a/src/components/ui/Button.tsx b/src/components/ui/Button.tsx
+index 1a2b3c..4d5e6f 100644
+--- a/src/components/ui/Button.tsx
++++ b/src/components/ui/Button.tsx
+@@ -14,6 +14,7 @@ export function Button({ children, variant = "primary", onClick, disabled }: Bu
+   return (
+     <button
+       onClick={onClick}
++      aria-disabled={disabled}
+       disabled={disabled}
+       className={cn(styles.base, styles[variant], disabled && styles.disabled)}
+     >

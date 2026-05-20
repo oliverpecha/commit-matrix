@@ -1,0 +1,36 @@
+diff --git a/docker-compose.yml b/docker-compose.yml
+index aaa..bbb 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -12,8 +12,8 @@ services:
+   api:
+     image: myapp-api:latest
+     environment:
+-      - DATABASE_URL=postgresql://postgres:secret123@postgres:5432/myapp
+-      - REDIS_URL=redis://redis:6379/0
+-      - WORKERS=4
++      - DATABASE_URL=${DATABASE_URL}
++      - REDIS_URL=${REDIS_URL}
++      - WORKERS=${WORKERS:-4}
+     depends_on:
+       - postgres
+       - redis
+   worker:
+     image: myapp-worker:latest
+     environment:
+-      - DATABASE_URL=postgresql://postgres:secret123@postgres:5432/myapp
+-      - REDIS_URL=redis://redis:6379/0
++      - DATABASE_URL=${DATABASE_URL}
++      - REDIS_URL=${REDIS_URL}
+     depends_on:
+       - postgres
+       - redis
+diff --git a/.env.example b/.env.example
+index ccc..ddd 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,3 +1,5 @@
++DATABASE_URL=postgresql://postgres:changeme@postgres:5432/myapp
++REDIS_URL=redis://redis:6379/0
++WORKERS=4
+

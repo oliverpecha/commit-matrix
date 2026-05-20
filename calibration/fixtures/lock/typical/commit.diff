@@ -1,0 +1,43 @@
+diff --git a/app/middleware/auth.py b/app/middleware/auth.py
+index aaa..bbb 100644
+--- a/app/middleware/auth.py
++++ b/app/middleware/auth.py
+@@ -8,12 +8,18 @@ import jwt
+-ALGORITHM = "HS256"
+-SECRET_KEY = os.getenv("JWT_SECRET")
++ALGORITHM = "RS256"
+
++def _load_private_key():
++    key_path = os.getenv("JWT_PRIVATE_KEY_PATH")
++    with open(key_path, "rb") as f:
++        return serialization.load_pem_private_key(f.read(), password=None)
++
++def _load_public_key():
++    key_path = os.getenv("JWT_PUBLIC_KEY_PATH")
++    with open(key_path, "rb") as f:
++        return serialization.load_pem_public_key(f.read())
++
+ def create_token(user_id: str, scopes: list[str]) -> str:
+-    return jwt.encode({"sub": user_id, "scopes": scopes, "exp": ...}, SECRET_KEY, algorithm=ALGORITHM)
++    payload = {"sub": user_id, "scopes": scopes, "exp": ..., "kid": KEY_ID}
++    return jwt.encode(payload, _load_private_key(), algorithm=ALGORITHM)
+
+ def verify_token(token: str) -> dict:
+-    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
++    return jwt.decode(token, _load_public_key(), algorithms=[ALGORITHM])
+diff --git a/app/middleware/tests/test_auth.py b/app/middleware/tests/test_auth.py
+index ccc..ddd 100644
+--- a/app/middleware/tests/test_auth.py
++++ b/app/middleware/tests/test_auth.py
+@@ -0,0 +1,18 @@
++def test_token_round_trip():
++    token = create_token("user_1", ["read"])
++    claims = verify_token(token)
++    assert claims["sub"] == "user_1"
++    assert claims["scopes"] == ["read"]
++
++def test_hs256_token_rejected():
++    hs_token = jwt.encode({"sub": "attacker"}, "any_secret", algorithm="HS256")
++    with pytest.raises(jwt.InvalidAlgorithmError):
++        verify_token(hs_token)
+

@@ -1,0 +1,18 @@
+{
+  "F": 3,
+  "L": 2,
+  "U": 3,
+  "X": 3,
+  "tot": 11,
+  "score_pct": 91.7,
+  "tier": "Critical",
+  "danger_flag": false,
+  "debt_direction": "reduces",
+  "touches_transformation": true,
+  "touches_validation": true,
+  "touches_models": false,
+  "touches_schema": false,
+  "touches_config": false,
+  "touches_tests": false,
+  "touches_critical": true
+}

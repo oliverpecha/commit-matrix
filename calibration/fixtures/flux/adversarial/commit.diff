@@ -1,0 +1,7 @@
+diff --git a/pipeline/preprocess.py b/pipeline/preprocess.py
+index aaabbb..cccddd 100644
+--- a/pipeline/preprocess.py
++++ b/pipeline/preprocess.py
+@@ -31,4 +31,4 @@ def filter_active_users(df: pd.DataFrame) -> pd.DataFrame:
+-    return df[df["days_since_login"] <= 90]
++    return df[df["days_since_login"] <= 30]

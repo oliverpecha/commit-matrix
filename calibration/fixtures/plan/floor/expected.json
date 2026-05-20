@@ -1,0 +1,18 @@
+{
+  "P": 3,
+  "L": 1,
+  "A": 2,
+  "N": 1,
+  "tot": 7,
+  "score_pct": 58.3,
+  "tier": "Significant",
+  "danger_flag": false,
+  "debt_direction": "neutral",
+  "touches_routes": true,
+  "touches_models": false,
+  "touches_middleware": false,
+  "touches_auth": false,
+  "touches_database": true,
+  "touches_tests": false,
+  "touches_critical": false
+}

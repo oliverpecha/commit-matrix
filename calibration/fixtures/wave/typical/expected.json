@@ -1,0 +1,18 @@
+{
+  "W": 2,
+  "A": 3,
+  "V": 2,
+  "E": 2,
+  "tot": 9,
+  "score_pct": 75.0,
+  "tier": "Significant",
+  "danger_flag": false,
+  "debt_direction": "neutral",
+  "touches_components": true,
+  "touches_state": false,
+  "touches_routing": false,
+  "touches_styles": false,
+  "touches_design_system": true,
+  "touches_tests": false,
+  "touches_critical": false
+}

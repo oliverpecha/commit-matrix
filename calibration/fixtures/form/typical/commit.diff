@@ -1,0 +1,28 @@
+diff --git a/commitmatrix/scorer.py b/commitmatrix/scorer.py
+index aabbcc..ddeeff 100644
+--- a/commitmatrix/scorer.py
++++ b/commitmatrix/scorer.py
+@@ -31,3 +31,12 @@ def score_commit(diff: str, rubric: str) -> RubricResult:
+     ...
++
++
++def score_batch(diffs: list[str], rubric: str) -> list[RubricResult]:
++    """Score a list of diffs against the same rubric.
++    
++    Args:
++        diffs: List of unified diff strings
++        rubric: Rubric name (e.g. 'grid', 'plan')
++    Returns:
++        List of RubricResult in input order
++    """
++    return [score_commit(d, rubric) for d in diffs]
+diff --git a/tests/test_scorer.py b/tests/test_scorer.py
+index 111222..333444 100644
+--- a/tests/test_scorer.py
++++ b/tests/test_scorer.py
+@@ -18,3 +18,8 @@ def test_score_commit_returns_result():
++
++def test_score_batch_length():
++    diffs = ["diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new"] * 3
++    results = score_batch(diffs, "grid")
++    assert len(results) == 3

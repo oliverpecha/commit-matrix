@@ -1,0 +1,18 @@
+{
+  "L": 1,
+  "O": 2,
+  "C": 1,
+  "K": 3,
+  "tot": 7,
+  "score_pct": 58.3,
+  "tier": "Significant",
+  "danger_flag": true,
+  "debt_direction": "increases",
+  "touches_auth": false,
+  "touches_crypto": true,
+  "touches_tokens": false,
+  "touches_secrets": false,
+  "touches_middleware": false,
+  "touches_tests": false,
+  "touches_critical": true
+}

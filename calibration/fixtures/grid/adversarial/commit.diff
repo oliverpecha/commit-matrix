@@ -1,0 +1,12 @@
+diff --git a/nginx/nginx.conf b/nginx/nginx.conf
+index aabbcc1..ddeeff2 100644
+--- a/nginx/nginx.conf
++++ b/nginx/nginx.conf
+@@ -12,7 +12,7 @@ http {
+     server {
+         listen 80;
+-        server_name api.example.com;
++        server_name _;
+
+         location / {
+             proxy_pass http://backend:8000;
