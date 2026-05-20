@@ -1,0 +1,33 @@
+diff --git a/migrations/versions/0042_migrate_email_to_auth_provider.py b/migrations/versions/0042_migrate_email_to_auth_provider.py
+new file mode 100644
+--- /dev/null
++++ b/migrations/versions/0042_migrate_email_to_auth_provider.py
+@@ -0,0 +1,18 @@
++def upgrade():
++    op.alter_column('users', 'email', new_column_name='auth_uid')
++    op.execute(
++        "UPDATE users SET auth_uid = 'auth0|' || auth_uid"
++    )
++
++def downgrade():
++    op.execute(
++        "UPDATE users SET auth_uid = split_part(auth_uid, '|', 2)"
++    )
++    op.alter_column('users', 'auth_uid', new_column_name='email')
+diff --git a/backend/app/models/user.py b/backend/app/models/user.py
+index aaa..bbb 100644
+--- a/backend/app/models/user.py
++++ b/backend/app/models/user.py
+@@ -8,3 +8,3 @@ class User(Base):
+-    email = Column(String, unique=True)
++    auth_uid = Column(String, unique=True)
+diff --git a/frontend/src/types/user.ts b/frontend/src/types/user.ts
+index 111..222 100644
+--- a/frontend/src/types/user.ts
++++ b/frontend/src/types/user.ts
+@@ -2,5 +2,4 @@ export interface User {
+   id: number
+-  email: string
+   created_at: string
+ }
+

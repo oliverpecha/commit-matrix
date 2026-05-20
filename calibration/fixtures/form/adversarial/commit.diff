@@ -1,0 +1,17 @@
+diff --git a/src/scorer.ts b/src/scorer.ts
+index aaabbb..cccddd 100644
+--- a/src/scorer.ts
++++ b/src/scorer.ts
+@@ -14,7 +14,7 @@ export async function scoreCommit(
+   diff: string,
+   rubric: string,
+-): Promise<RubricResult> {
++): Promise<RubricResult | null> {
+   try {
+     const result = await _callLLM(diff, rubric);
+     return result;
+   } catch (e) {
+-    throw new ScoringError(e);
++    return null;
+   }
+ }

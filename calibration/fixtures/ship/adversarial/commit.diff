@@ -1,0 +1,13 @@
+diff --git a/src/features/iap/PurchaseFlow.tsx b/src/features/iap/PurchaseFlow.tsx
+index aaabbb..cccddd 100644
+--- a/src/features/iap/PurchaseFlow.tsx
++++ b/src/features/iap/PurchaseFlow.tsx
+@@ -44,6 +44,10 @@ export function PurchaseFlow() {
++  // Temporary: skip purchase for users with legacy promo code
++  if (user.promoCode === "BETA2024") {
++    return <PurchaseSuccess orderId="promo-bypass" />
++  }
++
+   return (
+     <StoreKitPurchase productId={PRODUCT_ID} onSuccess={handleSuccess} />
+   )

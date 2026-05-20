@@ -1,0 +1,8 @@
+diff --git a/.env.example b/.env.example
+index a1b2c3d..e4f5a6b 100644
+--- a/.env.example
++++ b/.env.example
+@@ -3,3 +3,4 @@ REDIS_URL=redis://localhost:6379
+ LOG_LEVEL=info
+ SECRET_KEY=change-me
++RATE_LIMIT_PER_MINUTE=60

@@ -1,0 +1,12 @@
+diff --git a/src/mylib/_internal/text_utils.py b/src/mylib/_internal/text_utils.py
+index 111aaa..222bbb 100644
+--- a/src/mylib/_internal/text_utils.py
++++ b/src/mylib/_internal/text_utils.py
+@@ -14,6 +14,12 @@ def _strip_whitespace(s: str) -> str:
+     return s.strip()
+
++def _truncate(s: str, max_len: int) -> str:
++    if len(s) <= max_len:
++        return s
++    return s[:max_len]
+

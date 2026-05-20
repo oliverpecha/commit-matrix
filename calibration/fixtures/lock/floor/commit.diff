@@ -1,0 +1,7 @@
+diff --git a/app/auth/utils.py b/app/auth/utils.py
+index 111aaa..222bbb 100644
+--- a/app/auth/utils.py
++++ b/app/auth/utils.py
+@@ -4,3 +4,4 @@ from datetime import datetime, timedelta
+ ACCESS_TOKEN_EXPIRE_MINUTES = 30
++REFRESH_TOKEN_EXPIRE_DAYS = 7

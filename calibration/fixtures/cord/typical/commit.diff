@@ -1,0 +1,17 @@
+diff --git a/backend/app/routers/projects.py b/backend/app/routers/projects.py
+index aab..bbc 100644
+--- a/backend/app/routers/projects.py
++++ b/backend/app/routers/projects.py
+@@ -18,3 +18,5 @@ async def list_projects(db=Depends(get_db)):
+-    return db.query(Project).all()
++    projects = db.query(Project).order_by(Project.created_at.desc()).all()
++    return [ProjectResponse.from_orm(p) for p in projects]
+diff --git a/frontend/src/api/projects.ts b/frontend/src/api/projects.ts
+index ccd..dde 100644
+--- a/frontend/src/api/projects.ts
++++ b/frontend/src/api/projects.ts
+@@ -8,3 +8,4 @@ export async function fetchProjects() {
+   const res = await api.get("/api/v1/projects");
++  if (!res.ok) throw new Error(`Failed to fetch projects: ${res.status}`);
+   return res.json();
+}
