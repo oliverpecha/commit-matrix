@@ -2,11 +2,11 @@
 
 **Architectural telemetry and multi-level visibility layer for AI-accelerated development.**
 
-<p align="center">
-  <img src="./data/commitmatrix-comic.png" alt="CommitMatrix comic strip" width="780">
-</p>
-
 GenAI has made it trivial to generate huge volumes of code. Velocity is up, but visibility is down. We have more commits, more diffs, and less intuition about what that code is doing to our systems.
+
+<p align="center">
+  <img src="./data/commitmatrix-comic.png" alt="CommitMatrix comic strip" width="580">
+</p>
 
 CommitMatrix turns raw Git history into an interactive risk console so you can ship faster without quietly scaling technical debt.
 
