@@ -3,7 +3,7 @@
 **Architectural telemetry and multi-level visibility layer for AI-accelerated development.**
 
 <p align="center">
-  <img src="./data/commitmatrix-comic.jpg" alt="CommitMatrix comic strip" width="780">
+  <img src="./data/commitmatrix-comic.png" alt="CommitMatrix comic strip" width="780">
 </p>
 
 GenAI has made it trivial to generate huge volumes of code. Velocity is up, but visibility is down. We have more commits, more diffs, and less intuition about what that code is doing to our systems.
@@ -33,6 +33,10 @@ At its core, CommitMatrix is a three-layer telemetry pipeline over your Git hist
   A vanilla ES6/HTML frontend (`templates/matrix.html`, `static/js/*`) reads the ledgers in `/data` and renders heatmaps, charts, and tables that adapt dynamically to whatever rubric you use.
 
 Scoring and visualization are driven by specialized rubrics that measure what is most critical across different project types and engineering concerns.
+
+<p align="center">
+  <img src="./data/dashboard_20260521.png" alt="CommitMatrix comic strip" width="780">
+</p>
 
 ---
 
