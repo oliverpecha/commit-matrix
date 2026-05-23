@@ -39,6 +39,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>window.MATRIX_PAYLOAD = {{ commits_data | default('[]', true) | safe }};</script>
-<script type="module" src="/static/js/app.js?v=3"></script>
+<script>window.MATRIX_PAYLOAD = {{ commits_data | tojson | safe }};</script>
+<script type="module" src="/static/js/app.js?v=4"></script>
 {% endblock %}

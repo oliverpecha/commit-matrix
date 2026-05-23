@@ -1,9 +1,10 @@
-import { SC_COLORS } from '../core/constants.js?v=2';
-import { UI_STATE } from '../core/state.js?v=2';
-import { MD_TOP } from '../charts/plugins.js?v=2';
+import { SC_COLORS } from '../core/constants.js?v=99';
+import { UI_STATE } from '../core/state.js?v=99';
+import { MD_TOP } from '../charts/plugins.js?v=99';
 
-const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Core'];
-const SVC_KEYS = ['t_metrics','t_preflight','t_tests','t_docs','t_dashboard','t_config','t_scripts','t_proxy','t_core'];
+// FIX: Aligned perfectly with your CSV headers
+const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];
+const SVC_KEYS = ['touches_metrics','touches_preflight','touches_tests','touches_docs','touches_dashboard','touches_config','touches_scripts','touches_proxy','touches_critical'];
 
 export function renderHeatmap(commits) {
     const svgEl = document.getElementById('cm-heat-svg');
@@ -20,7 +21,8 @@ export function renderHeatmap(commits) {
 
     let xPos = [];
     if (isLin) {
-        const t0 = commits[0].ts, tN = commits[commits.length-1].ts, pad = (tN - t0) * 0.05;
+        const t0 = commits[0].ts, tN = commits[commits.length-1].ts;
+        const pad = (tN === t0) ? 86400 : (tN - t0) * 0.05; 
         xPos = commits.map(c => PAD_L + ((c.ts - (t0 - pad)) / ((tN + pad) - (t0 - pad))) * plotW);
     } else {
         const step = plotW / commits.length; xPos = commits.map((_, i) => PAD_L + (i * step) + (step / 2));
@@ -39,11 +41,12 @@ export function renderHeatmap(commits) {
 
     commits.forEach((c, col) => {
         SVCS.forEach((svc, row) => {
-            const hit = c[SVC_KEYS[row]] === true;
+            // Because the keys now match the CSV, this hit check will pass!
+            const hit = c[SVC_KEYS[row]] === true || c[SVC_KEYS[row]] === "True";
             const rect = document.createElementNS(ns, 'rect');
             rect.setAttribute('x', xPos[col] - (colW / 2)); rect.setAttribute('y', PAD_T + row * rowH + 1);
             rect.setAttribute('width', colW); rect.setAttribute('height', rowH - 2); rect.setAttribute('rx', 2);
-            rect.setAttribute('fill', hit ? SC_COLORS[SVC_KEYS[row]] : 'rgba(255,255,255,.04)'); rect.setAttribute('opacity', hit ? '0.85' : '1');
+            rect.setAttribute('fill', hit ? SC_COLORS[SVC_KEYS[row]] || '#4f98a3' : 'rgba(255,255,255,.04)'); rect.setAttribute('opacity', hit ? '0.85' : '1');
             svgEl.appendChild(rect);
         });
     });

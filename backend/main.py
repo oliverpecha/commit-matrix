@@ -45,4 +45,4 @@ async def dashboard_home(request: Request, repo: str = "example-repo", token: st
                     commits.append(commit_data)
         except Exception as e: print(f"MATRIX PARSER ERROR: {e}")
     
-    return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": json.dumps(commits), "rubric": rubric})
+    return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": commits, "rubric": rubric, "version": VERSION})
