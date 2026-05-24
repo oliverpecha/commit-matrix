@@ -117,53 +117,26 @@ if __name__ == "__main__":
 
     print(f"📦 Discovered {total_unscanned} unscanned commit(s) ready for analysis.\n\n", flush=True)
 
-    # 3. Inject the Multi-Threaded Live Spinner
-    import threading, time
-    class DotSpinner:
-        def __init__(self, message):
-            self.message = message
-            self.running = False
-        def spin(self):
-            print(self.message, end="", flush=True)
-            while self.running:
-                print(".", end="", flush=True)
-                time.sleep(1.2) # Push a dot to the UI every 1.2 seconds
-        def start(self):
-            self.running = True
-            self.thread = threading.Thread(target=self.spin)
-            self.thread.start()
-        def stop(self):
-            self.running = False
-            self.thread.join()
-            print(" [DONE]\n\n", flush=True)
+# 3. The Orchestrator & Worker Pool Setup
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    MAX_WORKERS = 4 
+    file_exists = os.path.exists(CSV_PATH)
 
-    # 4. Process only the remaining unscanned commits
-    for i, parts in enumerate(unscanned_commits, 1):
+    def process_commit(i, parts, total_unscanned, arch_context):
+        # Pure function: No CSV writing, no locks. Just calculates and returns.
         hash_long, hash_short, author_date, subject = parts
-        
-        # --- DIFF & SCORING ---
         diff = run_cmd(["git", "diff", f"{hash_long}~1", hash_long])
-        
-        if not diff.strip():
-            diff = run_cmd(["git", "diff", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", hash_long])
+        if not diff.strip(): diff = run_cmd(["git", "diff", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", hash_long])
             
-        if not diff.strip(): 
-            print(f"⚠️ Diff is empty for {hash_short}. Skipping.\n\n", flush=True)
-            continue
+        if not diff.strip(): return i, None 
 
         try:
             with open(args.rubric, "r", encoding="utf-8") as f: rubric_rules = f.read()
             sys_prompt = f"{rubric_rules}"
             usr_prompt = f"ARCHITECTURE CONTEXT:\n{arch_context}\n\nGIT DIFF:\n{diff}"
             
-            # Start the live dot stream right before hitting the LLM
-            spinner = DotSpinner(f"🔍 Analyzing diff and applying [{RUBRIC_NAME}] rubric to commit {hash_short} ")
-            spinner.start()
-            
             response = completion(model=MODEL_NAME, messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": usr_prompt}], temperature=0.0)
-            
-            # Stop the live dot stream
-            spinner.stop()
             
             raw_text = response.choices[0].message.content
             json_str = raw_text.strip()
@@ -175,53 +148,78 @@ if __name__ == "__main__":
             
             scores = json.loads(json_str)
             
-            file_exists = os.path.exists(CSV_PATH)
             headers = ["hash_long", "hash_short", "subject", "author_date", "lines_added", "lines_deleted"] + list(scores.keys())
-            
             added = max(0, diff.count("\n+") - diff.count("\n+++"))
             deleted = max(0, diff.count("\n-") - diff.count("\n---"))
-            
             row = [hash_long, hash_short, subject, author_date, added, deleted] + [scores.get(k, "") for k in scores.keys()]
-            
-            with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                if not file_exists: writer.writerow(headers)
-                writer.writerow(row)
-                existing_hashes.add(hash_short)
 
             tier = scores.get('tier', 'Routine').upper()
             tot_score = scores.get('tot', sum([int(scores.get(k,0)) for k in ['C','I','R','S','D'] if str(scores.get(k,0)).isdigit()]))
             touches = [k.replace('touches_', '') for k, v in scores.items() if k.startswith('touches_') and v is True]
             t_str = ", ".join(touches) if touches else "None"
-
-            # Traffic light logic
             traffic_light = "🟢" if tier == "ROUTINE" else "🟡" if tier == "SIGNIFICANT" else "🔴"
             
-            # Format date string safely
             try:
                 dt_obj = datetime.fromisoformat(author_date.replace("Z", "+00:00"))
                 formatted_date = dt_obj.strftime('%b %d, %Y')
             except:
                 formatted_date = author_date.split("T")[0] if "T" in author_date else author_date
 
-            print(f"┌─────────────────────────────────────────────────────────────────────────┐")
-            print(f"│ 🚀 TELEMETRY {i} out of {total_unscanned}: {hash_short}")
-            print(f"├─────────────────────────────────────────────────────────────────────────┤")
-            print(f"│ 📅 Date:   {formatted_date}")
-            print(f"│ 📝 Subject: {subject[:60]}..." if len(subject) > 60 else f"│ 📝 Subject: {subject}")
-            print(f"│ {traffic_light} Tier:   {tier} (Score: {tot_score})")
-            print(f"│ 🛠️  Scope:  {t_str}")
-            print(f"└─────────────────────────────────────────────────────────────────────────┘\n\n", flush=True)
-
-        except Exception as e:
-            if 'spinner' in locals() and spinner.running: spinner.stop()
-            err_str = str(e)
-            print(f"❌ Error scoring commit {hash_short}: {err_str}\n\n", flush=True)
+            subject_display = f"📝 Subject: {subject[:60]}..." if len(subject) > 60 else f"📝 Subject: {subject}"
+            ui_block = (
+                f"┌─────────────────────────────────────────────────────────────────────────┐\n"
+                f"│ 🚀 TELEMETRY {i} out of {total_unscanned}: {hash_short}\n"
+                f"├─────────────────────────────────────────────────────────────────────────┤\n"
+                f"│ 📅 Date:   {formatted_date}\n"
+                f"│ {subject_display}\n"
+                f"│ {traffic_light} Tier:   {tier} (Score: {tot_score})\n"
+                f"│ 🛠️  Scope:  {t_str}\n"
+                f"└─────────────────────────────────────────────────────────────────────────┘\n\n"
+            )
+            return i, (headers, row, hash_short, ui_block)
             
-            # Catch hard API limits and abort instantly
+        except Exception as e:
+            err_str = str(e)
             if "429" in err_str or "spending cap" in err_str.lower() or "quota" in err_str.lower():
-                print("🛑 CRITICAL: API Rate Limit or Spending Cap reached. Aborting scan.\n\n", flush=True)
-                sys.exit(1)
-            continue
+                print("🛑 CRITICAL: API Rate Limit or Spending Cap reached. Aborting scan immediately.\n\n", flush=True)
+                import os; os._exit(1) 
+            return i, f"❌ Error scoring commit {hash_short}: {err_str}\n\n"
+
+    # 4. The Orchestrator Loop
+    print(f"⚡ Initializing ThreadPool with {MAX_WORKERS} workers...\n\n", flush=True)
+    
+    pending_results = {}
+    next_to_write = 1
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(process_commit, i, parts, total_unscanned, arch_context): i for i, parts in enumerate(unscanned_commits, 1)}
+        
+        for future in as_completed(futures):
+            idx, result = future.result()
+            pending_results[idx] = result
+            
+            # --- Intermediate Progress Feedback ---
+            if result and not isinstance(result, str):
+                h_short = result[2]
+                print(f"⚙️  [Worker] Scored {h_short} -> Queued for ledger flush...\n", flush=True)
+            
+            # The Flush: Only write to CSV and Terminal if the result is chronologically next in line
+            while next_to_write in pending_results:
+                res = pending_results.pop(next_to_write)
+                if res:
+                    if isinstance(res, str): # It's an error string
+                        print(res, flush=True)
+                    else:
+                        headers, row, hash_short, ui_block = res
+                        with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
+                            writer = csv.writer(f)
+                            if next_to_write == 1 and not file_exists:
+                                writer.writerow(headers)
+                                file_exists = True
+                            writer.writerow(row)
+                            existing_hashes.add(hash_short)
+                        print(ui_block, flush=True)
+                
+                next_to_write += 1
 
     print("🤝 PROCESS_COMPLETE\n\n", flush=True)

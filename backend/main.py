@@ -60,55 +60,48 @@ import subprocess
 
 @app.post("/api/scan")
 async def stream_scan(request: Request, repo: str = "example-repo", token: str = None):
+    import asyncio
     from fastapi.responses import HTMLResponse, StreamingResponse
-    import subprocess
+    import time
     
-    if token != METRICS_KEY:
-        return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
+    if token != METRICS_KEY: return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
         
-    def generate():
+    async def generate():
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
-        
+        os.system("docker ps -q --filter name=matrix-analyzer- | xargs -r docker rm -f > /dev/null 2>&1")
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
-        cmd = [
-            "docker", "run", "--rm",
-            "-v", "/root/commit-matrix:/target_repo",
-            "-v", "/root/commit-matrix/data:/app/data",
-            "-v", "/root/commit-matrix/rubrics:/app/rubrics",
-            "-v", "/root/commit-matrix/backend:/app/backend",
-            "-e", f"GEMINI_API_KEY={gemini_key}",
-            "-e", "MODEL_NAME=gemini-1.5-flash",
-            "-e", f"HOST_REPO_NAME={repo}",
-            "commit-matrix-core:latest",
-            "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"
-        ]
+        c_name = f"matrix-analyzer-{int(time.time())}"
         
-        cmd_display = cmd.copy()
-        for i, val in enumerate(cmd_display):
-            if val.startswith("GEMINI_API_KEY="):
-                cmd_display[i] = "GEMINI_API_KEY=********"
+        cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", "MODEL_NAME=gemini-1.5-flash", "-e", f"HOST_REPO_NAME={repo}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
+        
+        c_disp = cmd.copy()
+        for i, val in enumerate(c_disp):
+            if val.startswith("GEMINI_API_KEY="): c_disp[i] = "GEMINI_API_KEY=********"
                 
-        yield f"🔗 Executing nested container command:\n   <span style='color:#555'>{' '.join(cmd_display)}</span>\n\n"
+        yield f"🔗 Executing nested container command:\n   <span style='color:#555'>{' '.join(c_disp)}</span>\n\n"
         yield f"🧬 INITIATING AI SCORING MATRIX ANALYSIS ON REPOSITORY: [{repo}]\n\n"
-        yield "⏳ Booting isolated analyzer environment (this takes ~3-5 seconds)...\n\n"
 
-        process = None
+        proc = None
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            # Character-streaming logic for live dots
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            import codecs
+            # The incremental decoder safely buffers shattered emojis until they are whole
+            decoder = codecs.getincrementaldecoder('utf-8')()
             while True:
-                char = process.stdout.read(1)
-                if not char and process.poll() is not None:
-                    break
-                if char:
-                    yield char
-            process.wait()
-        except Exception as e:
-            yield f"❌ ERROR: {e}\n\n"
+                if await request.is_disconnected(): break
+                try:
+                    chunk = await asyncio.wait_for(proc.stdout.read(1024), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                if not chunk: break
+                text = decoder.decode(chunk)
+                if text: yield text
+        except asyncio.CancelledError: pass
+        except Exception as e: yield f"❌ ERROR: {e}\n\n"
         finally:
-            # The Zombie Killer: Violently terminate the nested process on disconnect
-            if process and process.poll() is None:
-                process.terminate()
-                process.kill()
+            if proc:
+                try: proc.terminate()
+                except: pass
+            os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
 
     return StreamingResponse(generate(), media_type="text/plain")

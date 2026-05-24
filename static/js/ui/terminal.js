@@ -13,7 +13,7 @@ export async function triggerLedgerRefresh() {
                 <span style="font-weight:bold; color:#4f98a3; display:flex; align-items:center; gap:6px;">🧬 CommitMatrix Live Engine Telemetry Terminal</span>
                 <div style="display:flex; align-items:center; gap:15px;">
                     <span id="cm-terminal-status" style="color:#ffb84d; font-weight:bold;">PROCESSING</span>
-                    <span onclick="document.getElementById('cm-terminal-modal').remove()" style="cursor:pointer; color:#777; font-weight:bold;">[ X ]</span>
+                    <span onclick="window.location.reload()" style="cursor:pointer; color:#777; font-weight:bold;">[ X ]</span>
                 </div>
             </div>
             <div id="cm-terminal-body" style="height:350px; overflow-y:auto; background:#070708; color:#a3e685; padding:15px; border-radius:6px; font-size:12px; line-height:1.6; border:1px solid rgba(255,255,255,0.04); white-space:pre-wrap; font-family:monospace;"></div>
