@@ -11,7 +11,7 @@ from litellm import completion
 parser = argparse.ArgumentParser(description="CommitMatrix LLM Parser")
 parser.add_argument("--repo", type=str, default=os.getcwd(), help="Absolute path to the target git repository")
 parser.add_argument("--remap", action="store_true", help="Force a repository architecture re-map")
-parser.add_argument("--rubric", type=str, default=os.path.join(os.getcwd(), "backend", "rubrics", "cirsd.md"), help="Path to the scoring rubric file")
+parser.add_argument("--rubric", type=str, default=os.path.join(os.getcwd(), "rubrics", "cirsd.md"), help="Path to the scoring rubric file")
 args = parser.parse_args()
 
 MODEL_NAME = "gemini/gemini-3.1-pro-preview"
@@ -46,14 +46,7 @@ def run_cmd(cmd):
     try: return subprocess.run(cmd, cwd=REPO_PATH, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True).stdout.strip()
     except subprocess.CalledProcessError: return ""
 
-def get_project_identifier():
-    remote = run_cmd(["git", "config", "--get", "remote.origin.url"])
-    if remote:
-        clean = remote.split(":")[-1].replace(".git", "").replace("/", "_")
-        if clean: return clean
-    return os.environ.get("HOST_REPO_NAME", os.path.basename(REPO_PATH))
-
-IDENTIFIER = get_project_identifier()
+IDENTIFIER = os.environ.get("HOST_REPO_NAME", os.path.basename(REPO_PATH))
 RUBRIC_NAME = "".join(e for e in os.path.splitext(os.path.basename(args.rubric))[0].lower() if e.isalnum())
 DATA_DIR = os.path.join(os.environ.get("MATRIX_DATA_DIR", "/app/data"), IDENTIFIER)
 CSV_PATH = os.path.join(DATA_DIR, f"{IDENTIFIER}_ledger_{RUBRIC_NAME}.csv")
@@ -76,7 +69,7 @@ def auto_map_architecture():
     spinner = Spinner(f"🧠 Mapping architecture for [{IDENTIFIER}]")
     try:
         spinner.start()
-        response = completion(model=MODEL_NAME, messages=[{"role": "user", "content": prompt}], temperature=0.0, num_retries=3)
+        response = completion(model=MODEL_NAME, messages=[{"role": "user", "content": prompt}], temperature=0.0)
         arch_content = response.choices[0].message.content
         with open(ARCH_PATH, "w", encoding="utf-8") as f: f.write(arch_content)
         return arch_content
@@ -84,74 +77,151 @@ def auto_map_architecture():
         spinner.stop()
 
 if __name__ == "__main__":
+    import csv
     if not os.path.exists(os.path.join(REPO_PATH, ".git")): print(f"❌ Error: {REPO_PATH} is not a valid git repository."); sys.exit(1)
     
-    hash_long = run_cmd(["git", "log", "-1", "--format=%H"])
-    hash_short = run_cmd(["git", "log", "-1", "--format=%h"])
-    subject = run_cmd(["git", "log", "-1", "--format=%s"])
-    author_date = run_cmd(["git", "log", "-1", "--format=%cI"])
-    if not hash_long: print("❌ No commits found in this repository."); sys.exit(1)
-
-    # --- IDEMPOTENCY CHECK ---
-    # Prevents duplicate entries in the database
-    if os.path.exists(CSV_PATH):
-        with open(CSV_PATH, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if len(row) > 1 and row[1] == hash_short:
-                    print(f"\n✅ Commit [{hash_short}] already exists in ledger. Skipping analysis.\n")
-                    sys.exit(0)
-
-    # --- ARCHITECTURE MAPPING ---
+    # --- ARCHITECTURE MAPPING (Only runs once per repository) ---
     if args.remap or not os.path.exists(ARCH_PATH): 
         arch_context = auto_map_architecture()
     else:
-        print(f"⚡ Loading cached architecture map for [{IDENTIFIER}].")
+        print(f"⚡ Loading cached architecture map for [{IDENTIFIER}].\n\n", flush=True)
         with open(ARCH_PATH, "r", encoding="utf-8") as f: arch_context = f.read()
 
-    # --- DIFF & SCORING ---
-    diff = run_cmd(["git", "diff", "HEAD~1", "HEAD"])
-    if not diff.strip(): print("⚠️ Diff is empty. Nothing to score."); sys.exit(0)
+    # Get a list of ALL commits in chronological order (oldest first)
+    log_output = run_cmd(["git", "log", "--reverse", "--format=%H|%h|%cI|%s"])
+    if not log_output: print("❌ No commits found in this repository."); sys.exit(1)
+    
+    commits = log_output.strip().split('\n')
 
-    try:
-        with open(args.rubric, "r", encoding="utf-8") as f: rubric_rules = f.read()
-        sys_prompt = f"{rubric_rules}"
-        usr_prompt = f"ARCHITECTURE CONTEXT:\n{arch_context}\n\nGIT DIFF:\n{diff}"
+    # 1. Pre-load the existing ledger to cross-reference
+    existing_hashes = set()
+    if os.path.exists(CSV_PATH):
+        with open(CSV_PATH, "r", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            next(reader, None) # Skip header
+            for row in reader:
+                if len(row) > 1: existing_hashes.add(row[1])
+
+    # 2. Filter out EVERYTHING that has already been scanned instantly
+    unscanned_commits = []
+    for commit_line in commits:
+        parts = commit_line.split('|', 3)
+        if len(parts) == 4 and parts[1] not in existing_hashes:
+            unscanned_commits.append(parts)
+
+    total_unscanned = len(unscanned_commits)
+
+    if total_unscanned == 0:
+        print("✅ Matrix is fully up to date. No new commits to analyze.\n\n", flush=True)
+        sys.exit(0)
+
+    print(f"📦 Discovered {total_unscanned} unscanned commit(s) ready for analysis.\n\n", flush=True)
+
+    # 3. Inject the Multi-Threaded Live Spinner
+    import threading, time
+    class DotSpinner:
+        def __init__(self, message):
+            self.message = message
+            self.running = False
+        def spin(self):
+            print(self.message, end="", flush=True)
+            while self.running:
+                print(".", end="", flush=True)
+                time.sleep(1.2) # Push a dot to the UI every 1.2 seconds
+        def start(self):
+            self.running = True
+            self.thread = threading.Thread(target=self.spin)
+            self.thread.start()
+        def stop(self):
+            self.running = False
+            self.thread.join()
+            print(" [DONE]\n\n", flush=True)
+
+    # 4. Process only the remaining unscanned commits
+    for i, parts in enumerate(unscanned_commits, 1):
+        hash_long, hash_short, author_date, subject = parts
         
-        spinner = Spinner(f"🔍 Analyzing diff and applying [{RUBRIC_NAME.upper()}] rubric")
+        # --- DIFF & SCORING ---
+        diff = run_cmd(["git", "diff", f"{hash_long}~1", hash_long])
+        
+        if not diff.strip():
+            diff = run_cmd(["git", "diff", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", hash_long])
+            
+        if not diff.strip(): 
+            print(f"⚠️ Diff is empty for {hash_short}. Skipping.\n\n", flush=True)
+            continue
+
         try:
+            with open(args.rubric, "r", encoding="utf-8") as f: rubric_rules = f.read()
+            sys_prompt = f"{rubric_rules}"
+            usr_prompt = f"ARCHITECTURE CONTEXT:\n{arch_context}\n\nGIT DIFF:\n{diff}"
+            
+            # Start the live dot stream right before hitting the LLM
+            spinner = DotSpinner(f"🔍 Analyzing diff and applying [{RUBRIC_NAME}] rubric to commit {hash_short} ")
             spinner.start()
-            # Added num_retries=3 to handle temporary 503 Google errors
-            response = completion(model=MODEL_NAME, messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": usr_prompt}], response_format={ "type": "json_object" }, temperature=0.0, num_retries=3)
-        finally:
+            
+            response = completion(model=MODEL_NAME, messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": usr_prompt}], temperature=0.0)
+            
+            # Stop the live dot stream
             spinner.stop()
             
-        scores = json.loads(response.choices[0].message.content.strip())
-        
-        file_exists = os.path.exists(CSV_PATH)
-        headers = ["hash_long", "hash_short", "subject", "author_date", "lines_added", "lines_deleted"] + list(scores.keys())
-        row = [hash_long, hash_short, subject, author_date, diff.count("\n+") - diff.count("\n+++"), diff.count("\n-") - diff.count("\n---")] + [scores[k] for k in scores.keys()]
-        
-        with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            if not file_exists: writer.writerow(headers)
-            writer.writerow(row)
+            raw_text = response.choices[0].message.content
+            json_str = raw_text.strip()
+            
+            t3 = chr(96) * 3
+            if json_str.startswith(t3 + "json"): json_str = json_str.split(t3 + "json", 1)[1].strip()
+            elif json_str.startswith(t3): json_str = json_str.split(t3, 1)[1].strip()
+            if json_str.endswith(t3): json_str = json_str.rsplit(t3, 1)[0].strip()
+            
+            scores = json.loads(json_str)
+            
+            file_exists = os.path.exists(CSV_PATH)
+            headers = ["hash_long", "hash_short", "subject", "author_date", "lines_added", "lines_deleted"] + list(scores.keys())
+            
+            added = max(0, diff.count("\n+") - diff.count("\n+++"))
+            deleted = max(0, diff.count("\n-") - diff.count("\n---"))
+            
+            row = [hash_long, hash_short, subject, author_date, added, deleted] + [scores.get(k, "") for k in scores.keys()]
+            
+            with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                if not file_exists: writer.writerow(headers)
+                writer.writerow(row)
+                existing_hashes.add(hash_short)
 
-        c_dim, c_rst = "\033[2m", "\033[0m"
-        c_grn, c_ylw, c_red, c_cyn = "\033[92m", "\033[93m", "\033[91m", "\033[96m"
+            tier = scores.get('tier', 'Routine').upper()
+            tot_score = scores.get('tot', sum([int(scores.get(k,0)) for k in ['C','I','R','S','D'] if str(scores.get(k,0)).isdigit()]))
+            touches = [k.replace('touches_', '') for k, v in scores.items() if k.startswith('touches_') and v is True]
+            t_str = ", ".join(touches) if touches else "None"
 
-        tier = scores.get('tier', 'Routine').upper()
-        t_color = c_red if tier == 'CRITICAL' else (c_ylw if tier == 'SIGNIFICANT' else c_grn)
-        tot_score = scores.get('tot', sum([scores.get(k,0) for k in ['C','I','R','S','D']]))
-        touches = [k.replace('touches_', '') for k, v in scores.items() if k.startswith('touches_') and v is True]
-        t_str = ", ".join(touches) if touches else "None"
+            # Traffic light logic
+            traffic_light = "🟢" if tier == "ROUTINE" else "🟡" if tier == "SIGNIFICANT" else "🔴"
+            
+            # Format date string safely
+            try:
+                dt_obj = datetime.fromisoformat(author_date.replace("Z", "+00:00"))
+                formatted_date = dt_obj.strftime('%b %d, %Y')
+            except:
+                formatted_date = author_date.split("T")[0] if "T" in author_date else author_date
 
-        print(f"\n{c_dim}┌─────────────────────────────────────────────────────────────────────────┐{c_rst}")
-        print(f"{c_dim}│{c_rst} 🚀 TELEMETRY: {c_cyn}{hash_short}{c_rst}")
-        print(f"{c_dim}├─────────────────────────────────────────────────────────────────────────┤{c_rst}")
-        print(f"{c_dim}│{c_rst} 🏆 Tier:   {t_color}{tier}{c_rst} (Score: {tot_score})")
-        print(f"{c_dim}│{c_rst} 📊 Matrix: │  C:{scores.get('C',0)}  │  I:{scores.get('I',0)}  │  R:{scores.get('R',0)}  │  S:{scores.get('S',0)}  │  D:{scores.get('D',0)}  │")
-        print(f"{c_dim}│{c_rst} 🛠️  Scope:  {t_str}")
-        print(f"{c_dim}└─────────────────────────────────────────────────────────────────────────┘{c_rst}\n")
+            print(f"┌─────────────────────────────────────────────────────────────────────────┐")
+            print(f"│ 🚀 TELEMETRY {i} out of {total_unscanned}: {hash_short}")
+            print(f"├─────────────────────────────────────────────────────────────────────────┤")
+            print(f"│ 📅 Date:   {formatted_date}")
+            print(f"│ 📝 Subject: {subject[:60]}..." if len(subject) > 60 else f"│ 📝 Subject: {subject}")
+            print(f"│ {traffic_light} Tier:   {tier} (Score: {tot_score})")
+            print(f"│ 🛠️  Scope:  {t_str}")
+            print(f"└─────────────────────────────────────────────────────────────────────────┘\n\n", flush=True)
 
-    except Exception as e: print(f"\n❌ Failed to parse commit: {e}")
+        except Exception as e:
+            if 'spinner' in locals() and spinner.running: spinner.stop()
+            err_str = str(e)
+            print(f"❌ Error scoring commit {hash_short}: {err_str}\n\n", flush=True)
+            
+            # Catch hard API limits and abort instantly
+            if "429" in err_str or "spending cap" in err_str.lower() or "quota" in err_str.lower():
+                print("🛑 CRITICAL: API Rate Limit or Spending Cap reached. Aborting scan.\n\n", flush=True)
+                sys.exit(1)
+            continue
+
+    print("🤝 PROCESS_COMPLETE\n\n", flush=True)
