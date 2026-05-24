@@ -20,7 +20,7 @@ templates = Jinja2Templates(directory="templates")
 METRICS_KEY = os.environ.get("MATRIX_TOKEN", "mochi")
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard_home(request: Request, repo: str = "example-repo", token: str = None, rubric: str = "cirsd"):
+async def dashboard_home(request: Request, repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
     if token != METRICS_KEY: return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
     
     commits = []
@@ -59,7 +59,7 @@ from fastapi.responses import StreamingResponse
 import subprocess
 
 @app.post("/api/scan")
-async def stream_scan(request: Request, repo: str = "example-repo", token: str = None):
+async def stream_scan(request: Request, repo: str = "commit-matrix", token: str = None):
     import asyncio
     from fastapi.responses import HTMLResponse, StreamingResponse
     import time
@@ -70,9 +70,10 @@ async def stream_scan(request: Request, repo: str = "example-repo", token: str =
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
         os.system("docker ps -q --filter name=matrix-analyzer- | xargs -r docker rm -f > /dev/null 2>&1")
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        max_w = os.environ.get("MATRIX_MAX_WORKERS", "32")
         c_name = f"matrix-analyzer-{int(time.time())}"
         
-        cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", "MODEL_NAME=gemini-1.5-flash", "-e", f"HOST_REPO_NAME={repo}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
+        cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", f"MATRIX_MAX_WORKERS={max_w}", "-e", "MODEL_NAME=gemini-1.5-flash", "-e", f"HOST_REPO_NAME={repo}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
         
         c_disp = cmd.copy()
         for i, val in enumerate(c_disp):
