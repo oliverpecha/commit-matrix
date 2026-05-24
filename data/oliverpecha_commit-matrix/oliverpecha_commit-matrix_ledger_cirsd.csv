@@ -1,0 +1,22 @@
+hash_long,hash_short,subject,author_date,lines_added,lines_deleted,C,I,R,S,D,tot,score_pct,tier,touches_proxy,touches_scripts,touches_config,touches_dashboard,touches_docs,touches_tests,touches_preflight,touches_metrics,touches_critical
+289be6fbd40cf114e7146c0684d41869f3567150,289be6f,feat(ui): decouple frontend rendering to ES6 modules and add SSOT versioning,2026-05-23T09:51:51Z,225,61,2,3,2,3,2,12,80.0,Critical,False,True,True,True,False,False,False,False,False
+962d562b18c1ba54c172c149d3a78379641d4f04,962d562,"chore(core): initialize CommitMatrix scaffold, Docker environment, and ES6 architecture",2026-05-16T12:16:44Z,761,0,2,3,1,3,1,10,66.7,Significant,False,False,True,True,False,False,False,True,False
+98c60514cde25384821b22b592bd003496064e97,98c6051,feat(core): decouple UI into ES6 modules and restore full dashboard fidelity,2026-05-16T16:47:14Z,181,329,3,3,2,3,1,12,80.0,Critical,False,False,False,True,False,False,False,False,False
+58f3cf25bbcd48696d2bfb107146d5bb6b28d2cb,58f3cf2,docs: add CIRSD manifesto and docker quickstart instructions,2026-05-16T17:14:56Z,93,49,1,2,2,2,3,10,66.7,Significant,False,False,True,False,True,False,False,False,True
+6787906c1a95e5ea05e4ef390f407ecef80be34b,6787906,"feat(core): implement dynamic LLM parsing, multi-repo support, and isolated rubrics",2026-05-18T13:39:34Z,185,124,3,3,3,3,1,13,86.7,Critical,False,True,True,True,True,False,False,True,True
+4401922608ade7d78a18e36dd2e6f008b687df9d,4401922,chore: ignore auto-generated calibration reports,2026-05-20T10:59:08Z,1,0,1,1,1,1,1,5,33.3,Routine,False,False,True,False,False,False,False,False,False
+8c0f249e16c066c02102038f84fadd4ae7dc110a,8c0f249,feat(rubrics): introduce universal 8-axis scoring templates,2026-05-18T14:15:00Z,1345,1,1,3,1,1,3,9,60.0,Significant,False,False,True,False,True,False,False,True,False
+d24248fd17d8d5564c477700111d0ae2233156c9,d24248f,feat(core): implement dynamic LLM parsing engine,2026-05-18T15:00:00Z,94,33,2,2,2,1,2,9,60.0,Significant,False,True,True,False,False,False,False,False,True
+b73bb402bb8f9722c1a7efd95e8bc76c7c756187,b73bb40,chore(infra): containerize application and update global CLI scripts,2026-05-19T10:30:00Z,61,12,2,3,1,2,2,10,66.7,Significant,False,True,True,False,False,False,False,False,False
+3789ef628ce2b7f255efdd5d5c8c901c353db741,3789ef6,test(harness): build dynamic LLM calibration suite with network resiliency,2026-05-20T08:30:00Z,1922,0,2,3,1,2,3,11,73.3,Significant,False,True,False,False,True,True,False,False,False
+f62f050000696adf244ede07fb5e41d88e6f6b19,f62f050,Initial commit,2026-05-20T13:06:33+02:00,21,0,1,1,1,1,1,5,33.3,Routine,False,False,False,False,True,False,False,False,False
+7b14d52ef299fb085d9bc29a24ce9a25400b8887,7b14d52,Merge branch 'main' of github-commit_matrix:oliverpecha/commit-matrix,2026-05-20T11:55:56Z,21,0,1,1,1,1,3,7,46.7,Routine,False,False,False,False,True,False,False,False,False
+a18a79b69e3b8ae98556f90dab38bba764bfa6f5,a18a79b,chore: enforce security ignore rules on main,2026-05-20T15:38:58Z,1,0,1,1,1,1,1,5,33.3,Routine,False,False,True,False,False,False,False,False,False
+e88071c3a81949a22a91d0afdf339302003d4cf6,e88071c,Merge branch 'main' into feat/llm-scoring-engine,2026-05-20T18:17:31+02:00,21,0,1,1,1,1,1,5,33.3,Routine,False,False,False,False,True,False,False,False,False
+277d9d0096be19bd1c906dd3f292d41e10daca77,277d9d0,Merge pull request #1 from oliverpecha/feat/llm-scoring-engine,2026-05-20T18:30:58+02:00,3563,126,3,3,3,3,3,15,100.0,Critical,False,True,True,True,True,True,False,False,True
+6ce7a1262b3e7c8525d555392d78759b6f1cabcb,6ce7a12,Add files via upload,2026-05-21T20:36:58+02:00,0,0,1,1,1,1,1,5,33.3,Routine,False,False,False,False,False,False,False,False,False
+c6c5a0d2b7ec3f5b80878c27d62e1118efee33b0,c6c5a0d,README.md refactor,2026-05-21T20:44:13+02:00,190,15,1,2,1,1,3,8,53.3,Significant,False,False,False,False,True,False,False,False,False
+a25710b189bc0ea957efd13b1c86502aabc65eed,a25710b,added comic image,2026-05-21T21:03:43+02:00,20,20,1,1,1,1,1,5,33.3,Routine,False,False,False,False,True,False,False,False,False
+45ca8e9d213760238868acf5d95947a41439c599,45ca8e9,alpha pngs,2026-05-21T21:09:01+02:00,5,1,1,1,1,1,3,7,46.7,Routine,False,False,False,False,True,False,False,False,False
+0761f5f0738646f810600455338b6e2c23f60128,0761f5f,alpha pngs,2026-05-21T21:09:31+02:00,0,0,1,1,1,1,1,5,33.3,Routine,False,False,False,False,False,False,False,False,False
+8e65278e17218963f92900ec011fac639ecce609,8e65278,formatting,2026-05-21T21:12:02+02:00,3,3,1,1,1,1,1,5,33.3,Routine,False,False,False,False,True,False,False,False,False

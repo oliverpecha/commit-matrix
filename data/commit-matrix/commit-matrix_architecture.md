@@ -1,49 +1,52 @@
-# Architecture Overview: Commit Matrix System
+# Architecture Overview
 
-## 1. System Overview
-The repository defines a client-server web application (likely named "Commit Matrix") designed to parse, analyze, and visualize structured data (presumably Git commits based on repository artifacts). It utilizes a Python-based backend for data processing/serving and a modular JavaScript frontend for stateful data visualization. 
+This document outlines the system architecture, core modules, coupling characteristics, and systemic blast radius for the repository. Based on the structure, the system is a web-based evaluation and visualization engine that parses code commits and architectural documents against predefined rubrics.
 
-## 2. Core Modules
+## Core Modules
 
-### 2.1. Backend API & Processing Engine (`/backend`)
-*   **API Gateway/Router (`main.py`)**: The primary entry point for the backend service (likely Flask or FastAPI). Handles HTTP requests, static file routing, and serves base HTML templates.
-*   **Parsing Engine (`parser.py`)**: The core business logic module responsible for ingesting raw data, applying transformations, and formatting it for frontend consumption.
-*   **Business Rules/Rubrics (`rubrics/cirsd.md`)**: Externalized markdown-based rules or configurations used by the parser to categorize or evaluate data.
+1. **Backend Engine (`backend/`)**
+   * **`main.py`**: The primary application server (likely FastAPI or Flask) handling API requests and serving templates.
+   * **`parser.py`**: The core logic module responsible for ingesting inputs (diffs, architecture documents) and evaluating them against the rubric definitions.
+   * **Containerization**: Managed via `Dockerfile` and orchestrated via the root `docker-compose.yml`.
 
-### 2.2. Frontend Visualization Client (`/static`, `/templates`)
-*   **Core State & Data Management (`js/core/`)**:
-    *   `dataEngine.js`: Handles fetching, filtering, and transforming backend data payloads for UI consumption.
-    *   `state.js`: Centralized state management for the client session.
-    *   `constants.js`: Shared immutable application configurations.
-*   **Visualization Layer (`js/charts/`)**: Encapsulates graphing logic (`chartCtrl.js`) and third-party graphing integrations/extensions (`plugins.js`).
-*   **UI Components (`js/ui/`)**: Distinct presentation controllers for specific layout domains, including `heatmap.js`, `tableCtrl.js`, and contextual `tooltips.js`.
-*   **View Templates (`/templates`)**: Server-side injected base layouts (`layout.html`, `matrix.html`) that bootstrap the JavaScript application.
+2. **Frontend Application (`static/`, `templates/`)**
+   * **Templates (`templates/`)**: Server-rendered HTML layouts (`layout.html`, `matrix.html`) providing the structural DOM.
+   * **Core State & Data (`static/js/core/`)**: Manages application state (`state.js`) and API communication/data processing (`dataEngine.js`).
+   * **UI & Visualization (`static/js/charts/`, `static/js/ui/`)**: Modular components for rendering complex data, including heatmaps, data tables, terminal emulators, and charts.
 
-### 2.3. Orchestration & Deployment (`/`)
-*   **Containerization (`docker-compose.yml`, `backend/Dockerfile`)**: Defines the infrastructure topology, networking, and volume bindings for local and deployed environments.
-*   **Lifecycle Scripts (`install.sh`, `uninstall.sh`)**: Imperative setup and teardown routines for host-level configuration.
+3. **Rubric Domain (`rubrics/`)**
+   * The central source of truth for evaluation criteria. Contains markdown-based rulesets (`plan.md`, `ship.md`, `flux.md`, etc.) that dictate how the backend parser scores or categorizes inputs.
 
----
+4. **Calibration Framework (`calibration/`)**
+   * A comprehensive testing and validation suite (`calibrate.py`).
+   * **Fixtures**: Contains highly structured test cases (`typical`, `adversarial`, `floor`) for each rubric, including input data (`commit.diff`, `architecture.md`) and expected outputs (`expected.json`).
 
-## 3. Architectural Coupling
-
-*   **Client-Server Coupling (Moderate)**: The frontend and backend are decoupled at the data tier (communicating presumably via JSON over REST/HTTP), but are temporally coupled at the presentation tier since `main.py` likely serves the base Jinja/HTML files from `/templates`. 
-*   **Frontend Data-to-View Coupling (Loose)**: The UI components (`charts/`, `ui/`) subscribe to or read from the `core/state.js` and `core/dataEngine.js`. This unidirectional data flow pattern isolates view logic from data retrieval.
-*   **Backend Ingestion Coupling (Tight)**: `main.py` is tightly coupled to `parser.py`. The API layer acts as a direct proxy for the parser's output, meaning parser schema changes directly mutate the API contract.
+5. **Maintenance & Operations (Root Scripts)**
+   * A suite of utility scripts (`fix_all.py`, `fix_duplicates.py`, `patch_ansi.py`, `fix_visibility.py`) used for data sanitization, state correction, and environment management.
 
 ---
 
-## 4. Systemic Blast Radius
+## Architectural Coupling
+
+* **Backend ↔ Rubrics (Tight Coupling)**: The `parser.py` is heavily dependent on the exact schema and structure of the markdown files in the `rubrics/` directory. Any structural change to the rubrics requires a corresponding update to the parser.
+* **Calibration ↔ Backend/Rubrics (Tight Coupling)**: The calibration suite acts as a strict contract monitor. It is tightly coupled to both the parser's logic and the rubrics' definitions. Changes to either will immediately invalidate the `expected.json` fixtures.
+* **Frontend ↔ Backend (Loose/Moderate Coupling)**: The frontend operates as a decoupled Single Page Application (SPA) or hybrid app, communicating with the backend via `dataEngine.js`. It relies on a stable JSON contract from the backend API.
+* **Frontend Core ↔ UI Components (Moderate Coupling)**: UI components (`heatmap.js`, `terminal.js`, `chartCtrl.js`) are coupled to the centralized state manager (`state.js`), ensuring synchronized updates across the dashboard.
+
+---
+
+## Systemic Blast Radius
 
 ### High Blast Radius
-*   **`backend/parser.py`**: Changes to the data structures generated here will cascade across the entire system. A schema mutation will break the API contract, causing cascading failures in `dataEngine.js`, `state.js`, and all downstream visualizations.
-*   **`static/js/core/state.js` & `dataEngine.js`**: Modifying state lifecycle or data transformation logic risks bringing down the entire frontend SPA, as all UI modules depend on these singletons.
-*   **`docker-compose.yml` & `.env`**: Infrastructure changes affect system availability, port bindings, and service discovery.
+* **`backend/parser.py`**: The most critical operational component. Bugs or changes here will alter evaluation results system-wide, break the frontend data contract, and fail the entire calibration suite.
+* **`rubrics/*.md`**: Modifying the domain rules directly impacts the business logic. A change to a rubric alters how inputs are evaluated, requiring cascading updates to calibration fixtures and potentially frontend visualization logic.
+* **`static/js/core/state.js` & `dataEngine.js`**: Changes to frontend state management or data ingestion will affect all downstream UI components simultaneously.
 
 ### Medium Blast Radius
-*   **`backend/main.py`**: Changes to route definitions or middleware affect client-server connectivity. Bugs here result in localized 404/500 errors preventing specific views from loading.
-*   **`templates/layout.html`**: Altering the DOM structure, script load order, or CSS injection will affect the foundational rendering of all pages inheriting this layout.
+* **`backend/main.py`**: Changes to routing or middleware affect API availability and template rendering, but do not alter the core evaluation logic.
+* **`templates/matrix.html`**: Structural DOM changes will break the bindings of the frontend JavaScript components (e.g., `tableCtrl.js`, `heatmap.js`).
 
 ### Low Blast Radius
-*   **Specific UI Controllers (e.g., `heatmap.js`, `tableCtrl.js`)**: Isolated presentation logic. A bug in the heatmap will generally not corrupt the state or crash the table view, provided state immutability is respected.
-*   **`static/css/matrix.css`**: Purely aesthetic impact. Visual regressions are constrained to the browser's rendering engine without halting application logic.
+* **`calibration/`**: Changes here are isolated to the CI/CD or local testing environments. While critical for validation, breaking the calibration suite does not directly impact the running production system.
+* **Root Utility Scripts (`fix_*.py`)**: These are ad-hoc operational tools. Errors here are localized to the specific maintenance task being performed and do not affect the continuous runtime of the application.
+* **Individual UI Components (`static/js/ui/tooltips.js`, etc.)**: Visual or logical bugs in a specific UI module are isolated to that specific feature and will not crash the broader application state.
