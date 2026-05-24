@@ -1,5 +1,44 @@
 {% extends "layout.html" %}
-{% block title %}CommitMatrix Telemetry{% endblock %}
+{% block title %}CommitMatrix Telemetry
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Evaluated by Python before sending to browser. True if commits exist, False if empty/missing.
+        const serverHasData = {{ 'true' if commits_data else 'false' }};
+
+        if (!serverHasData) {
+            if (document.getElementById('cm-zero-state')) return;
+
+            const zeroStateDiv = document.createElement('div');
+            zeroStateDiv.id = 'cm-zero-state';
+            zeroStateDiv.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:75vh; text-align:center; font-family:Satoshi, sans-serif;">
+                    <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
+                    <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Awaiting Telemetry</h2>
+                    <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">The architectural ledger is currently empty. Initialize the AI scoring engine to parse your Git history and generate the matrix.</p>
+                    <button onclick="triggerLedgerRefresh()" class="cm-fbtn" style="background:rgba(79,152,163,0.12); border:1px solid rgba(79,152,163,0.4); padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: all 0.2s ease;">🚀 Initialize Engine</button>
+                </div>
+            `;
+            document.body.insertBefore(zeroStateDiv, document.body.firstChild);
+
+            // Nuclear Hide: Destroy all empty panels so they don't clutter the screen
+            Array.from(document.body.children).forEach(child => {
+                const tagName = child.tagName || '';
+                const id = (child.id || '').toLowerCase();
+                const className = (child.className || '').toLowerCase();
+
+                const isZeroState = id === 'cm-zero-state';
+                const isTerminalOrModal = id.includes('terminal') || id.includes('modal') || className.includes('modal');
+                const isScriptOrStyle = tagName === 'SCRIPT' || tagName === 'STYLE';
+
+                if (!isZeroState && !isTerminalOrModal && !isScriptOrStyle) {
+                    child.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }
+    });
+    </script>
+    
+{% endblock %}
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -13,6 +52,9 @@
 </style>
 <div id="info-tt"></div><div id="cm-tt"></div>
 <div class="cm-wrap">
+  <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+        <button onclick="triggerLedgerRefresh()" class="cm-fbtn" style="background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); padding:8px 18px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:4px; font-family:Satoshi,sans-serif;">🔄 Refresh Ledger</button>
+      </div>
   <div class="cm-kpi-row">
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_tot">Total Commits</div><div class="cm-kpi-val" id="cm-kp">—</div></div>
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
@@ -37,8 +79,86 @@
   </div>
   <div class="cm-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table></div></div>
 </div>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Evaluated by Python before sending to browser. True if commits exist, False if empty/missing.
+        const serverHasData = {{ 'true' if commits_data else 'false' }};
+
+        if (!serverHasData) {
+            if (document.getElementById('cm-zero-state')) return;
+
+            const zeroStateDiv = document.createElement('div');
+            zeroStateDiv.id = 'cm-zero-state';
+            zeroStateDiv.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:75vh; text-align:center; font-family:Satoshi, sans-serif;">
+                    <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
+                    <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Awaiting Telemetry</h2>
+                    <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">The architectural ledger is currently empty. Initialize the AI scoring engine to parse your Git history and generate the matrix.</p>
+                    <button onclick="triggerLedgerRefresh()" class="cm-fbtn" style="background:rgba(79,152,163,0.12); border:1px solid rgba(79,152,163,0.4); padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: all 0.2s ease;">🚀 Initialize Engine</button>
+                </div>
+            `;
+            document.body.insertBefore(zeroStateDiv, document.body.firstChild);
+
+            // Nuclear Hide: Destroy all empty panels so they don't clutter the screen
+            Array.from(document.body.children).forEach(child => {
+                const tagName = child.tagName || '';
+                const id = (child.id || '').toLowerCase();
+                const className = (child.className || '').toLowerCase();
+
+                const isZeroState = id === 'cm-zero-state';
+                const isTerminalOrModal = id.includes('terminal') || id.includes('modal') || className.includes('modal');
+                const isScriptOrStyle = tagName === 'SCRIPT' || tagName === 'STYLE';
+
+                if (!isZeroState && !isTerminalOrModal && !isScriptOrStyle) {
+                    child.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }
+    });
+    </script>
+    
 {% endblock %}
 {% block scripts %}
 <script>window.MATRIX_PAYLOAD = {{ commits_data | tojson | safe }};</script>
 <script type="module" src="/static/js/app.js?v=4"></script>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Evaluated by Python before sending to browser. True if commits exist, False if empty/missing.
+        const serverHasData = {{ 'true' if commits_data else 'false' }};
+
+        if (!serverHasData) {
+            if (document.getElementById('cm-zero-state')) return;
+
+            const zeroStateDiv = document.createElement('div');
+            zeroStateDiv.id = 'cm-zero-state';
+            zeroStateDiv.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:75vh; text-align:center; font-family:Satoshi, sans-serif;">
+                    <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
+                    <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Awaiting Telemetry</h2>
+                    <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">The architectural ledger is currently empty. Initialize the AI scoring engine to parse your Git history and generate the matrix.</p>
+                    <button onclick="triggerLedgerRefresh()" class="cm-fbtn" style="background:rgba(79,152,163,0.12); border:1px solid rgba(79,152,163,0.4); padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: all 0.2s ease;">🚀 Initialize Engine</button>
+                </div>
+            `;
+            document.body.insertBefore(zeroStateDiv, document.body.firstChild);
+
+            // Nuclear Hide: Destroy all empty panels so they don't clutter the screen
+            Array.from(document.body.children).forEach(child => {
+                const tagName = child.tagName || '';
+                const id = (child.id || '').toLowerCase();
+                const className = (child.className || '').toLowerCase();
+
+                const isZeroState = id === 'cm-zero-state';
+                const isTerminalOrModal = id.includes('terminal') || id.includes('modal') || className.includes('modal');
+                const isScriptOrStyle = tagName === 'SCRIPT' || tagName === 'STYLE';
+
+                if (!isZeroState && !isTerminalOrModal && !isScriptOrStyle) {
+                    child.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }
+    });
+    </script>
+    
 {% endblock %}
