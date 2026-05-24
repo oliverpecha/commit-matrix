@@ -13,9 +13,25 @@ cat << 'WRAPPER' > /tmp/commit-matrix
 TARGET_REPO="${1:-$(pwd)}"
 
 if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    RUBRICS_DIR="/root/commit-matrix/backend/rubrics"
+    # Pointing to the newly consolidated folder
+    RUBRICS_DIR="/root/commit-matrix/rubrics"
+    AVAILABLE_RUBRICS=""
+    
     if [ -d "$RUBRICS_DIR" ]; then
-        AVAILABLE_RUBRICS=$(ls -1 "$RUBRICS_DIR"/*.md 2>/dev/null | awk -F/ '{print "    - "$NF}')
+        for f in "$RUBRICS_DIR"/*.md; do
+            if [ -f "$f" ] && [[ $(basename "$f") != "RUBRIC_AUTHORING_GUIDE.md" ]]; then
+                name=$(basename "$f" .md | tr '[:lower:]' '[:upper:]')
+                profile=$(grep '^# Profile:' "$f" | sed 's/^# Profile:[[:space:]]*//')
+                # Extract the words from the markdown headers (e.g., "### [G] Guard")
+                acronym=$(grep -E '^### \[[A-Z]\]' "$f" | sed -n 's/^### \[[A-Z]\] \([a-zA-Z]*\).*/\1/p' | paste -sd ", " -)
+                
+                if [ -n "$acronym" ]; then
+                    AVAILABLE_RUBRICS+="    - $(printf "%-5s" "$name") ($acronym)\n      ↳ $profile\n\n"
+                else
+                    AVAILABLE_RUBRICS+="    - $(printf "%-5s" "$name")\n      ↳ $profile\n\n"
+                fi
+            fi
+        done
     else
         AVAILABLE_RUBRICS="    (Directory not found)"
     fi
@@ -39,18 +55,12 @@ if [[ "$1" == "--help" || "$1" == "-h" ]]; then
     echo "  commit-matrix .                  # Analyze the repo in the current folder"
     echo "  commit-matrix /var/www/my-app    # Analyze a specific project folder"
     echo ""
-    echo "ENVIRONMENT (.env):"
-    echo "  MATRIX_TOKEN        (Required) Security token for dashboard access."
-    echo "  GEMINI_API_KEY      (Required) API key for the LLM scoring engine."
-    echo "  MODEL_NAME          (Optional) LLM model override (default: gemini-1.5-flash)."
-    echo ""
     echo "RUBRICS:"
     echo "  The engine evaluates commits based on markdown files located in:"
-    echo "  ~/commit-matrix/backend/rubrics/"
+    echo "  ~/commit-matrix/rubrics/"
     echo ""
-    echo "  Available Rubrics:"
-    echo "$AVAILABLE_RUBRICS"
-    echo ""
+    echo "  Available Profiles:"
+    printf "%b" "$AVAILABLE_RUBRICS"
     echo "OUTPUT:"
     echo "  - Generates a compiled ledger in ~/commit-matrix/data/<repo_name>/"
     echo "  - Hosts a live dashboard. To view it, open this URL in your browser:"
@@ -73,7 +83,7 @@ echo "==========================================================================
 docker run --rm \
   -v "$TARGET_REPO:/target_repo" \
   -v "/root/commit-matrix/data:/app/data" \
-  -v "/root/commit-matrix/backend/rubrics:/app/backend/rubrics" \
+  -v "/root/commit-matrix/rubrics:/app/rubrics" \
   --env-file "/root/commit-matrix/.env" \
   -e HOST_REPO_NAME="$HOST_REPO_NAME" \
   commit-matrix-core:latest \
@@ -101,7 +111,7 @@ cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matri
 
 docker run --rm \
   -v "$(pwd)/calibration:/app/calibration" \
-  -v "$(pwd)/backend/rubrics:/app/backend/rubrics" \
+  -v "$(pwd)/rubrics:/app/rubrics" \
   --env-file .env \
   -e LITELLM_LOG=ERROR \
   -e SUPPRESS_LITELLM_WARNINGS=True \

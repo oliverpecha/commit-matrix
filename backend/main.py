@@ -3,6 +3,14 @@ from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+
+import os
+try:
+    with open('/app/VERSION', 'r') as vf:
+        VERSION = vf.read().strip()
+except Exception:
+    VERSION = "v1.0"
+
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="CommitMatrix Telemetry")
@@ -46,3 +54,61 @@ async def dashboard_home(request: Request, repo: str = "example-repo", token: st
         except Exception as e: print(f"MATRIX PARSER ERROR: {e}")
     
     return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": commits, "rubric": rubric, "version": VERSION})
+
+from fastapi.responses import StreamingResponse
+import subprocess
+
+@app.post("/api/scan")
+async def stream_scan(request: Request, repo: str = "example-repo", token: str = None):
+    from fastapi.responses import HTMLResponse, StreamingResponse
+    import subprocess
+    
+    if token != METRICS_KEY:
+        return HTMLResponse("<h1>Unauthorized.</h1>", status_code=401)
+        
+    def generate():
+        yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
+        
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", "/root/commit-matrix:/target_repo",
+            "-v", "/root/commit-matrix/data:/app/data",
+            "-v", "/root/commit-matrix/rubrics:/app/rubrics",
+            "-v", "/root/commit-matrix/backend:/app/backend",
+            "-e", f"GEMINI_API_KEY={gemini_key}",
+            "-e", "MODEL_NAME=gemini-1.5-flash",
+            "-e", f"HOST_REPO_NAME={repo}",
+            "commit-matrix-core:latest",
+            "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"
+        ]
+        
+        cmd_display = cmd.copy()
+        for i, val in enumerate(cmd_display):
+            if val.startswith("GEMINI_API_KEY="):
+                cmd_display[i] = "GEMINI_API_KEY=********"
+                
+        yield f"🔗 Executing nested container command:\n   <span style='color:#555'>{' '.join(cmd_display)}</span>\n\n"
+        yield f"🧬 INITIATING AI SCORING MATRIX ANALYSIS ON REPOSITORY: [{repo}]\n\n"
+        yield "⏳ Booting isolated analyzer environment (this takes ~3-5 seconds)...\n\n"
+
+        process = None
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            # Character-streaming logic for live dots
+            while True:
+                char = process.stdout.read(1)
+                if not char and process.poll() is not None:
+                    break
+                if char:
+                    yield char
+            process.wait()
+        except Exception as e:
+            yield f"❌ ERROR: {e}\n\n"
+        finally:
+            # The Zombie Killer: Violently terminate the nested process on disconnect
+            if process and process.poll() is None:
+                process.terminate()
+                process.kill()
+
+    return StreamingResponse(generate(), media_type="text/plain")
