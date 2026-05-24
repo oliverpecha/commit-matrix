@@ -1,3 +1,4 @@
+import "./ui/terminal.js?v=99";
 import { processCommits } from './core/dataEngine.js?v=99';
 import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=99';
 import { renderHeatmap } from './ui/heatmap.js?v=99';
