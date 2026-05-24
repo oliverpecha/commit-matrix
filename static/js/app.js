@@ -36,3 +36,6 @@ function attemptRender() {
     }
 }
 window.addEventListener('load', attemptRender);
+
+// Force refresh on terminal close to clear Zero-State
+document.addEventListener('click', (e) => { if (e.target.closest('.modal-close') || e.target.closest('#close-terminal')) window.location.reload(); });
