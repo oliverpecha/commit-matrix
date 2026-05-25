@@ -14,7 +14,12 @@ parser.add_argument("--remap", action="store_true", help="Force a repository arc
 parser.add_argument("--rubric", type=str, default=os.path.join(os.getcwd(), "rubrics", "cirsd.md"), help="Path to the scoring rubric file")
 args = parser.parse_args()
 
-MODEL_NAME = "gemini/gemini-3.1-pro-preview"
+model_env = os.environ.get("MODEL_NAME")
+if not model_env:
+    print("\n❌ FATAL ERROR: MODEL_NAME environment variable is missing. Strict configuration enforcement active.\nAborting.", flush=True)
+    import sys
+    sys.exit(1)
+MODEL_NAME = model_env
 REPO_PATH = os.path.abspath(args.repo)
 
 # --- DAEMON SPINNER ---
@@ -123,7 +128,7 @@ if __name__ == "__main__":
 
     MAX_CONCURRENT_WORKERS = int(os.environ.get("MATRIX_MAX_WORKERS", 32))
     file_exists = os.path.exists(CSV_PATH)
-    MAX_RETRIES = 3
+    MAX_RETRIES = 6
 
     class AIMDController:
         def __init__(self, initial=2, max_workers=8):
@@ -212,14 +217,21 @@ if __name__ == "__main__":
                 return i, (headers, row, hash_short, ui_block)
 
             except Exception as e:
+                error_str = str(e)
+                if 'monthly spending cap' in error_str.lower() or 'billing' in error_str.lower():
+                    print('\n❌ FATAL ERROR: Google API Billing Cap Exceeded. Check https://ai.studio/spend.\nAborting.', flush=True)
+                    import sys
+                    sys.exit(1)
                 err_str = str(e)
                 aimd.release(success=False)
                 
                 if "429" in err_str or "spending cap" in err_str.lower() or "quota" in err_str.lower():
                     retries -= 1
                     if retries > 0:
-                        print(f"⚠️ [Worker] API Rate Limit hit on {hash_short}. AIMD halving bandwidth & pausing 10s...\n", flush=True)
-                        time.sleep(10)
+                        backoff = 15 * (6 - retries)
+                        import traceback; traceback.print_exc(); print(f"⚠️ [Worker] API Rate Limit hit on {hash_short}. Pausing {backoff}s... ", end="", flush=True)
+                        time.sleep(backoff)
+                        print("Resuming.\n", flush=True)
                     else:
                         print(f"🛑 CRITICAL: API Rate Limit hard-failed {MAX_RETRIES} times on {hash_short}. Aborting.\n\n", flush=True)
                         import os; os._exit(1)
@@ -227,8 +239,13 @@ if __name__ == "__main__":
                     return i, f"❌ Error scoring commit {hash_short}: {err_str}\n\n"
 
     # 4. The Orchestrator Loop (Sliding Window Dispatcher)
-    print(f"⚡ Initializing AIMD Engine (Sliding Window, Dynamic Max: {MAX_CONCURRENT_WORKERS})...\n\n", flush=True)
+    print(f"⚡ Initializing AIMD Engine (Sliding Window, Dynamic Max: {MAX_CONCURRENT_WORKERS})", end="", flush=True)
+    is_first_output = True
     
+    error_count = 0
+    success_count = 0
+    error_count = 0
+    success_count = 0
     pending_results = {}
     next_to_write = 1
     window_size = MAX_CONCURRENT_WORKERS + 4 # The maximum lookahead buffer
@@ -248,7 +265,13 @@ if __name__ == "__main__":
                 
         # 2. Process completions and slide the window forward
         while active_futures:
-            done, _ = wait(active_futures.keys(), return_when=FIRST_COMPLETED)
+            done, _ = wait(active_futures.keys(), timeout=1.5, return_when=FIRST_COMPLETED)
+            if not done:
+                print(".", end="", flush=True)
+                continue
+            if is_first_output:
+                print("\n\n", flush=True)
+                is_first_output = False
             
             for future in done:
                 idx = active_futures.pop(future)
@@ -270,9 +293,13 @@ if __name__ == "__main__":
                     res = pending_results.pop(next_to_write)
                     if res:
                         if isinstance(res, str): 
+                            error_count += 1
+                            error_count += 1
                             print(res, flush=True)
                         else:
                             headers, row, hash_short, ui_block = res
+                            success_count += 1
+                            success_count += 1
                             with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
                                 writer = csv.writer(f)
                                 if next_to_write == 1 and not file_exists:
@@ -284,4 +311,7 @@ if __name__ == "__main__":
                     
                     next_to_write += 1
 
-    print("🤝 PROCESS_COMPLETE\n\n", flush=True)
+    if error_count > 0:
+        print(f'⚠️ PROCESS_COMPLETE_WITH_ERRORS: {error_count} failed, {success_count} succeeded.\n\n', flush=True)
+    else:
+        print('🤝 PROCESS_COMPLETE\n\n', flush=True)
