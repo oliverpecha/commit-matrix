@@ -2,3 +2,6 @@
 calibration/reports/
 backend/__pycache__/
 backend/__pycache__/
+
+# Ignore generated telemetry and dynamic architecture context
+data/
