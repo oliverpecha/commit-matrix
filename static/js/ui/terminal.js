@@ -21,7 +21,7 @@ export async function triggerLedgerRefresh() {
         <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:12px; color:#aaa; font-family:Satoshi, sans-serif; font-size:13px; align-items:center; flex-shrink:0;">
             <span style="font-weight:bold; color:#4f98a3; display:flex; align-items:center; gap:6px;">🧬 Engine Telemetry</span>
             <div style="display:flex; align-items:center; gap:15px;">
-                <span id="cm-terminal-status" class="processing-pulse" style="color:#ffb84d; font-weight:bold;">PROCESSING</span>
+                <span id="cm-terminal-status" class="processing-pulse" style="color:#ffb84d; font-weight:bold; display:flex; align-items:center; gap:10px;">PROCESSING</span>
                 <svg onclick="window.location.reload()" style="cursor:pointer; width:16px; height:16px; fill:#777; transition:fill 0.2s;" viewBox="0 0 24 24" onmouseover="this.style.fill='#fff'" onmouseout="this.style.fill='#777'"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </div>
         </div>
@@ -69,17 +69,34 @@ export async function triggerLedgerRefresh() {
                 const shouldAutoClose = autoCloseSeconds > 0;
 
                 termStatus.className = '';
-                termStatus.innerHTML = `<span style="color:${color}; font-weight:bold;">${msg}</span>`;
-
+                
                 if (isRealSuccess && shouldAutoClose) {
+                    // Inject the success state with a Cancel button
+                    termStatus.innerHTML = `
+                        <span style="color:${color};">${msg}</span>
+                        <button id="cm-cancel-autoclose" style="background:#2a2a2c; border:1px solid #444; color:#bbb; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold; transition:all 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='#777'" onmouseout="this.style.color='#bbb'; this.style.borderColor='#444'">Cancel Auto-Close</button>
+                    `;
+
                     const barContainer = document.getElementById('cm-auto-close-container');
                     const bar = document.getElementById('cm-auto-close-bar');
+                    
                     if (barContainer && bar) {
                         barContainer.style.display = 'block';
                         bar.style.transition = `width ${autoCloseSeconds}s linear`;
+                        
+                        // Store the reload timer so we can abort it
+                        window.cmReloadTimer = setTimeout(() => { window.location.reload(); }, autoCloseSeconds * 1000);
                         setTimeout(() => { bar.style.width = '0%'; }, 50);
-                        setTimeout(() => { window.location.reload(); }, autoCloseSeconds * 1000);
+
+                        // Bind the Cancel action
+                        document.getElementById('cm-cancel-autoclose').onclick = function() {
+                            clearTimeout(window.cmReloadTimer);
+                            barContainer.style.display = 'none';
+                            termStatus.innerHTML = `<span style="color:${color};">COMPLETE (Auto-Close Canceled)</span>`;
+                        };
                     }
+                } else {
+                    termStatus.innerHTML = `<span style="color:${color}; font-weight:bold;">${msg}</span>`;
                 }
                 return;
             }
