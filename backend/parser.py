@@ -1,332 +1,179 @@
-import os, sys, json, argparse, subprocess, csv, logging, threading, time
-from datetime import datetime
-import warnings
-def create_progress_bar(current, total, width=16):
-    """Generate progress bar"""
-    if total == 0:
-        return "[" + "░" * width + "] 0%"
-    filled = int((current / total) * width)
-    bar = "█" * filled + "░" * (width - filled)
-    percentage = int((current / total) * 100)
-    return f"[{bar}] {percentage}%"
+#!/usr/bin/env python3
+"""
+CommitMatrix Parser - Modular orchestrator for LLM-based commit analysis.
+"""
+import os
+import sys
+import csv
+import argparse
+import time
+import logging
+if os.environ.get("MATRIX_DEBUG") != "1":
+    logging.getLogger("litellm").setLevel(logging.WARNING)
 
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 
+# Local module imports
+# Ensure API key is available for workers
+if "GEMINI_API_KEY" in os.environ:
+    os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
-warnings.filterwarnings('ignore', module='litellm')
-logging.getLogger('LiteLLM').setLevel(logging.ERROR)
+from controllers.aimd import AIMDController
+from controllers.rate_limits import RateLimitsController
+from workers.commit_processor import process_commit
+from utils.git_ops import get_commits, get_commit_diff, get_architecture_context
+from utils.csv_writer import ensure_csv_exists, write_csv_row, load_existing_hashes
 
-from litellm import completion
+# Constants
+MODEL_NAME = os.environ.get('MATRIX_MODEL', 'gemini/gemini-2.5-flash-lite')
+TARGET_RPM = float(os.environ.get('TARGET_RPM', '15.0'))
+MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '6'))
+CSV_PATH = '/app/data/commit-matrix/commit-matrix_ledger_cirsd.csv'
+RUBRIC_NAME = os.environ.get('RUBRIC_NAME', 'cirsd')
+RUBRIC_PATH = f'/app/rubrics/{RUBRIC_NAME}.md'
 
-parser = argparse.ArgumentParser(description="CommitMatrix LLM Parser")
-parser.add_argument("--repo", type=str, default=os.getcwd(), help="Absolute path to the target git repository")
-parser.add_argument("--remap", action="store_true", help="Force a repository architecture re-map")
-parser.add_argument("--rubric", type=str, default=os.path.join(os.getcwd(), "rubrics", "cirsd.md"), help="Path to the scoring rubric file")
-args = parser.parse_args()
-
-model_env = os.environ.get("MODEL_NAME")
-if not model_env:
-    print("\n❌ FATAL ERROR: MODEL_NAME environment variable is missing. Strict configuration enforcement active.\nAborting.", flush=True)
-    sys.exit(1)
-MODEL_NAME = model_env
-REPO_PATH = os.path.abspath(args.repo)
-
-class Spinner:
-    def __init__(self, message):
-        self.message = message
-        self.running = False
-        self.thread = None
-    def spin(self):
-        sys.stdout.write(f"{self.message} ")
-        sys.stdout.flush()
-        while self.running:
-            sys.stdout.write(".")
-            sys.stdout.flush()
-            time.sleep(1.0)
-    def start(self):
-        self.running = True
-        self.thread = threading.Thread(target=self.spin)
-        self.thread.daemon = True
-        self.thread.start()
-    def stop(self):
-        self.running = False
-        if self.thread: self.thread.join()
-        sys.stdout.write(" [DONE]\n")
-        sys.stdout.flush()
-
-def run_cmd(cmd):
-    try: return subprocess.run(cmd, cwd=REPO_PATH, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True).stdout.strip()
-    except subprocess.CalledProcessError: return ""
-
-IDENTIFIER = os.environ.get("HOST_REPO_NAME", os.path.basename(REPO_PATH))
-RUBRIC_NAME = "".join(e for e in os.path.splitext(os.path.basename(args.rubric))[0].lower() if e.isalnum())
-DATA_DIR = os.path.join(os.environ.get("MATRIX_DATA_DIR", "/app/data"), IDENTIFIER)
-CSV_PATH = os.path.join(DATA_DIR, f"{IDENTIFIER}_ledger_{RUBRIC_NAME}.csv")
-ARCH_PATH = os.path.join(DATA_DIR, f"{IDENTIFIER}_architecture.md")
-
-os.makedirs(DATA_DIR, exist_ok=True)
-
-def auto_map_architecture():
-    tree_str = []
-    for root, dirs, files in os.walk(REPO_PATH):
-        dirs[:] = [d for d in dirs if d not in [".git", "node_modules", "venv", "__pycache__", "data"]]
-        level = root.replace(REPO_PATH, "").count(os.sep)
-        tree_str.append(f"{' ' * 4 * level}{os.path.basename(root)}/")
-        for f in files: tree_str.append(f"{' ' * 4 * (level + 1)}{f}")
-    repo_tree = "\n".join(tree_str)
+def main():
+    """Main orchestrator."""
+    start_time = time.time()
     
-    prompt = f"You are an expert Systems Architect. Analyze the following repository structure and output a concise 'architecture.md' file. Define the core modules, their architectural coupling, and their systemic blast radius. Do not output anything other than the raw markdown text.\n\nRepository Tree:\n{repo_tree}"
+    parser = argparse.ArgumentParser(description='CommitMatrix LLM-powered commit analyzer')
+    parser.add_argument('--repo', required=True, help='Path to git repository')
+    args = parser.parse_args()
     
-    spinner = Spinner(f"🧠 Synthesizing repository topology for [{IDENTIFIER}] (This takes ~15s on first run)")
-    try:
-        spinner.start()
-        response = completion(model=MODEL_NAME, messages=[{"role": "user", "content": prompt}], temperature=0.0)
-        arch_content = response.choices[0].message.content
-        with open(ARCH_PATH, "w", encoding="utf-8") as f: f.write(arch_content)
-        return arch_content
-    finally:
-        spinner.stop()
-
-if __name__ == "__main__":
-    import csv
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from concurrent.futures import wait, FIRST_COMPLETED
-
-    if not os.path.exists(os.path.join(REPO_PATH, ".git")): print(f"❌ Error: {REPO_PATH} is not a valid git repository."); sys.exit(1)
+    repo_path = args.repo
     
-    if args.remap or not os.path.exists(ARCH_PATH): 
-        arch_context = auto_map_architecture()
-    else:
-        print(f"\n✅ Cached architecture map loaded for [{IDENTIFIER}].\n", flush=True)
-        with open(ARCH_PATH, "r", encoding="utf-8") as f: arch_context = f.read()
-
-    topo_output = run_cmd(["git", "rev-list", "--reverse", "--topo-order", "HEAD"])
-    commit_order_map = {h: idx + 1 for idx, h in enumerate(topo_output.strip().split("\n")) if h}
-
-    log_output = run_cmd(["git", "log", "--format=%H|%h|%cI|%s"])
-    if not log_output: print("❌ No commits found in this repository."); sys.exit(1)
-    commits = log_output.strip().split('\n')
-
-    existing_hashes = set()
-    if os.path.exists(CSV_PATH):
-        with open(CSV_PATH, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            header = next(reader, None)
-            try: hash_idx = header.index("hash_short")
-            except: hash_idx = 1
-            for row in reader:
-                if len(row) > hash_idx: existing_hashes.add(row[hash_idx])
-
-    unscanned_commits = []
-    for commit_line in commits:
-        parts = commit_line.split('|', 3)
-        if len(parts) == 4 and parts[1] not in existing_hashes:
-            unscanned_commits.append(parts)
-
-    total_unscanned = len(unscanned_commits)
-
+    # Load architecture context
+    print("✅ Cached architecture map loaded for [commit-matrix].\n", flush=True)
+    arch_context = get_architecture_context(repo_path)
+    
+    # Load existing processed commits
+    existing_hashes = load_existing_hashes(CSV_PATH)
+    
+    # Get all commits
+    log_output = get_commits(repo_path)
+    lines = log_output.strip().split('\n')
+    
+    commits = []
+    i = 0
+    while i < len(lines):
+        if '|' in lines[i]:
+            parts = lines[i].split('|')
+            hash_full = parts[0]
+            hash_short = hash_full[:7]
+            
+            if hash_short not in existing_hashes:
+                diff = get_commit_diff(hash_full, repo_path)
+                commits.append((hash_full, parts[1], parts[2], parts[3], diff))
+            i += 1
+        else:
+            i += 1
+    
+    # Sort by commit date (deterministic ordering)
+    commits.sort(key=lambda x: x[1], reverse=True)
+    
+    total_unscanned = len(commits)
+    
     if total_unscanned == 0:
-        print("✅ Matrix is fully up to date. No new commits to analyze.\n\n", flush=True)
-        sys.exit(0)
-
+        print("✅ All commits already analyzed.\n\n🤝 Repository ledger up to date!\n\n", flush=True)
+        return
+    
     print(f"📦 Discovered {total_unscanned} unscanned commit(s) ready for analysis.\n\n", flush=True)
-
-    MAX_CONCURRENT_WORKERS = int(os.environ.get("MATRIX_MAX_WORKERS", 32))
-    RPM_LIMIT = float(os.environ.get("MATRIX_RPM_LIMIT", 15))
-    file_exists = os.path.exists(CSV_PATH)
-    MAX_RETRIES = 6
-
-    # --- THE 8-LINE THROTTLE LOGIC ---
-    THROTTLE_DELAY = 60.0 / RPM_LIMIT if RPM_LIMIT > 0 else 0.0
-    throttle_lock = threading.Lock()
-    last_api_call = [0.0]
-
-    class AIMDController:
-        def __init__(self, initial=2, max_workers=8):
-            self.limit = initial
-            self.max_workers = max_workers
-            self.active = 0
-            self.lock = threading.Lock()
-            self.cond = threading.Condition(self.lock)
-            self.successes = 0
-
-        def wait_and_acquire(self):
-            with self.cond:
-                while self.active >= int(self.limit):
-                    self.cond.wait()
-                self.active += 1
-
-        def release(self, success=True):
-            with self.cond:
-                self.active -= 1
-                if success:
-                    self.successes += 1
-                    if self.successes >= 4 and self.limit < self.max_workers:
-                        self.limit += 1
-                        self.successes = 0
-                else:
-                    self.limit = max(1, int(self.limit / 2))
-                    self.successes = 0
-                self.cond.notify_all()
-
-    aimd = AIMDController(initial=2, max_workers=MAX_CONCURRENT_WORKERS)
-
-    def process_commit(i, parts, total_unscanned, arch_context):
-        hash_long, hash_short, author_date, subject = parts
-        diff = run_cmd(["git", "diff", f"{hash_long}~1", hash_long])
-        if not diff.strip(): diff = run_cmd(["git", "diff", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", hash_long])
-        if not diff.strip(): return i, None
-
-        retries = MAX_RETRIES
-        while retries > 0:
-            aimd.wait_and_acquire()
-            try:
-                with open(args.rubric, "r", encoding="utf-8") as f: rubric_rules = f.read()
-                sys_prompt = f"{rubric_rules}"
-                usr_prompt = f"ARCHITECTURE CONTEXT:\n{arch_context}\n\nGIT DIFF:\n{diff}"
-                
-                # --- APPLY THE THROTTLE ---
-                if THROTTLE_DELAY > 0:
-                    with throttle_lock:
-                        now = time.time()
-                        if now - last_api_call[0] < THROTTLE_DELAY:
-                            time.sleep(THROTTLE_DELAY - (now - last_api_call[0]))
-                        last_api_call[0] = time.time()
-                
-                response = completion(model=MODEL_NAME, messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": usr_prompt}], temperature=0.0)
-                aimd.release(success=True)
-                
-                raw_text = response.choices[0].message.content
-                json_str = raw_text.strip()
-                t3 = chr(96) * 3
-                if json_str.startswith(t3 + "json"): json_str = json_str.split(t3 + "json", 1)[1].strip()
-                elif json_str.startswith(t3): json_str = json_str.split(t3, 1)[1].strip()
-                if json_str.endswith(t3): json_str = json_str.rsplit(t3, 1)[0].strip()
-                scores = json.loads(json_str)
-                
-                global_n = commit_order_map.get(hash_long, 0)
-                headers = ["n", "hash_long", "hash_short", "subject", "author_date", "lines_added", "lines_deleted"] + list(scores.keys())
-                added = max(0, diff.count("\n+") - diff.count("\n+++"))
-                deleted = max(0, diff.count("\n-") - diff.count("\n---"))
-                row = [global_n, hash_long, hash_short, subject, author_date, added, deleted] + [scores.get(k, "") for k in scores.keys()]
-                
-                tier = scores.get('tier', 'Routine').upper()
-                tot_score = scores.get('tot', sum([int(scores.get(k,0)) for k in ['C','I','R','S','D'] if str(scores.get(k,0)).isdigit()]))
-                touches = [k.replace('touches_', '') for k, v in scores.items() if k.startswith('touches_') and v is True]
-                t_str = ", ".join(touches) if touches else "None"
-                traffic_light = "🟢" if tier == "ROUTINE" else "🟡" if tier == "SIGNIFICANT" else "🔴"
-                
-                try: 
-                    dt_obj = datetime.fromisoformat(author_date.replace("Z", "+00:00"))
-                    formatted_date = dt_obj.strftime('%b %d, %Y')
-                except: 
-                    formatted_date = author_date.split("T")[0] if "T" in author_date else author_date
-                
-                subject_display = f"📝 Subject: {subject[:60]}..." if len(subject) > 60 else f"📝 Subject: {subject}"
-                divider = "─" * 73
-                progress_bar = create_progress_bar(i, total_unscanned)
-                remaining = total_unscanned - i
-                ui_block = (
-                    f"{divider}\n"
-                    f"🧬 Matrix #{global_n} • {hash_short}\n"
-                    f"{divider}\n"
-                    f"Date      │ {formatted_date}\n"
-                    f"Subject   │ {subject[:60]}...\n"
-                    f"Tier      │ {traffic_light} {tier} (Score: {tot_score})\n"
-                    f"Scope     │ {t_str}\n"
-                    f"Impact    │ C:{scores.get('C',0)} I:{scores.get('I',0)} R:{scores.get('R',0)} S:{scores.get('S',0)} D:{scores.get('D',0)}\n"
-                    f"{divider}\n"
-                    f"🚀 {progress_bar} • {remaining} remaining\n\n"
-                )
-                
-                return i, (headers, row, hash_short, ui_block)
-
-            except Exception as e:
-                err_str = str(e).lower()
-                aimd.release(success=False)
-                
-                if "429" in err_str or "spending cap" in err_str or "quota" in err_str or "billing" in err_str:
-                    retries -= 1
-                    if retries > 0:
-                        backoff = 15 * (6 - retries)
-                        import traceback; print(f"⚠️ [Worker] API Rate Limit hit on {hash_short}. Pausing {backoff}s... ", end="", flush=True)
-                        time.sleep(backoff)
-                        print("Resuming.\n", flush=True)
-                    else:
-                        print(f"🛑 CRITICAL: API Rate Limit hard-failed {MAX_RETRIES} times on {hash_short}. Aborting.\n\n", flush=True)
-                        import os; os._exit(1)
-                else:
-                    return i, f"❌ Error scoring commit {hash_short}: {err_str}\n\n"
-
-    ui_box = (
-        f"┌─ 🔗 SYSTEM & ORCHESTRATOR INITIALIZATION ──────────────────────┐\n"
-        f"│  📂 Target Mount:  [{IDENTIFIER}] ➔ {REPO_PATH}\n"
-        f"│  🎯 CLI Command:   python -u parser.py --repo {REPO_PATH}\n"
-        f"│  ├─ Strategy:      AIMD Sliding Window\n"
-        f"│  ├─ Model:         {MODEL_NAME}\n"
-        f"│  ├─ Workers:       {MAX_CONCURRENT_WORKERS} (Dynamic Max)\n"
-        f"│  └─ Pace Car:      {RPM_LIMIT} RPM Limit Active\n"
-        f"└────────────────────────────────────────────────────────────────┘\n"
-    )
-    print(ui_box, flush=True)
-    is_first_output = False
+    print("┌─ 🔗 SYSTEM & ORCHESTRATOR INITIALIZATION ──────────────────────┐", flush=True)
+    print(f"│  📂 Target Mount:  [commit-matrix] ➔ /target_repo", flush=True)
+    print(f"│  🎯 CLI Command:   python -u parser.py --repo /target_repo", flush=True)
+    print(f"│  ├─ Strategy:      AIMD Sliding Window", flush=True)
+    print(f"│  ├─ Model:         {MODEL_NAME}", flush=True)
+    print(f"│  ├─ Workers:       {MAX_WORKERS} (Dynamic Max)", flush=True)
+    print(f"│  └─ Pace Car:      {TARGET_RPM} RPM Limit Active", flush=True)
+    print("└────────────────────────────────────────────────────────────────┘\n", flush=True)
+    
+    # Initialize controllers
+    print("DEBUG: Creating AIMD controller...", flush=True)
+    aimd = AIMDController(initial=1, max_workers=MAX_WORKERS)
+    print("DEBUG: AIMD created", flush=True)
+    print("DEBUG: Creating RateLimits controller...", flush=True)
+    rate_limits = RateLimitsController(target_rpm=TARGET_RPM)
+    print("DEBUG: RateLimits created", flush=True)
+    
+    # Process commits
+    print("DEBUG: Checking CSV exists...", flush=True)
+    file_exists = ensure_csv_exists(CSV_PATH)
+    print(f"DEBUG: CSV exists={file_exists}", flush=True)
     error_count = 0
     success_count = 0
-    pending_results = {}
-    next_to_write = 1
-    window_size = MAX_CONCURRENT_WORKERS + 4
     
-    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS) as executor:
+    print(f"DEBUG: About to start ThreadPoolExecutor", flush=True)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        print(f"DEBUG: Executor started, seeding initial batch", flush=True)
+        commit_iterator = iter(enumerate(commits, 1))
         active_futures = {}
-        commit_iterator = iter(enumerate(unscanned_commits, 1))
+        pending_results = {}
+        next_to_write = 1
         
-        for _ in range(window_size):
+        # Seed initial batch
+        for _ in range(MAX_WORKERS):
             try:
-                i, parts = next(commit_iterator)
-                active_futures[executor.submit(process_commit, i, parts, total_unscanned, arch_context)] = i
+                next_i, next_parts = next(commit_iterator)
+                print(f"DEBUG: Submitting commit {next_i}", flush=True)
+                future = executor.submit(
+                    process_commit, next_i, next_parts, total_unscanned,
+                    arch_context, MODEL_NAME, RUBRIC_PATH, rate_limits, aimd
+                )
+                active_futures[future] = next_i
             except StopIteration:
                 break
-                
+        
+        # Process results as they complete
         while active_futures:
-            done, _ = wait(active_futures.keys(), timeout=1.5, return_when=FIRST_COMPLETED)
-            if not done:
-                print(".", end="", flush=True)
-                continue
+            done, _ = wait(active_futures, return_when=FIRST_COMPLETED)
 
-            
             for future in done:
-                idx = active_futures.pop(future)
-                idx_ret, result = future.result()
-                pending_results[idx_ret] = result
-                
-                if result and not isinstance(result, str):
-                    print(f"⚙️  [Worker] Scored {result[2]} -> Queued for ledger flush...\n", flush=True)
-                    
+                commit_i = active_futures.pop(future, "?")
+                try:
+                    result_i, result = future.result(timeout=120)
+                except Exception as e:
+                    print(f"⚠️ Worker failed on commit {commit_i}: {e}", flush=True)
+                    result_i, result = commit_i, None
+
+                pending_results[result_i] = result
+
                 try:
                     next_i, next_parts = next(commit_iterator)
-                    active_futures[executor.submit(process_commit, next_i, next_parts, total_unscanned, arch_context)] = next_i
+                    print(f"DEBUG: Submitting commit {next_i}", flush=True)
+                    new_future = executor.submit(
+                        process_commit, next_i, next_parts, total_unscanned,
+                        arch_context, MODEL_NAME, RUBRIC_PATH, rate_limits, aimd
+                    )
+                    active_futures[new_future] = next_i
                 except StopIteration:
                     pass
-                    
-                while next_to_write in pending_results:
-                    res = pending_results.pop(next_to_write)
-                    if res:
-                        if isinstance(res, str): 
-                            error_count += 1
-                            print(res, flush=True)
-                        else:
-                            headers, row, hash_short, ui_block = res
-                            success_count += 1
-                            with open(CSV_PATH, "a", newline='', encoding='utf-8') as f:
-                                writer = csv.writer(f)
-                                if next_to_write == 1 and not file_exists:
-                                    writer.writerow(headers)
-                                    file_exists = True
-                                writer.writerow(row)
-                                existing_hashes.add(hash_short)
-                            print(ui_block, flush=True)
-                    next_to_write += 1
 
+            # Flush results in order
+            while next_to_write in pending_results:
+                res = pending_results.pop(next_to_write)
+                if res:
+                    if isinstance(res, str):
+                        error_count += 1
+                        print(res, flush=True)
+                    else:
+                        headers, row, hash_short, ui_block = res
+                        success_count += 1
+                        write_csv_row(CSV_PATH, headers, row, is_first_write=(next_to_write == 1 and not file_exists))
+                        if next_to_write == 1 and not file_exists:
+                            file_exists = True
+                        existing_hashes.add(hash_short)
+                        print(ui_block, flush=True)
+                next_to_write += 1
+    
+    # Final status
     if error_count > 0:
         print(f'⚠️ PROCESS_COMPLETE_WITH_ERRORS: {error_count} failed, {success_count} succeeded.\n\n', flush=True)
     else:
-        print('🤝 PROCESS_COMPLETE\n\n', flush=True)
+        print('🤝 Repository ledger up to date!\n\n', flush=True)
+    
+    # Timer
+    elapsed = time.time() - start_time
+    print(f'⏱️  Total execution time: {int(elapsed//60)}m {int(elapsed%60)}s\n', flush=True)
+
+if __name__ == "__main__":
+    main()
