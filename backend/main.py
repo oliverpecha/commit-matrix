@@ -4,7 +4,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-import os
 try:
     with open('/app/VERSION', 'r') as vf:
         VERSION = vf.read().strip()
@@ -42,7 +41,8 @@ async def dashboard_home(request: Request, repo: str = "commit-matrix", token: s
                         else:
                             try: commit_data[key] = int(float(val))
                             except: commit_data[key] = val.strip() if val else ""
-                    commit_data["n"] = idx + 1
+                    if "n" not in commit_data or commit_data["n"] == "":
+                        commit_data["n"] = idx + 1
                     commit_data["h"] = commit_data.get("hash_short", "")
                     commit_data["s"] = commit_data.get("subject", "")
                     date_str = commit_data.get("author_date", "")
@@ -59,8 +59,8 @@ async def dashboard_home(request: Request, repo: str = "commit-matrix", token: s
 
 from fastapi.responses import StreamingResponse
 import subprocess
-
 from fastapi.responses import JSONResponse
+
 @app.get("/api/data")
 async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
     import os, csv
@@ -81,7 +81,8 @@ async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: 
                         else:
                             try: c_data[key] = int(float(val))
                             except: c_data[key] = val.strip() if val else ""
-                    c_data["n"] = idx + 1
+                    if "n" not in c_data or c_data["n"] == "":
+                        c_data["n"] = idx + 1
                     c_data["h"] = c_data.get("hash_short", "")
                     c_data["s"] = c_data.get("subject", "")
                     c_data["tot"] = sum([int(c_data.get(k,0)) for k in ['C','I','R','S','D'] if str(c_data.get(k,0)).isdigit()])
@@ -111,28 +112,31 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", token: str 
     async def generate():
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
         os.system("docker ps -q --filter name=matrix-analyzer- | xargs -r docker rm -f > /dev/null 2>&1")
+        
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
         max_w = os.environ.get("MATRIX_MAX_WORKERS", "32")
+        rpm_limit = os.environ.get("MATRIX_RPM_LIMIT", "15") # Fetch the RPM limit from .env
         model_name = os.environ.get("MATRIX_MODEL")
+        
         if not model_name:
             yield "❌ ERROR: 🛑 CRITICAL: MATRIX_MODEL is not defined in .env. Engine aborted.\n\n"
             return
+            
         c_name = f"matrix-analyzer-{int(time.time())}"
         
-        cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", f"MATRIX_MAX_WORKERS={max_w}", "-e", f"MODEL_NAME={model_name}", "-e", f"HOST_REPO_NAME={repo}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
+        # Inject MATRIX_RPM_LIMIT into the Docker run command
+        cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", f"MATRIX_MAX_WORKERS={max_w}", "-e", f"MATRIX_RPM_LIMIT={rpm_limit}", "-e", f"MODEL_NAME={model_name}", "-e", f"HOST_REPO_NAME={repo}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
         
         c_disp = cmd.copy()
         for i, val in enumerate(c_disp):
             if val.startswith("GEMINI_API_KEY="): c_disp[i] = "GEMINI_API_KEY=********"
                 
-        yield f"🔗 Executing nested container command:\n   <span style='color:#555'>{' '.join(c_disp)}</span>\n\n"
-        yield f"🧬 INITIATING AI SCORING MATRIX ANALYSIS ON REPOSITORY: [{repo}]\n\n"
+        yield f"🚀 Spawning ephemeral analyzer container: {c_name}\n\n"
 
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
             import codecs
-            # The incremental decoder safely buffers shattered emojis until they are whole
             decoder = codecs.getincrementaldecoder('utf-8')()
             while True:
                 if await request.is_disconnected(): break
