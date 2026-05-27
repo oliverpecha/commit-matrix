@@ -152,3 +152,10 @@ export function renderTable(commits) {
         </tr>`;
     }).join('');
 }
+
+// --- STREAM SORTING HOOK ---
+window.setTableStreamMode = function(isActive) { 
+    currentSort.col = "n"; 
+    currentSort.asc = isActive; 
+    renderTable(window.MATRIX_PAYLOAD); 
+};

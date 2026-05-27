@@ -55,7 +55,7 @@ window.triggerSilentRefresh = async function() {
         // Only trigger heavy DOM repaints if we actually have new commits
         
         const currentData = window.MATRIX_PAYLOAD || [];
-        if (newData.length > currentData.length || (currentData.length === 0 && newData.length > 0)) {
+        if (JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
 
             window.MATRIX_PAYLOAD = newData;
             
