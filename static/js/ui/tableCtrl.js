@@ -20,12 +20,13 @@ const getScopeColor = (scope) => {
     return map[scope] || '#aaa';
 };
 
-window.CM_FORCE_ASC_IN_SIDE_MODE = window.CM_FORCE_ASC_IN_SIDE_MODE || false;
+window.CM_SIDE_STREAM_ACTIVE = window.CM_SIDE_STREAM_ACTIVE || false;
+window.CM_SIDE_STREAM_ASC = window.CM_SIDE_STREAM_ASC ?? true;
 window.CM_TABLE_SORT = window.CM_TABLE_SORT || { col: 'n', asc: false };
 
 function getLiveSort() {
-    if (window.CM_FORCE_ASC_IN_SIDE_MODE) {
-        return { col: 'n', asc: true };
+    if (window.CM_SIDE_STREAM_ACTIVE) {
+        return { col: 'n', asc: !!window.CM_SIDE_STREAM_ASC };
     }
     return window.CM_TABLE_SORT || { col: 'n', asc: false };
 }
@@ -86,7 +87,7 @@ export function renderTable(commits) {
             th.innerHTML = `${col.label} <span class="sort-icon" style="font-size:10px; margin-left:4px;"></span>`;
 
             th.onclick = () => {
-                if (window.CM_FORCE_ASC_IN_SIDE_MODE) return;
+                if (window.CM_SIDE_STREAM_ACTIVE) return;
 
                 const currentSort = getLiveSort();
                 if (currentSort.col === col.key) {
@@ -185,10 +186,16 @@ export function renderTable(commits) {
     }).join('');
 }
 
-window.setTableStreamMode = function(isActive) {
-    window.CM_FORCE_ASC_IN_SIDE_MODE = !!isActive;
+window.setTableStreamMode = function(isActive, opts = {}) {
+    window.CM_SIDE_STREAM_ACTIVE = !!isActive;
+
+    if (typeof opts.asc === 'boolean') {
+        window.CM_SIDE_STREAM_ASC = opts.asc;
+    }
+
     if (!isActive) {
         setLiveSort({ col: 'n', asc: false });
     }
+
     renderTable(window.MATRIX_PAYLOAD || []);
 };

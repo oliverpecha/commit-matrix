@@ -33,6 +33,52 @@ def get_active_container():
     return None
 
 
+def get_scan_side_sort_context(repo: str, rubric: str = "cirsd"):
+    csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
+    repo_path = f"/root/{repo}"
+
+    ledger_ids = set()
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, newline='', encoding='utf-8') as f:
+                for row in csv.DictReader(f):
+                    raw = row.get("#") or row.get("n")
+                    if raw in (None, ""):
+                        continue
+                    try:
+                        ledger_ids.add(int(float(raw)))
+                    except:
+                        pass
+        except Exception:
+            pass
+
+    ledger_count = len(ledger_ids)
+    ledger_max_n = max(ledger_ids) if ledger_ids else 0
+
+    repo_max_n = 0
+    try:
+        repo_max_n = int(subprocess.check_output(
+            ["git", "-C", repo_path, "rev-list", "--count", "HEAD"],
+            text=True
+        ).strip())
+    except Exception:
+        repo_max_n = ledger_max_n
+
+    ledger_complete = (
+        ledger_count > 0 and
+        ledger_count == ledger_max_n and
+        ledger_max_n == repo_max_n
+    )
+
+    return {
+        "side_sort": "desc" if ledger_complete else "asc",
+        "ledger_complete": ledger_complete,
+        "ledger_count": ledger_count,
+        "ledger_max_n": ledger_max_n,
+        "repo_max_n": repo_max_n
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_home(request: Request, repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
     if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
@@ -123,12 +169,18 @@ async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: 
         except Exception as e: print(f"API DATA ERROR: {e}")
     return JSONResponse(commits)
 
+@app.get("/api/scan/context")
+async def scan_context(repo: str = "commit-matrix", rubric: str = "cirsd", token: str = None):
+    if token != METRICS_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return JSONResponse(get_scan_side_sort_context(repo, rubric))
+
 @app.post("/api/engine/control")
 async def control_engine(action: str, token: str = None):
     if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
     
     c_name = get_active_container()
-    if not c_name: return {"status": "no_active_engine"}
+    if not c_name: return {"status": "starting"}
         
     if action == "pause":
         os.system(f"docker pause {c_name} > /dev/null 2>&1")
