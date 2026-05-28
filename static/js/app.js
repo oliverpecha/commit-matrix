@@ -4,6 +4,8 @@ import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, 
 import { renderHeatmap } from './ui/heatmap.js?v=115';
 import { renderTable } from './ui/tableCtrl.js?v=201';
 
+window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
+
 function attemptRender() {
     const p = processCommits(window.MATRIX_PAYLOAD || []);
     if (p.length === 0) return console.warn("MATRIX WARNING: Payload empty.");
@@ -44,6 +46,8 @@ document.addEventListener('click', (e) => { if (e.target.closest('.modal-close')
 // --- LIVE REFRESH ENGINE ---
 window.triggerSilentRefresh = async function() {
     try {
+        if (window.CM_CLOSE_IN_PROGRESS) return;
+
         const urlParams = new URLSearchParams(window.location.search);
         const repo = urlParams.get('repo') || 'commit-matrix';
         const token = urlParams.get('token') || '';
@@ -52,35 +56,28 @@ window.triggerSilentRefresh = async function() {
         if (!res.ok) return;
         
         const newData = await res.json();
-        // Only trigger heavy DOM repaints if we actually have new commits
-        
-        const currentData = window.MATRIX_PAYLOAD || [];
-        if (JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
+        if (window.CM_CLOSE_IN_PROGRESS) return;
 
+        if (JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
             window.MATRIX_PAYLOAD = newData;
             
             const zs = document.getElementById('cm-zero-state');
-            if (zs) zs.remove(); // Purge the zero state completely
+            if (zs) zs.remove();
             
-            // Un-hide all the preserved dashboard elements safely
             document.querySelectorAll('.cm-row, .cm-kpi-row, #cm-ledger-card').forEach(el => {
                 if (el.style.display === 'none') el.style.display = '';
             });
             
-            attemptRender(); // Inject new data into Chart.js
+            if (!window.CM_CLOSE_IN_PROGRESS) {
+                attemptRender();
+            }
         }
     } catch (e) { }
 };
 
 // Restored original triggerLedgerRefresh
 
-// Polling loop: Only fetches data if the terminal window is actively open
-setInterval(() => {
-    const term = document.getElementById('cm-terminal-status');
-    if (term && !term.innerHTML.includes('RELOAD')) {
-        window.triggerSilentRefresh();
-    }
-}, 2500);
+// Polling loop destroyed. Reactivity is now driven by backend EOF tokens. 🚀
 
 // --- BULLETPROOF TOAST CSS INJECTION ---
 if (!document.getElementById('toast-css')) {
@@ -160,3 +157,5 @@ document.addEventListener('click', (e) => {
         if (['frag','churn','blast'].includes(target)) renderAnalytics(window.MATRIX_PAYLOAD);
     }
 });
+
+// Polling removed. UI is now 100% event-driven via terminal.js.
