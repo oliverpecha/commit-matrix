@@ -1,8 +1,8 @@
-import os, csv, json
+import os, csv, json, subprocess, asyncio, codecs, time
 from pathlib import Path
 from datetime import datetime
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -14,7 +14,6 @@ try:
         VERSION = vf.read().strip()
 except Exception:
     VERSION = "v1.0"
-from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="CommitMatrix Telemetry")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -22,15 +21,25 @@ templates = Jinja2Templates(directory="templates")
 
 METRICS_KEY = os.environ.get("MATRIX_TOKEN", "mochi")
 
+# --- BULLETPROOF DOCKER STATE TRACKER ---
+STATE_FILE = "/tmp/matrix_active_container.txt"
+
+def set_active_container(name):
+    with open(STATE_FILE, "w") as f: f.write(name)
+
+def get_active_container():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f: return f.read().strip()
+    return None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_home(request: Request, repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
-    if token != METRICS_KEY:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
     
     commits = []
     csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
-            
+                
     if not os.path.exists(csv_path): print(f"MATRIX WARNING: {csv_path} not found.")
     else:
         try:
@@ -45,8 +54,8 @@ async def dashboard_home(request: Request, repo: str = "commit-matrix", token: s
                         else:
                             try: commit_data[key] = int(float(val))
                             except: commit_data[key] = val.strip() if val else ""
-                    if "n" not in commit_data or commit_data["n"] == "":
-                        commit_data["n"] = idx + 1
+                    
+                    commit_data["n"] = commit_data.get("#") or commit_data.get("n") or (idx + 1)
                     commit_data["h"] = commit_data.get("hash_short") or commit_data.get("Hash", "")
                     commit_data["s"] = commit_data.get("subject") or commit_data.get("Subject", "")
                     date_str = commit_data.get("author_date") or commit_data.get("Date", "")
@@ -63,22 +72,16 @@ async def dashboard_home(request: Request, repo: str = "commit-matrix", token: s
                     commit_data["lines_added"] = int(commit_data.get("lines_added") or commit_data.get("Additions") or 0)
                     commit_data["lines_deleted"] = int(commit_data.get("lines_deleted") or commit_data.get("Deletions") or 0)
                     commits.append(commit_data)
+            
+            commits.sort(key=lambda x: int(x.get("n", 0)))
         except Exception as e: print(f"MATRIX PARSER ERROR: {e}")
     
     return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": commits, "rubric": rubric, "version": VERSION, "layout": os.environ.get("MATRIX_LAYOUT", "toast").lower(), "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", 5))})
-
-from fastapi.responses import StreamingResponse
-import subprocess
-from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
-load_dotenv()  # Load .env file
-
 
 @app.get("/api/data")
 async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
     import os, csv
     from datetime import datetime
-    from fastapi.responses import JSONResponse
     commits = []
     csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
     if os.path.exists(csv_path):
@@ -94,8 +97,8 @@ async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: 
                         else:
                             try: c_data[key] = int(float(val))
                             except: c_data[key] = val.strip() if val else ""
-                    if "n" not in c_data or c_data["n"] == "":
-                        c_data["n"] = idx + 1
+                    
+                    c_data["n"] = c_data.get("#") or c_data.get("n") or (idx + 1)
                     c_data["h"] = c_data.get("hash_short") or c_data.get("Hash", "")
                     c_data["s"] = c_data.get("subject") or c_data.get("Subject", "")
                     c_data["tot"] = sum([int(c_data.get(k,0)) for k in ['C','I','R','S','D'] if str(c_data.get(k,0)).isdigit()])
@@ -115,18 +118,30 @@ async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: 
                     c_data["lines_added"] = int(c_data.get("lines_added") or c_data.get("Additions") or 0)
                     c_data["lines_deleted"] = int(c_data.get("lines_deleted") or c_data.get("Deletions") or 0)
                     commits.append(c_data)
+            
+            commits.sort(key=lambda x: int(x.get("n", 0)))
         except Exception as e: print(f"API DATA ERROR: {e}")
     return JSONResponse(commits)
 
+@app.post("/api/engine/control")
+async def control_engine(action: str, token: str = None):
+    if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    c_name = get_active_container()
+    if not c_name: return {"status": "no_active_engine"}
+        
+    if action == "pause":
+        os.system(f"docker pause {c_name} > /dev/null 2>&1")
+        return {"status": "paused"}
+    elif action == "play":
+        os.system(f"docker unpause {c_name} > /dev/null 2>&1")
+        return {"status": "running"}
+        
+    return {"status": "invalid"}
+
 @app.post("/api/scan")
 async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = "cirsd", token: str = None):
-    import asyncio
-    from fastapi.responses import HTMLResponse, StreamingResponse
-    import time
-    
-    if token != METRICS_KEY:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
         
     async def generate():
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
@@ -134,7 +149,7 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
         
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
         max_w = os.environ.get("MATRIX_MAX_WORKERS", "32")
-        rpm_limit = os.environ.get("MATRIX_RPM_LIMIT", "15") # Fetch the RPM limit from .env
+        rpm_limit = os.environ.get("MATRIX_RPM_LIMIT", "15")
         model_name = os.environ.get("MATRIX_MODEL")
         
         if not model_name:
@@ -142,20 +157,15 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
             return
             
         c_name = f"matrix-analyzer-{int(time.time())}"
+        set_active_container(c_name)
         
-        # Inject MATRIX_RPM_LIMIT into the Docker run command
         cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", f"MATRIX_MAX_WORKERS={max_w}", "-e", f"MATRIX_RPM_LIMIT={rpm_limit}", "-e", f"MATRIX_STRESS_TEST={os.environ.get('MATRIX_STRESS_TEST', '0')}", "-e", f"MATRIX_CRASH_RATE={os.environ.get('MATRIX_CRASH_RATE', '0.4')}", "-e", f"MATRIX_MODEL={model_name}", "-e", f"HOST_REPO_NAME={repo}", "-e", f"RUBRIC_NAME={rubric}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
         
-        c_disp = cmd.copy()
-        for i, val in enumerate(c_disp):
-            if val.startswith("GEMINI_API_KEY="): c_disp[i] = "GEMINI_API_KEY=********"
-                
         yield f"🚀 Spawning ephemeral analyzer container: {c_name}\n\n"
 
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-            import codecs
             decoder = codecs.getincrementaldecoder('utf-8')()
             while True:
                 if await request.is_disconnected(): break
@@ -166,9 +176,19 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
                 if not chunk: break
                 text = decoder.decode(chunk)
                 if text: yield text
-        except asyncio.CancelledError: pass
-        except Exception as e: yield f"❌ ERROR: {e}\n\n"
+            
+            await proc.wait()
+            if proc.returncode == 0:
+                yield "\n\n[__MATRIX_EOF_SUCCESS__]"
+            else:
+                yield f"\n\n[__MATRIX_EOF_FAIL_CODE_{proc.returncode}__]"
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            yield f"❌ ERROR: {e}\n\n[__MATRIX_EOF_FAIL__]"
         finally:
+            if os.path.exists(STATE_FILE): os.remove(STATE_FILE)
             if proc:
                 try: proc.terminate()
                 except: pass
