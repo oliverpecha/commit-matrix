@@ -13,8 +13,6 @@ if os.environ.get("MATRIX_DEBUG") != "1":
 
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 
-# Local module imports
-# Ensure API key is available for workers
 if "GEMINI_API_KEY" in os.environ:
     os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
@@ -26,11 +24,24 @@ from utils.csv_writer import ensure_csv_exists, write_csv_row, load_existing_has
 
 # Constants
 MODEL_NAME = os.environ.get('MATRIX_MODEL', 'gemini/gemini-2.5-flash-lite')
-TARGET_RPM = float(os.environ.get('TARGET_RPM', '15.0'))
-MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '6'))
-CSV_PATH = '/app/data/commit-matrix/commit-matrix_ledger_cirsd.csv'
+TARGET_RPM = float(os.environ.get('MATRIX_RPM_LIMIT', os.environ.get('TARGET_RPM', '15.0')))
+MAX_WORKERS = int(os.environ.get('MATRIX_MAX_WORKERS', os.environ.get('MAX_WORKERS', '6')))
+HOST_REPO_NAME = os.environ.get('HOST_REPO_NAME', 'commit-matrix')
 RUBRIC_NAME = os.environ.get('RUBRIC_NAME', 'cirsd')
+CSV_PATH = f'/app/data/{HOST_REPO_NAME}/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}.csv'
 RUBRIC_PATH = f'/app/rubrics/{RUBRIC_NAME}.md'
+
+
+def build_topo_index(repo_path):
+    """Return {hash_short: global_topo_n} oldest->newest from full git history."""
+    topo = {}
+    log_output = get_commits(repo_path)
+    lines = [line for line in log_output.strip().split('\n') if '|' in line]
+    lines.reverse()
+    for idx, line in enumerate(lines, start=1):
+        hash_full = line.split('|')[0].strip()
+        topo[hash_full[:7]] = idx
+    return topo
 
 def main():
     """Main orchestrator."""
@@ -42,12 +53,16 @@ def main():
     
     repo_path = args.repo
     
-    # Load architecture context
-    print("✅ Cached architecture map loaded for [commit-matrix].\n", flush=True)
+    # --- EMOJI & ARCHITECTURE FIX ---
     arch_context = get_architecture_context(repo_path)
+    if arch_context and len(arch_context.strip()) > 10:
+        print(f"🗺️  Cached architecture map loaded for [{os.path.basename(repo_path)}].\n", flush=True)
+    else:
+        print(f"🗄️  No architecture map found for [{os.path.basename(repo_path)}]. Using default.\n", flush=True)
     
     # Load existing processed commits
     existing_hashes = load_existing_hashes(CSV_PATH)
+    topo_map = build_topo_index(repo_path)
     
     # Get all commits
     log_output = get_commits(repo_path)
@@ -67,11 +82,22 @@ def main():
             i += 1
         else:
             i += 1
+            
+    # --- GLOBAL TOPO IDS + NEWEST-FIRST PROCESSING ---
+    # Assign stable global topo IDs from full git history, then process newest first.
+    commits_with_ids = []
+    for commit in commits:
+        hash_full = commit[0]
+        hash_short = hash_full[:7]
+        topo_id = topo_map.get(hash_short)
+        if topo_id is None:
+            continue
+        commits_with_ids.append((topo_id, commit))
+
+    # Process newest commits first using absolute topo IDs.
+    commits_with_ids.sort(key=lambda x: x[0], reverse=True)
     
-    # Sort by commit date (deterministic ordering)
-    commits.sort(key=lambda x: x[1], reverse=True)
-    
-    total_unscanned = len(commits)
+    total_unscanned = len(commits_with_ids)
     
     if total_unscanned == 0:
         print("✅ All commits already analyzed.\n\n🤝 Repository ledger up to date!\n\n", flush=True)
@@ -79,7 +105,7 @@ def main():
     
     print(f"📦 Discovered {total_unscanned} unscanned commit(s) ready for analysis.\n\n", flush=True)
     print("┌─ 🔗 SYSTEM & ORCHESTRATOR INITIALIZATION ──────────────────────┐", flush=True)
-    print(f"│  📂 Target Mount:  [commit-matrix] ➔ /target_repo", flush=True)
+    print(f"│  📂 Target Mount:  [{os.path.basename(repo_path)}] ➔ /target_repo", flush=True)
     print(f"│  🎯 CLI Command:   python -u parser.py --repo /target_repo", flush=True)
     print(f"│  ├─ Strategy:      AIMD Sliding Window", flush=True)
     print(f"│  ├─ Model:         {MODEL_NAME}", flush=True)
@@ -87,38 +113,32 @@ def main():
     print(f"│  └─ Pace Car:      {TARGET_RPM} RPM Limit Active", flush=True)
     print("└────────────────────────────────────────────────────────────────┘\n", flush=True)
     
-    # Initialize controllers
-    print("DEBUG: Creating AIMD controller...", flush=True)
     aimd = AIMDController(initial=1, max_workers=MAX_WORKERS)
-    print("DEBUG: AIMD created", flush=True)
-    print("DEBUG: Creating RateLimits controller...", flush=True)
     rate_limits = RateLimitsController(target_rpm=TARGET_RPM)
-    print("DEBUG: RateLimits created", flush=True)
     
-    # Process commits
-    print("DEBUG: Checking CSV exists...", flush=True)
     file_exists = ensure_csv_exists(CSV_PATH)
-    print(f"DEBUG: CSV exists={file_exists}", flush=True)
     error_count = 0
     success_count = 0
     
-    print(f"DEBUG: About to start ThreadPoolExecutor", flush=True)
+    # --- WRITE QUEUE & PROGRESS TRACKING ---
+    expected_write_order = [c[0] for c in commits_with_ids]
+    write_index = 0
+    processed_count = 1
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        print(f"DEBUG: Executor started, seeding initial batch", flush=True)
-        commit_iterator = iter(enumerate(commits, 1))
+        commit_iterator = iter(commits_with_ids)
         active_futures = {}
         pending_results = {}
-        next_to_write = 1
         
         # Seed initial batch
         for _ in range(MAX_WORKERS):
             try:
                 next_i, next_parts = next(commit_iterator)
-                print(f"DEBUG: Submitting commit {next_i}", flush=True)
                 future = executor.submit(
-                    process_commit, next_i, next_parts, total_unscanned,
+                    process_commit, next_i, next_parts, total_unscanned, processed_count,
                     arch_context, MODEL_NAME, RUBRIC_PATH, rate_limits, aimd
                 )
+                processed_count += 1
                 active_futures[future] = next_i
             except StopIteration:
                 break
@@ -139,18 +159,19 @@ def main():
 
                 try:
                     next_i, next_parts = next(commit_iterator)
-                    print(f"DEBUG: Submitting commit {next_i}", flush=True)
                     new_future = executor.submit(
-                        process_commit, next_i, next_parts, total_unscanned,
+                        process_commit, next_i, next_parts, total_unscanned, processed_count,
                         arch_context, MODEL_NAME, RUBRIC_PATH, rate_limits, aimd
                     )
+                    processed_count += 1
                     active_futures[new_future] = next_i
                 except StopIteration:
                     pass
 
-            # Flush results in order
-            while next_to_write in pending_results:
-                res = pending_results.pop(next_to_write)
+            # Flush results in order of expected_write_order (Newest First)
+            while write_index < len(expected_write_order) and expected_write_order[write_index] in pending_results:
+                res_id = expected_write_order[write_index]
+                res = pending_results.pop(res_id)
                 if res:
                     if isinstance(res, str):
                         error_count += 1
@@ -158,20 +179,19 @@ def main():
                     else:
                         headers, row, hash_short, ui_block = res
                         success_count += 1
-                        write_csv_row(CSV_PATH, headers, row, is_first_write=(next_to_write == 1 and not file_exists))
-                        if next_to_write == 1 and not file_exists:
+                        is_first = (write_index == 0 and not file_exists)
+                        write_csv_row(CSV_PATH, headers, row, is_first_write=is_first)
+                        if is_first:
                             file_exists = True
                         existing_hashes.add(hash_short)
                         print(ui_block, flush=True)
-                next_to_write += 1
+                write_index += 1
     
-    # Final status
     if error_count > 0:
         print(f'⚠️ PROCESS_COMPLETE_WITH_ERRORS: {error_count} failed, {success_count} succeeded.\n\n', flush=True)
     else:
         print('🤝 Repository ledger up to date!\n\n', flush=True)
     
-    # Timer
     elapsed = time.time() - start_time
     print(f'⏱️  Total execution time: {int(elapsed//60)}m {int(elapsed%60)}s\n', flush=True)
 
