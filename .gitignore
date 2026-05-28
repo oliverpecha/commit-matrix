@@ -5,3 +5,10 @@ backend/__pycache__/
 
 # Ignore generated telemetry and dynamic architecture context
 data/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local patch backups
+*.bak.*
