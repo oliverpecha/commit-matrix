@@ -8,6 +8,9 @@ import csv
 import argparse
 import time
 import logging
+import os
+os.environ['SUPPRESS_LITELLM_LOGS'] = 'True'
+os.environ['LITELLM_LOG'] = 'ERROR'
 if os.environ.get("MATRIX_DEBUG") != "1":
     logging.getLogger("litellm").setLevel(logging.WARNING)
 
@@ -69,6 +72,7 @@ def main():
     lines = log_output.strip().split('\n')
     
     commits = []
+    seen_unscanned = set()
     i = 0
     while i < len(lines):
         if '|' in lines[i]:
@@ -76,7 +80,8 @@ def main():
             hash_full = parts[0]
             hash_short = hash_full[:7]
             
-            if hash_short not in existing_hashes:
+            if hash_short not in existing_hashes and hash_short not in seen_unscanned:
+                seen_unscanned.add(hash_short)
                 diff = get_commit_diff(hash_full, repo_path)
                 commits.append((hash_full, parts[1], parts[2], parts[3], diff))
             i += 1
@@ -86,16 +91,25 @@ def main():
     # --- GLOBAL TOPO IDS + NEWEST-FIRST PROCESSING ---
     # Assign stable global topo IDs from full git history, then process newest first.
     commits_with_ids = []
+    seen_topo = set()
     for commit in commits:
         hash_full = commit[0]
         hash_short = hash_full[:7]
         topo_id = topo_map.get(hash_short)
-        if topo_id is None:
+        if topo_id is None or topo_id in seen_topo:
             continue
+        seen_topo.add(topo_id)
         commits_with_ids.append((topo_id, commit))
 
     # Process newest commits first using absolute topo IDs.
     commits_with_ids.sort(key=lambda x: x[0], reverse=True)
+    
+    # --- TOKEN SAVER: MAX COMMITS LIMIT ---
+    total_found = len(commits_with_ids)
+    max_commits = int(os.environ.get('MATRIX_MAX_COMMITS', '0'))
+    if max_commits > 0 and len(commits_with_ids) > max_commits:
+        commits_with_ids = commits_with_ids[:max_commits]
+        
     
     total_unscanned = len(commits_with_ids)
     
@@ -103,7 +117,10 @@ def main():
         print("✅ All commits already analyzed.\n\n🤝 Repository ledger up to date!\n\n", flush=True)
         return
     
-    print(f"📦 Discovered {total_unscanned} unscanned commit(s) ready for analysis.\n\n", flush=True)
+    if max_commits > 0:
+        print(f"📦 Discovered {total_found} unscanned commits.\n\n🛡️ TOKEN SAVER ACTIVE: Throttling queue to the {max_commits} newest.\n", flush=True)
+    else:
+        print(f"📦 Discovered {total_found} unscanned commit(s) ready for analysis.\n\n", flush=True)
     print("┌─ 🔗 SYSTEM & ORCHESTRATOR INITIALIZATION ──────────────────────┐", flush=True)
     print(f"│  📂 Target Mount:  [{os.path.basename(repo_path)}] ➔ /target_repo", flush=True)
     print(f"│  🎯 CLI Command:   python -u parser.py --repo /target_repo", flush=True)

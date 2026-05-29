@@ -116,7 +116,7 @@ def process_commit(i, parts, total_unscanned, processed_count, arch_context, mod
                     continue
                 else:
                     print(f"❌ CRITICAL: API error hard-failed {MAX_RETRIES} times on {hash_short}. Aborting.", flush=True)
-                    os._exit(1)
+                    return i, f"❌ API hard-fail on {hash_short}. Aborting this commit."
             else:
                 import traceback
                 print(f"\n🔴 FATAL EXCEPTION in worker processing {hash_short}:", flush=True)
