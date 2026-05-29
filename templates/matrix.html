@@ -56,7 +56,7 @@
                 </div>
             </div>
             <div style="padding:8px; background:#0a0e14;">
-                <button onclick="alert('Backend hook: Add Git Repository')" style="width:100%; padding:8px; background:rgba(79,152,163,0.1); border:1px dashed rgba(79,152,163,0.4); color:#4f98a3; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; transition:all 0.2s ease; font-family:Satoshi, sans-serif;" onmouseover="this.style.background='rgba(79,152,163,0.2)';" onmouseout="this.style.background='rgba(79,152,163,0.1)';">
+                <button onclick="window.hub.emit('ACTION:ADD_REPO_REQUESTED')" style="width:100%; padding:8px; background:rgba(79,152,163,0.1); border:1px dashed rgba(79,152,163,0.4); color:#4f98a3; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; transition:all 0.2s ease; font-family:Satoshi, sans-serif;" onmouseover="this.style.background='rgba(79,152,163,0.2)';" onmouseout="this.style.background='rgba(79,152,163,0.1)';">
                     + Add Repository
                 </button>
             </div>
@@ -113,7 +113,7 @@
   <div style="display:flex; gap:12px;">
     <button onclick="toggleDashboardLayout()" class="cm-fbtn" style="padding:6px 14px;">🔲 Toggle View</button>
     <button class="cm-fbtn" style="padding:6px 14px;">📅 Filter Dates</button>
-    <button onclick="triggerLedgerRefresh()" class="cm-fbtn" style="background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); padding:6px 14px; font-weight:bold; color:#4f98a3;">🔄 Refresh Ledger</button>
+    <button class="cm-fbtn" style="background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); padding:6px 14px; font-weight:bold; color:#4f98a3;">🔄 Refresh Ledger</button>
   </div>
 </div>
 
@@ -151,7 +151,7 @@
     window.MATRIX_PAYLOAD = {{ commits_data | tojson | safe }};
     window.MATRIX_TIME_AUTOCLOSE = {{ time_autoclose | tojson }};
 </script>
-<script type="module" src="/static/js/app.js?v=400"></script>
+<script type="module" src="/static/js/app.js?v=1780075021"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -175,7 +175,7 @@ document.addEventListener("DOMContentLoaded", function() {
             <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
             <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Ledger Empty</h2>
             <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">Awaiting Telemetry.</p>
-            <button id="cm-init-btn" onclick="triggerLedgerRefresh()" class="cm-fbtn" style="pointer-events:auto; position:relative; overflow:hidden; background:rgba(79,152,163,0.05); border:1px solid rgba(79,152,163,0.4); padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+            <button id="cm-init-btn" class="cm-fbtn" style="pointer-events:auto; position:relative; overflow:hidden; background:rgba(79,152,163,0.05); border:1px solid rgba(79,152,163,0.4); padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
                 <div id="cm-btn-progress" style="position:absolute; top:0; left:0; height:100%; width:100%; background:rgba(79,152,163,0.25); transition: width 5s linear; transform-origin: left;"></div>
                 <span style="position:relative; z-index:1;" id="cm-btn-text">🚀 Initialize the engine</span>
             </button>
@@ -194,8 +194,11 @@ document.addEventListener("DOMContentLoaded", function() {
             if (timeLeft <= 0) {
                 clearInterval(interval);
                 const t = document.getElementById('cm-btn-text');
+                window.CM_ZERO_AUTO_INIT_USED = window.CM_ZERO_AUTO_INIT_USED || false;
+                if (window.CM_ZERO_AUTO_INIT_USED) return;
+                window.CM_ZERO_AUTO_INIT_USED = true;
                 if (t) t.textContent = "🚀 Initializing...";
-                if (typeof triggerLedgerRefresh === 'function') triggerLedgerRefresh();
+                if (window.hub) window.hub.emit("ACTION:REFRESH_LEDGER");
             }
         }, 1000);
     }
@@ -217,7 +220,7 @@ window.toggleDashboardLayout = function(forceSide = false) {
         wrap.style.display = "grid";
         wrap.style.gridTemplateColumns = "minmax(0, 2fr) minmax(0, 1.2fr)";
         wrap.style.alignItems = "stretch";
-        wrap.style.gap = "12px"; // Standardized Gap
+        wrap.style.gap = "12px";
         wrap.style.height = "calc(100vh - 75px)";
         wrap.style.overflow = "hidden";
 
@@ -227,15 +230,13 @@ window.toggleDashboardLayout = function(forceSide = false) {
 
         const rightCol = document.createElement("div");
         rightCol.id = "cm-right-col";
-        rightCol.style.cssText = "display:flex; flex-direction:column; gap:12px; height:100%; overflow:hidden;"; // Standardized Gap
+        rightCol.style.cssText = "display:flex; flex-direction:column; gap:12px; height:100%; overflow:hidden;";
 
-        // 1. Create Terminal Slot FIRST so it renders above the Ledger
         const termSlot = document.createElement("div");
         termSlot.id = "cm-native-terminal-slot";
         termSlot.style.cssText = "display:none; flex: 0 0 350px; min-height: 0; flex-direction:column; overflow:hidden;";
         rightCol.appendChild(termSlot);
 
-        // 2. Reparent Ledger SECOND
         const children = Array.from(wrap.children);
         children.forEach(child => {
             if (child.id === "cm-ledger-card") {
