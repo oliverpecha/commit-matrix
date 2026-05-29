@@ -1,249 +1,185 @@
-import os, csv, json, subprocess, asyncio, codecs, time
-from pathlib import Path
+import os
+import csv
+import json
+import subprocess
+import asyncio
+import codecs
+import time
+import logging
+import litellm
 from datetime import datetime
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Request, Query
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
+from fastapi.templating import Jinja2Templates
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# --- LITELM LOGGING SWITCH ---
+if os.environ.get("MATRIX_DEBUG", "0") == "0":
+    litellm.suppress_debug_info = True
+    logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+else:
+    litellm.suppress_debug_info = False
+    logging.getLogger("LiteLLM").setLevel(logging.DEBUG)
 
-try:
-    with open('/app/VERSION', 'r') as vf:
-        VERSION = vf.read().strip()
-except Exception:
-    VERSION = "v1.0"
+app = FastAPI(title="CommitMatrix Core Engine")
 
-app = FastAPI(title="CommitMatrix Telemetry")
+# Mount Static assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-METRICS_KEY = os.environ.get("MATRIX_TOKEN", "mochi")
-
-# --- BULLETPROOF DOCKER STATE TRACKER ---
-STATE_FILE = "/tmp/matrix_active_container.txt"
-
-def set_active_container(name):
-    with open(STATE_FILE, "w") as f: f.write(name)
-
-def get_active_container():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f: return f.read().strip()
-    return None
-
-
-def get_scan_side_sort_context(repo: str, rubric: str = "cirsd"):
-    csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
-    repo_path = f"/root/{repo}"
-
-    ledger_ids = set()
-    if os.path.exists(csv_path):
-        try:
-            with open(csv_path, newline='', encoding='utf-8') as f:
-                for row in csv.DictReader(f):
-                    raw = row.get("#") or row.get("n")
-                    if raw in (None, ""):
-                        continue
-                    try:
-                        ledger_ids.add(int(float(raw)))
-                    except:
-                        pass
-        except Exception:
-            pass
-
-    ledger_count = len(ledger_ids)
-    ledger_max_n = max(ledger_ids) if ledger_ids else 0
-
-    repo_max_n = 0
+def fetch_ledger(repo):
+    import csv, os
+    p = f"/app/data/{repo}/{repo}_ledger_cirsd.csv"
+    if not os.path.exists(p): return []
+    out = []
     try:
-        repo_max_n = int(subprocess.check_output(
-            ["git", "-C", repo_path, "rev-list", "--count", "HEAD"],
-            text=True
-        ).strip())
-    except Exception:
-        repo_max_n = ledger_max_n
-
-    ledger_complete = (
-        ledger_count > 0 and
-        ledger_count == ledger_max_n and
-        ledger_max_n == repo_max_n
-    )
-
-    return {
-        "side_sort": "desc" if ledger_complete else "asc",
-        "ledger_complete": ledger_complete,
-        "ledger_count": ledger_count,
-        "ledger_max_n": ledger_max_n,
-        "repo_max_n": repo_max_n
-    }
-
-
-@app.get("/", response_class=HTMLResponse)
-async def dashboard_home(request: Request, repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
-    if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    commits = []
-    csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
+        # utf-8-sig automatically strips hidden BOM characters from CSV headers
+        with open(p, mode="r", encoding="utf-8-sig", errors="replace") as f:
+            for idx, r in enumerate(csv.DictReader(f)):
+                def s_int(k, d=0):
+                    try: return int(str(r.get(k, d)).replace("+", "").replace("-", "").strip())
+                    except: return d
                 
-    if not os.path.exists(csv_path): print(f"MATRIX WARNING: {csv_path} not found.")
-    else:
-        try:
-            with open(csv_path, "r", encoding="utf-8-sig", errors="replace") as f:
-                reader = csv.DictReader(f)
-                for idx, row in enumerate(reader):
-                    if not (row.get("hash_short") or row.get("Hash")): continue
-                    commit_data = {}
-                    for key, val in row.items():
-                        if val == "True": commit_data[key] = True
-                        elif val == "False": commit_data[key] = False
-                        else:
-                            try: commit_data[key] = int(float(val))
-                            except: commit_data[key] = val.strip() if val else ""
-                    
-                    commit_data["n"] = commit_data.get("#") or commit_data.get("n") or (idx + 1)
-                    commit_data["h"] = commit_data.get("hash_short") or commit_data.get("Hash", "")
-                    commit_data["s"] = commit_data.get("subject") or commit_data.get("Subject", "")
-                    date_str = commit_data.get("author_date") or commit_data.get("Date", "")
-                    ts = 0
-                    if date_str:
-                        for fmt in ["%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z", "%b %d, '%y", "%b %e, '%y"]:
-                            try: ts = int(datetime.strptime(date_str, fmt).timestamp()); break
-                            except: continue
-                    commit_data["ts"] = ts
-                    commit_data["tier"] = str(commit_data.get("tier") or commit_data.get("Tier", "Routine")).capitalize()
-                    commit_data["type"] = commit_data.get("type") or commit_data.get("Type", "commit")
-                    commit_data["scope"] = commit_data.get("scope") or commit_data.get("Scope", "")
-                    commit_data["tot"] = int(commit_data.get("Total") or commit_data.get("tot") or sum([int(commit_data.get(k,0)) for k in ['C','I','R','S','D'] if str(commit_data.get(k,0)).isdigit()]))
-                    commit_data["lines_added"] = int(commit_data.get("lines_added") or commit_data.get("Additions") or 0)
-                    commit_data["lines_deleted"] = int(commit_data.get("lines_deleted") or commit_data.get("Deletions") or 0)
-                    commits.append(commit_data)
-            
-            commits.sort(key=lambda x: int(x.get("n", 0)))
-        except Exception as e: print(f"MATRIX PARSER ERROR: {e}")
-    
-    return templates.TemplateResponse(request=request, name="matrix.html", context={"token": token, "commits_data": commits, "rubric": rubric, "version": VERSION, "layout": os.environ.get("MATRIX_LAYOUT", "toast").lower(), "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", 5))})
+                # Fallback to 'n' if '#' is missing due to weird Git encodings
+                n_val = r.get("#") or r.get("n")
+                
+                out.append({
+                    "n": int(n_val) if n_val and str(n_val).isdigit() else idx + 1,
+                    "ts": 0, "date": r.get("Date", ""),
+                    "type": r.get("Type", "commit"), "scope": r.get("Scope", ""),
+                    "s": r.get("Subject", ""), "tier": str(r.get("Tier", "Routine")).capitalize(),
+                    "C": s_int("C", 1), "I": s_int("I", 1), "R": s_int("R", 1),
+                    "S": s_int("S", 1), "D": s_int("D", 1), "tot": s_int("Total", 5),
+                    "lines_added": s_int("Additions", 0), "lines_deleted": s_int("Deletions", 0),
+                    "h": r.get("Hash", "")
+                })
+    except Exception as e: 
+        print(f"LEDGER FETCH ERROR: {e}", flush=True)
+    return out
+
+@app.get("/")
+async def index(request: Request, repo: str = "commit-matrix"):
+    return templates.TemplateResponse(request=request, name="matrix.html", context={
+        "repo": repo, "commits_data": fetch_ledger(repo),
+        "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5"))
+    })
 
 @app.get("/api/data")
-async def get_live_data(repo: str = "commit-matrix", token: str = None, rubric: str = "cirsd"):
-    import os, csv
-    from datetime import datetime
-    commits = []
-    csv_path = f"/app/data/{repo}/{repo}_ledger_{rubric}.csv"
-    if os.path.exists(csv_path):
-        try:
-            with open(csv_path, "r", encoding="utf-8-sig", errors="replace") as f:
-                reader = csv.DictReader(f)
-                for idx, row in enumerate(reader):
-                    if not (row.get("hash_short") or row.get("Hash")): continue
-                    c_data = {}
-                    for key, val in row.items():
-                        if val == "True": c_data[key] = True
-                        elif val == "False": c_data[key] = False
-                        else:
-                            try: c_data[key] = int(float(val))
-                            except: c_data[key] = val.strip() if val else ""
-                    
-                    c_data["n"] = c_data.get("#") or c_data.get("n") or (idx + 1)
-                    c_data["h"] = c_data.get("hash_short") or c_data.get("Hash", "")
-                    c_data["s"] = c_data.get("subject") or c_data.get("Subject", "")
-                    c_data["tot"] = sum([int(c_data.get(k,0)) for k in ['C','I','R','S','D'] if str(c_data.get(k,0)).isdigit()])
-                    if "tier" not in c_data or not c_data["tier"]: c_data["tier"] = "Routine"
-                    
-                    date_str = c_data.get("author_date") or c_data.get("Date", "")
-                    ts = 0
-                    if date_str:
-                        for fmt in ["%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z", "%b %d, '%y", "%b %e, '%y"]:
-                            try: ts = int(datetime.strptime(date_str, fmt).timestamp()); break
-                            except: continue
-                    c_data["ts"] = ts
-                    c_data["tier"] = str(c_data.get("tier") or c_data.get("Tier", "Routine")).capitalize()
-                    c_data["type"] = c_data.get("type") or c_data.get("Type", "commit")
-                    c_data["scope"] = c_data.get("scope") or c_data.get("Scope", "")
-                    c_data["tot"] = int(c_data.get("Total") or c_data.get("tot") or sum([int(c_data.get(k,0)) for k in ['C','I','R','S','D'] if str(c_data.get(k,0)).isdigit()]))
-                    c_data["lines_added"] = int(c_data.get("lines_added") or c_data.get("Additions") or 0)
-                    c_data["lines_deleted"] = int(c_data.get("lines_deleted") or c_data.get("Deletions") or 0)
-                    commits.append(c_data)
-            
-            commits.sort(key=lambda x: int(x.get("n", 0)))
-        except Exception as e: print(f"API DATA ERROR: {e}")
-    return JSONResponse(commits)
-
-@app.get("/api/scan/context")
-async def scan_context(repo: str = "commit-matrix", rubric: str = "cirsd", token: str = None):
-    if token != METRICS_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return JSONResponse(get_scan_side_sort_context(repo, rubric))
+async def get_data(repo: str = "commit-matrix", token: str = ""):
+    return JSONResponse(content=fetch_ledger(repo))
 
 @app.post("/api/engine/control")
-async def control_engine(action: str, token: str = None):
-    if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    c_name = get_active_container()
-    if not c_name: return {"status": "starting"}
-        
+async def control_engine(request: Request, action: str, repo: str = "commit-matrix"):
+    import os
+    c_name = "matrix-analyzer-singleton"
     if action == "pause":
         os.system(f"docker pause {c_name} > /dev/null 2>&1")
-        return {"status": "paused"}
+        return JSONResponse(content={"status": "paused", "action": action})
     elif action == "play":
         os.system(f"docker unpause {c_name} > /dev/null 2>&1")
-        return {"status": "running"}
-        
-    return {"status": "invalid"}
+        return JSONResponse(content={"status": "running", "action": action})
+    return JSONResponse(content={"status": "acknowledged", "action": action})
 
 @app.post("/api/scan")
-async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = "cirsd", token: str = None):
-    if token != METRICS_KEY: raise HTTPException(status_code=401, detail="Unauthorized")
-        
+async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = "cirsd", token: str = ""):
+    c_name = "matrix-analyzer-singleton"
+    
     async def generate():
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
-        os.system("docker ps -q --filter name=matrix-analyzer- | xargs -r docker rm -f > /dev/null 2>&1")
+        
+        # Backend natively protected by Singleton Architecture.
+        
+        # Kill any identically named collision container block
+        os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
         
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
         max_w = os.environ.get("MATRIX_MAX_WORKERS", "32")
-        rpm_limit = os.environ.get("MATRIX_RPM_LIMIT", "15")
-        model_name = os.environ.get("MATRIX_MODEL")
+        max_commits = os.environ.get("MATRIX_MAX_COMMITS", "0")
         
-        if not model_name:
-            yield "❌ ERROR: 🛑 CRITICAL: MATRIX_MODEL is not defined in .env. Engine aborted.\n\n"
-            return
-            
-        c_name = f"matrix-analyzer-{int(time.time())}"
-        set_active_container(c_name)
-        
-        cmd = ["docker", "run", "--rm", "--name", c_name, "-v", "/root/commit-matrix:/target_repo", "-v", "/root/commit-matrix/data:/app/data", "-v", "/root/commit-matrix/rubrics:/app/rubrics", "-v", "/root/commit-matrix/backend:/app/backend", "-e", f"GEMINI_API_KEY={gemini_key}", "-e", f"MATRIX_MAX_WORKERS={max_w}", "-e", f"MATRIX_RPM_LIMIT={rpm_limit}", "-e", f"MATRIX_STRESS_TEST={os.environ.get('MATRIX_STRESS_TEST', '0')}", "-e", f"MATRIX_CRASH_RATE={os.environ.get('MATRIX_CRASH_RATE', '0.4')}", "-e", f"MATRIX_MODEL={model_name}", "-e", f"HOST_REPO_NAME={repo}", "-e", f"RUBRIC_NAME={rubric}", "commit-matrix-core:latest", "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"]
-        
-        yield f"🚀 Spawning ephemeral analyzer container: {c_name}\n\n"
+        # Setup clean absolute directory execution paths mapping across host mounts
+        target_volume = f"/root/commit-matrix" if repo == "commit-matrix" else f"/root/commit-matrix/data/{repo}/src"
+        data_volume = "/root/commit-matrix/data"
 
-        proc = None
+        rpm_limit = os.environ.get("MATRIX_RPM_LIMIT", "15")
+        model_name = os.environ.get("MATRIX_MODEL", "gemini/gemini-2.5-flash-lite")
+        stress_test = os.environ.get("MATRIX_STRESS_TEST", "0")
+        crash_rate = os.environ.get("MATRIX_CRASH_RATE", "0.4")
+        
+        docker_cmd = [
+            "docker", "run", "-d", "--name", c_name,
+            "-v", "/var/run/docker.sock:/var/run/docker.sock",
+            "-v", f"{target_volume}:/target_repo",
+            "-v", f"{data_volume}:/app/data",
+            "-v", "/root/commit-matrix/rubrics:/app/rubrics",
+            "-v", "/root/commit-matrix/backend:/app/backend",
+            "-e", f"GEMINI_API_KEY={gemini_key}",
+            "-e", f"MATRIX_MAX_WORKERS={max_w}",
+            "-e", f"MATRIX_MAX_COMMITS={max_commits}",
+            "-e", f"MATRIX_RPM_LIMIT={rpm_limit}",
+            "-e", f"MATRIX_MODEL={model_name}",
+            "-e", f"MATRIX_STRESS_TEST={stress_test}",
+            "-e", f"MATRIX_CRASH_RATE={crash_rate}",
+            "-e", "LITELLM_LOG=ERROR",
+            "-e", "SUPPRESS_LITELLM_LOGS=True",
+            "-e", f"HOST_REPO_NAME={repo}",
+            "-e", f"RUBRIC_NAME={rubric}",
+            "commit-matrix-core:latest",
+            "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"
+        ]
+        
         try:
-            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-            decoder = codecs.getincrementaldecoder('utf-8')()
-            while True:
-                if await request.is_disconnected(): break
-                try:
-                    chunk = await asyncio.wait_for(proc.stdout.read(1024), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
-                if not chunk: break
-                text = decoder.decode(chunk)
-                if text: yield text
+            process = await asyncio.create_subprocess_exec(
+                *docker_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
+            )
+            stdout, stderr = await process.communicate()
             
-            await proc.wait()
-            if proc.returncode == 0:
+            if process.returncode != 0:
+                yield f"❌ DOCKER INVOCATION FAILED: {stderr.decode(errors='ignore')}\n"
+                return
+                
+            container_id = stdout.decode().strip()
+            yield f"🐳 ENGINE INITIALIZED CONTAINER CONTAINER_ID: {container_id[:12]}\n\n"
+            
+            # Follow log streams natively in real-time chunk cycles
+            log_stream = await asyncio.create_subprocess_exec(
+                "docker", "logs", "-f", c_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
+            )
+            
+            while True:
+                if await request.is_disconnected():
+                    break
+                    
+                line = await log_stream.stdout.readline()
+                if not line:
+                    break
+                yield line.decode(errors='ignore')
+                
+            await log_stream.wait()
+            
+            # Pull check execution codes out of the dead runner container
+            inspect = await asyncio.create_subprocess_exec(
+                "docker", "inspect", "-f", "{{.State.ExitCode}}", c_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
+            )
+            i_out, _ = await inspect.communicate()
+            exit_code = i_out.decode(errors="ignore").strip()
+
+            if inspect.returncode != 0 or "No such object" in exit_code:
+                yield "\n\n⚠️ Engine cleanup race detected while resolving final container state. Stream output above is authoritative.\n[__MATRIX_EOF_SUCCESS__]"
+            elif exit_code == "0":
                 yield "\n\n[__MATRIX_EOF_SUCCESS__]"
             else:
-                yield f"\n\n[__MATRIX_EOF_FAIL_CODE_{proc.returncode}__]"
+                yield f"\n\n❌ FATAL ENGINE CRASH (Exit Code {exit_code}). See traceback above.\n[__MATRIX_EOF_FAIL_CODE_{exit_code}__]"
 
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            yield f"❌ ERROR: {e}\n\n[__MATRIX_EOF_FAIL__]"
+        except Exception as ex:
+            yield f"\n⚠️ INTERNAL STREAM STREAM EXCEPTION ERROR: {str(ex)}\n"
         finally:
-            if os.path.exists(STATE_FILE): os.remove(STATE_FILE)
-            if proc:
-                try: proc.terminate()
-                except: pass
+            # Complete execution isolation. Kills runtime thread context on disconnect/exit
             os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
 
     return StreamingResponse(generate(), media_type="text/plain")
