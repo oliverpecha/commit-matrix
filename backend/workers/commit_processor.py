@@ -20,7 +20,7 @@ def process_commit(i, parts, total_unscanned, processed_count, arch_context, mod
         try:
             aimd.acquire()
             
-            if os.environ.get("MATRIX_STRESS_TEST") == "1":
+            if str(os.environ.get("MATRIX_STRESS_TEST", "false")).strip().lower() in ("1", "true", "yes", "on"):
                 import random
                 if random.random() < float(os.environ.get("MATRIX_CRASH_RATE", "0.3")):
                     raise Exception('litellm.ServiceUnavailableError: 503 STRESS TEST simulated')
