@@ -1,6 +1,8 @@
 import { hub } from "./core/eventHub.js";
+import "./core/appStateCtrl.js";
 import "./engine/repoManager.js";
 import "./engine/telemetryStream.js";
+import "./engine/engineControl.js";
 import "./ui/terminalView.js";
 
 import { processCommits } from './core/dataEngine.js';
@@ -10,7 +12,6 @@ import { renderTable } from './ui/tableCtrl.js';
 import { UI_STATE } from './core/state.js';
 
 window.hub = hub;
-window.cmToggleEngine = (action) => hub.emit("ACTION:TOGGLE_ENGINE", { action });
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
 window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
@@ -48,12 +49,22 @@ window.triggerSilentRefresh = async function() {
         if (window.CM_CLOSE_IN_PROGRESS) return;
 
         if (JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
+            const hadNoLedger = !Array.isArray(window.MATRIX_PAYLOAD) || window.MATRIX_PAYLOAD.length === 0;
+            const hasLedgerNow = Array.isArray(newData) && newData.length > 0;
+
             window.MATRIX_PAYLOAD = newData;
+
             const zs = document.getElementById('cm-zero-state');
             if (zs) zs.remove();
+
             document.querySelectorAll('.cm-row, .cm-kpi-row, #cm-ledger-card').forEach(el => {
                 if (el.style.display === 'none') el.style.display = '';
             });
+
+            if (hadNoLedger && hasLedgerNow) {
+                hub.emit("DATA:LEDGER_CONFIRMED");
+            }
+
             if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
         }
     } catch (e) { }
