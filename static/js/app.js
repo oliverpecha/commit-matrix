@@ -61,10 +61,6 @@ window.triggerSilentRefresh = async function() {
                 if (el.style.display === 'none') el.style.display = '';
             });
 
-            if (hadNoLedger && hasLedgerNow) {
-                hub.emit("DATA:LEDGER_CONFIRMED");
-            }
-
             if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
         }
     } catch (e) { }

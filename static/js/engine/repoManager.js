@@ -8,16 +8,6 @@ hub.on("ACTION:REFRESH_LEDGER", () => {
     hub.emit("ENGINE:SCAN_REQUESTED", { repo, token });
 });
 
-hub.on("ACTION:TOGGLE_ENGINE", async (payload) => {
-    const { action } = payload;
-    const urlParams = new URLSearchParams(window.location.search);
-    try {
-        const resp = await fetch(`/api/engine/control?action=${action}&token=${urlParams.get("token")}`, { method: "POST" });
-        const data = await resp.json();
-        hub.emit("ENGINE:CONTROL_UPDATED", { action, status: data.status });
-    } catch (e) { hub.emit("ENGINE:CONTROL_UPDATED", { action, status: "error" }); }
-});
-
 hub.on("ACTION:ADD_REPO_REQUESTED", () => {
     hub.emit("UI:SHOW_CLI_INSTRUCTIONS");
 });
