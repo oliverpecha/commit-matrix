@@ -60,7 +60,6 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
             }
 
             if (chunk.includes("Queued for ledger flush")) {
-                hub.emit("DATA:LEDGER_CONFIRMED");
                 if (window.triggerSilentRefresh) window.triggerSilentRefresh();
             }
 

@@ -16,16 +16,6 @@ function getScanRequestPayload() {
     };
 }
 
-hub.on("ACTION:TOGGLE_ENGINE", async ({ action }) => {
-    if (action === "pause" && !window.CM_ENGINE_CONTROLLABLE) return;
-
-    try {
-        const data = await postEngineControl(action);
-        hub.emit("ENGINE:CONTROL_UPDATED", { action, status: data.status });
-    } catch (e) {
-        console.warn("Backend control failed.", e);
-    }
-});
 
 hub.on("ACTION:CLOSE_TERMINAL", () => {
     hub.emit("ENGINE:EXIT_REQUESTED");

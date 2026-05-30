@@ -64,52 +64,6 @@
     </div>
 </div>
 
-<script>
-    // Synchronized Dual-Dropdown Controller
-    document.addEventListener("DOMContentLoaded", () => {
-        const setups = [
-            { toggle: 'cm-user-toggle', menu: 'cm-user-menu' },
-            { toggle: 'cm-repo-toggle', menu: 'cm-repo-menu' }
-        ];
-        
-        const closeAllMenus = () => {
-            setups.forEach(s => {
-                const menuEl = document.getElementById(s.menu);
-                const toggleEl = document.getElementById(s.toggle);
-                if (menuEl) menuEl.style.display = 'none';
-                if (toggleEl) toggleEl.style.background = 'rgba(138,180,240,0.05)';
-            });
-        };
-
-        setups.forEach(s => {
-            const toggleEl = document.getElementById(s.toggle);
-            const menuEl = document.getElementById(s.menu);
-            
-            if (toggleEl && menuEl) {
-                toggleEl.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const wasHidden = menuEl.style.display === 'none';
-                    closeAllMenus(); // Close sibling menus
-                    
-                    if (wasHidden) {
-                        menuEl.style.display = 'flex';
-                        toggleEl.style.background = 'rgba(138,180,240,0.15)';
-                    }
-                });
-            }
-        });
-
-        // Close on outside click
-        document.addEventListener('click', (e) => {
-            let clickedInside = false;
-            setups.forEach(s => {
-                const menuEl = document.getElementById(s.menu);
-                if (menuEl && menuEl.contains(e.target)) clickedInside = true;
-            });
-            if (!clickedInside) closeAllMenus();
-        });
-    });
-</script>
   <div style="display:flex; gap:12px;">
     <button onclick="toggleDashboardLayout()" class="cm-fbtn" style="padding:6px 14px;">🔲 Toggle View</button>
     <button class="cm-fbtn" style="padding:6px 14px;">📅 Filter Dates</button>
@@ -147,109 +101,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-    window.MATRIX_PAYLOAD = {{ commits_data | tojson | safe }};
-    window.MATRIX_TIME_AUTOCLOSE = {{ time_autoclose | tojson }};
-</script>
+<script id="cm-page-payload" type="application/json">{{ {'commits_data': commits_data, 'time_autoclose': time_autoclose} | tojson | safe }}</script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js"></script>
 <script type="module" src="/static/js/app.js?v=1780075021"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const repoSpan = document.getElementById("cm-active-repo");
-    if (repoSpan) repoSpan.textContent = urlParams.get("repo") || "commit-matrix";
 
-    const serverHasData = {{ "true" if commits_data else "false" }};
-    if (!serverHasData) {
-        const wrap = document.getElementById("main-dashboard-wrap");
-        
-        // Hide the empty dashboard
-        const elementsToHide = wrap.querySelectorAll('.cm-row, .cm-kpi-row, #cm-ledger-card');
-        elementsToHide.forEach(el => el.style.display = 'none');
-        
-        // Inject Zero State
-        const zs = document.createElement('div');
-        zs.id = 'cm-zero-state';
-        zs.style.cssText = 'position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%; pointer-events:none;';
-        
-        zs.innerHTML = `
-            <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
-            <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Ledger Empty</h2>
-            <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">Awaiting Telemetry.</p>
-            <button id="cm-init-btn" class="cm-fbtn" style="pointer-events:auto; position:relative; overflow:hidden; background:rgba(79,152,163,0.05); border:1px solid rgba(79,152,163,0.4); padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; color:#4f98a3; border-radius:6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                <div id="cm-btn-progress" style="position:absolute; top:0; left:0; height:100%; width:100%; background:rgba(79,152,163,0.25); transition: width 5s linear; transform-origin: left;"></div>
-                <span style="position:relative; z-index:1;" id="cm-btn-text">🚀 Initialize the engine</span>
-            </button>
-        `;
-        wrap.insertBefore(zs, wrap.firstChild);
-        
-        // Trigger visual drain
-        setTimeout(() => {
-            const pBar = document.getElementById('cm-btn-progress');
-            if (pBar) pBar.style.width = '0%';
-        }, 50);
-        
-        let timeLeft = 5;
-        const interval = setTimeout(() => {
-            const t = document.getElementById('cm-btn-text');
-            window.CM_ZERO_AUTO_INIT_USED = window.CM_ZERO_AUTO_INIT_USED || false;
-            if (window.CM_ZERO_AUTO_INIT_USED) return;
-            window.CM_ZERO_AUTO_INIT_USED = true;
-            if (t) t.textContent = 'Initializing...';
-            if (window.hub && !window.CM_SCAN_IN_FLIGHT) window.hub.emit('ACTION:REFRESH_LEDGER');
-        }, 5000);
-    }
-});
-
-window.toggleDashboardLayout = function(forceSide = false) {
-    const wrap = document.getElementById("main-dashboard-wrap");
-    if (!wrap) return;
-
-    const isCurrentlySide = wrap.dataset.layout === "side";
-
-    if (isCurrentlySide && !forceSide) {
-        window.location.reload(); 
-        return;
-    }
-
-    if (!isCurrentlySide) {
-        wrap.dataset.layout = "side";
-        wrap.style.display = "grid";
-        wrap.style.gridTemplateColumns = "minmax(0, 2fr) minmax(0, 1.2fr)";
-        wrap.style.alignItems = "stretch";
-        wrap.style.gap = "12px";
-        wrap.style.height = "calc(100vh - 75px)";
-        wrap.style.overflow = "hidden";
-
-        const leftCol = document.createElement("div");
-        leftCol.id = "cm-left-col";
-        leftCol.style.cssText = "display:flex; flex-direction:column; gap:12px; overflow-y:auto; height:100%; padding-right:8px; padding-bottom:16px;";
-
-        const rightCol = document.createElement("div");
-        rightCol.id = "cm-right-col";
-        rightCol.style.cssText = "display:flex; flex-direction:column; gap:12px; height:100%; overflow:hidden;";
-
-        const termSlot = document.createElement("div");
-        termSlot.id = "cm-native-terminal-slot";
-        termSlot.style.cssText = "display:none; flex: 0 0 350px; min-height: 0; flex-direction:column; overflow:hidden;";
-        rightCol.appendChild(termSlot);
-
-        const children = Array.from(wrap.children);
-        children.forEach(child => {
-            if (child.id === "cm-ledger-card") {
-                const isHidden = child.style.display === 'none';
-                child.style.cssText = "flex: 1; min-height: 0; display:flex; flex-direction:column;";
-                if (isHidden) child.style.display = 'none';
-                const tblWrap = child.querySelector(".cm-tbl-wrap");
-                if (tblWrap) { tblWrap.style.flex = "1"; tblWrap.style.overflowY = "auto"; }
-                rightCol.appendChild(child);
-            } else {
-                leftCol.appendChild(child);
-            }
-        });
-        
-        wrap.appendChild(leftCol);
-        wrap.appendChild(rightCol);
-    }
-};
-</script>
 {% endblock %}

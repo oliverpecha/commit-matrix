@@ -47,3 +47,16 @@ export function onCompleteState() {
 export function onFailureState() {
     return setAppState(APP_STATES.FAILED);
 }
+
+export function hasSeenLedger() {
+    return hasLedgerData();
+}
+
+export function markLedgerSeen() {
+    return setAppState(APP_STATES.INGESTION_STREAMING_WITH_LEDGER);
+}
+
+export function initAppStateFromLedger() {
+    return syncInitialAppState();
+}
+
