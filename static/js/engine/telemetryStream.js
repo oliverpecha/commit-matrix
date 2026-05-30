@@ -2,8 +2,11 @@ import { formatTerminalChunk } from "../ui/terminalFormatter.js";
 import { hub } from "../core/eventHub.js";
 
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
+window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
 
 hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
+    if (window.CM_SCAN_IN_FLIGHT) return;
+    window.CM_SCAN_IN_FLIGHT = true;
     const urlParams = new URLSearchParams(window.location.search);
     const repoName = repo || urlParams.get("repo") || "commit-matrix";
     const authToken = token || urlParams.get("token") || "";
@@ -19,6 +22,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
             hub.emit("ENGINE:CHUNK_RECEIVED", {
                 chunk: `\n❌ Stream Processing Interrupted: HTTP ${response.status}\n`
             });
+            window.CM_SCAN_IN_FLIGHT = false;
             hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
             return;
         }
@@ -33,7 +37,10 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
 
             if (done) {
                 if (!streamBuffer.includes("[__MATRIX_EOF_SUCCESS__]") && !streamBuffer.includes("[__MATRIX_EOF_FAIL")) {
+                    window.CM_SCAN_IN_FLIGHT = false;
                     hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+                } else {
+                    window.CM_SCAN_IN_FLIGHT = false;
                 }
                 break;
             }
@@ -52,13 +59,15 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
                 window.CM_ENGINE_CONTROLLABLE = true;
             }
 
-            if (chunk.includes("Queued for ledger flush") && window.triggerSilentRefresh) {
-                window.triggerSilentRefresh();
+            if (chunk.includes("Queued for ledger flush")) {
+                hub.emit("DATA:LEDGER_CONFIRMED");
+                if (window.triggerSilentRefresh) window.triggerSilentRefresh();
             }
 
             if (streamBuffer.includes("[__MATRIX_EOF_SUCCESS__]")) {
                 const cleanChunk = chunk.split("[__MATRIX_EOF_SUCCESS__]").join("");
                 if (cleanChunk) hub.emit("ENGINE:CHUNK_RECEIVED", { chunk: cleanChunk });
+                window.CM_SCAN_IN_FLIGHT = false;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: true });
                 break;
             }
@@ -66,6 +75,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
             if (streamBuffer.includes("[__MATRIX_EOF_FAIL")) {
                 const cleanChunk = chunk.replace(/\[__MATRIX_EOF_.*__\]/g, "");
                 if (cleanChunk) hub.emit("ENGINE:CHUNK_RECEIVED", { chunk: cleanChunk });
+                window.CM_SCAN_IN_FLIGHT = false;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
                 break;
             }
@@ -76,7 +86,20 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
         hub.emit("ENGINE:CHUNK_RECEIVED", {
             chunk: `\n❌ Stream Processing Interrupted: ${err.message}\n`
         });
+        window.CM_SCAN_IN_FLIGHT = false;
         hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+    }
+});
+
+hub.on("ACTION:TOGGLE_ENGINE", async ({ action } = {}) => {
+    if (!action) return;
+    try {
+        const data = await window.cmToggleEngine(action);
+        if (data && data.status) {
+            hub.emit("ENGINE:CONTROL_UPDATED", { action, status: data.status });
+        }
+    } catch (err) {
+        console.warn("Engine toggle bridge failed.", err);
     }
 });
 
@@ -86,7 +109,7 @@ window.cmToggleEngine = async function(action) {
     const stat = document.getElementById('cm-terminal-status');
     const urlParams = new URLSearchParams(window.location.search);
 
-    if (action === 'pause' && !window.CM_ENGINE_CONTROLLABLE) return;
+    if (action === 'pause' && !window.CM_ENGINE_CONTROLLABLE) return null;
 
     try {
         const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || 'commit-matrix'}`, { method: 'POST' });
@@ -110,7 +133,10 @@ window.cmToggleEngine = async function(action) {
                 stat.classList.add('processing-pulse');
             }
         }
+
+        return data;
     } catch (e) {
         console.warn('Backend control failed.', e);
+        return null;
     }
 };
