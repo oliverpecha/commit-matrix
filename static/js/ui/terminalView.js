@@ -1,50 +1,83 @@
 import { hub } from "../core/eventHub.js";
-import { APP_STATES, LAYOUTS } from "../core/state.js";
-import { applyLayout } from "./layoutCtrl.js";
+import { APP_STATES } from "../core/state.js";
+import {
+    getAppState,
+    setAppState,
+    syncInitialAppState,
+    beginScanState,
+    onFirstChunkState,
+    onLedgerAvailableState,
+    onPauseState,
+    onPlayState,
+    onCompleteState,
+    onFailureState,
+} from "../core/appStateCtrl.js";
 import { renderTerminalShell } from "./terminalShell.js";
-import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js";
+import { scheduleAutoClose, resetCloseLifecycle } from "./terminalLifecycle.js";
+import { getEngineControlFlags } from "../engine/engineControlPolicy.js";
 
-let closeInFlight = false;
-let closeTimer = null;
-let firstLedgerSeen = false;
-
-const stateToLayout = (state) => {
-    if (state === APP_STATES.ZERO) return LAYOUTS.ZERO_LAYOUT;
-    if ([APP_STATES.INGESTION_BOOT, APP_STATES.INGESTION_STREAMING_FIRST].includes(state)) return LAYOUTS.TERMINAL_SLOT_LAYOUT;
-    if ([APP_STATES.INGESTION_STREAMING_WITH_LEDGER, APP_STATES.DASHBOARD_STREAMING, APP_STATES.PAUSED, APP_STATES.COMPLETE_PENDING_CLOSE].includes(state)) return LAYOUTS.SIDE_LAYOUT;
-    if (state === APP_STATES.FAILED) return firstLedgerSeen ? LAYOUTS.SIDE_LAYOUT : LAYOUTS.TERMINAL_SLOT_LAYOUT;
-    return LAYOUTS.DASHBOARD_LAYOUT;
-};
-
-const setAppState = (state) => {
-    window.CM_APP_STATE = state;
-    return applyLayout(stateToLayout(state));
-};
-
-const closeTerminalPanel = () => {
-    if (closeInFlight) return;
-    closeInFlight = true;
-    window.CM_CLOSE_IN_PROGRESS = true;
-    if (closeTimer) clearTimeout(closeTimer);
-    hub.emit("ENGINE:EXIT_REQUESTED");
-    window.location.reload();
-};
-
-const renderShellForCurrentState = () => {
-    const termSlot = setAppState(window.CM_APP_STATE);
-    if (!termSlot) return null;
-    const shell = renderTerminalShell(termSlot);
-    if (!shell) return null;
-
+function bindShellControls(shell) {
+    if (!shell) return;
     shell.closeBtn.onclick = () => hub.emit("ACTION:CLOSE_TERMINAL");
     shell.pauseBtn.onclick = () => hub.emit("ACTION:TOGGLE_ENGINE", { action: "pause" });
     shell.playBtn.onclick = () => hub.emit("ACTION:TOGGLE_ENGINE", { action: "play" });
+}
+
+function syncShellControls() {
+    const flags = getEngineControlFlags();
+    const pauseBtn = document.getElementById("cm-btn-pause");
+    const playBtn = document.getElementById("cm-btn-play");
+    const closeBtn = document.getElementById("cm-btn-close");
+
+    if (pauseBtn) pauseBtn.style.display = flags.showPause ? "block" : "none";
+    if (playBtn) playBtn.style.display = flags.showPlay ? "block" : "none";
+    if (closeBtn) closeBtn.style.display = flags.showClose ? "block" : "none";
+}
+
+function captureShellSnapshot() {
+    return {
+        bodyHtml: document.getElementById("cm-terminal-body")?.innerHTML || "",
+        statusHtml: document.getElementById("cm-terminal-status")?.innerHTML || "",
+    };
+}
+
+function restoreShellSnapshot(snapshot) {
+    if (!snapshot) return;
+
+    const body = document.getElementById("cm-terminal-body");
+    const status = document.getElementById("cm-terminal-status");
+
+    if (body && snapshot.bodyHtml) {
+        body.innerHTML = snapshot.bodyHtml;
+        body.scrollTop = body.scrollHeight;
+    }
+
+    if (status && snapshot.statusHtml) {
+        status.innerHTML = snapshot.statusHtml;
+    }
+}
+
+function renderShellForCurrentState() {
+    const snapshot = captureShellSnapshot();
+    const termSlot = setAppState(getAppState());
+    if (!termSlot) return null;
+    const shell = renderTerminalShell(termSlot);
+    restoreShellSnapshot(snapshot);
+    bindShellControls(shell);
+    syncShellControls();
     return shell;
-};
+}
+
+function appendChunk(chunk) {
+    const body = document.getElementById("cm-terminal-body");
+    if (!body) return;
+    body.innerHTML += chunk.replace(/\[__MATRIX_EOF_.*__\]/g, "");
+    body.scrollTop = body.scrollHeight;
+}
 
 hub.on("UI:SHOW_CLI_INSTRUCTIONS", () => {
-    window.CM_APP_STATE = firstLedgerSeen ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_BOOT;
-    const termSlot = setAppState(window.CM_APP_STATE);
+    setAppState(Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0 ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_BOOT);
+    const termSlot = setAppState(getAppState());
     if (!termSlot) return;
 
     termSlot.innerHTML = `
@@ -68,106 +101,67 @@ To ingest a new repository, open your host terminal and run:
 });
 
 hub.on("ENGINE:SCAN_REQUESTED", () => {
-    closeInFlight = false;
-    window.CM_APP_STATE = firstLedgerSeen ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_BOOT;
-    clearAutoCloseToast(document.getElementById("cm-terminal-toast-slot"));
+    resetCloseLifecycle();
+    beginScanState();
     renderShellForCurrentState();
 });
 
 hub.on("DATA:FIRST_CHUNK_RECEIVED", () => {
-    if (!firstLedgerSeen) {
-        window.CM_APP_STATE = APP_STATES.INGESTION_STREAMING_FIRST;
-        renderShellForCurrentState();
-    }
+    onFirstChunkState();
+    renderShellForCurrentState();
+});
+
+hub.on("DATA:LEDGER_CONFIRMED", () => {
+    onLedgerAvailableState();
+    syncShellControls();
 });
 
 hub.on("ENGINE:CHUNK_RECEIVED", ({ chunk }) => {
-    const body = document.getElementById("cm-terminal-body");
-    if (!body) return;
-
-    body.innerHTML += chunk.replace(/\[__MATRIX_EOF_.*__\]/g, "");
-    body.scrollTop = body.scrollHeight;
+    appendChunk(chunk);
 
     if (chunk.includes("🐳 ENGINE INITIALIZED CONTAINER")) {
-        const pauseBtn = document.getElementById("cm-btn-pause");
-        if (pauseBtn) pauseBtn.style.display = "block";
+        window.CM_ENGINE_CONTROLLABLE = true;
+        syncShellControls();
     }
 
     if (chunk.includes("Queued for ledger flush")) {
-        firstLedgerSeen = true;
-        if ([APP_STATES.INGESTION_BOOT, APP_STATES.INGESTION_STREAMING_FIRST].includes(window.CM_APP_STATE)) {
-            window.CM_APP_STATE = APP_STATES.INGESTION_STREAMING_WITH_LEDGER;
-            renderShellForCurrentState();
-            const body2 = document.getElementById("cm-terminal-body");
-            if (body2 && !body2.innerHTML.trim()) body2.innerHTML = body.innerHTML;
-        }
+        onLedgerAvailableState();
+        renderShellForCurrentState();
     }
 });
 
 hub.on("ENGINE:CONTROL_UPDATED", ({ action, status }) => {
     const statusEl = document.getElementById("cm-terminal-status");
-    const pauseBtn = document.getElementById("cm-btn-pause");
-    const playBtn = document.getElementById("cm-btn-play");
 
     if (action === "pause" && status === "paused") {
-        window.CM_APP_STATE = APP_STATES.PAUSED;
+        onPauseState();
         if (statusEl) statusEl.innerHTML = `<span style="color:#aaa;">PAUSED</span>`;
-        if (pauseBtn) pauseBtn.style.display = "none";
-        if (playBtn) playBtn.style.display = "block";
     }
 
     if (action === "play" && status === "running") {
-        window.CM_APP_STATE = firstLedgerSeen ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_STREAMING_FIRST;
+        onPlayState();
         if (statusEl) statusEl.innerHTML = `<span style="color:#ffb84d;">PROCESSING</span>`;
-        if (pauseBtn) pauseBtn.style.display = "block";
-        if (playBtn) playBtn.style.display = "none";
     }
+
+    syncShellControls();
 });
 
 hub.on("ENGINE:SCAN_COMPLETE", ({ success }) => {
     const statusEl = document.getElementById("cm-terminal-status");
-    const pauseBtn = document.getElementById("cm-btn-pause");
-    const playBtn = document.getElementById("cm-btn-play");
-    const toastSlot = document.getElementById("cm-terminal-toast-slot");
-
-    if (pauseBtn) pauseBtn.style.display = "none";
-    if (playBtn) playBtn.style.display = "none";
 
     if (success) {
-        window.CM_APP_STATE = APP_STATES.COMPLETE_PENDING_CLOSE;
+        onCompleteState();
         if (statusEl) statusEl.innerHTML = `<span style="color:#8ed068;">COMPLETE</span>`;
         if (window.triggerSilentRefresh) window.triggerSilentRefresh();
-
-        const closeIfLedgerExists = () => {
-            const hasLedger = Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0;
-            if (hasLedger) {
-                closeTerminalPanel();
-            } else {
-                window.CM_ZERO_AUTO_INIT_USED = true;
-            }
-        };
-
-        showAutoCloseToast(
-            toastSlot,
-            window.MATRIX_TIME_AUTOCLOSE ?? 5,
-            () => closeIfLedgerExists(),
-            () => {}
-        );
-
-        closeTimer = setTimeout(() => closeIfLedgerExists(), (window.MATRIX_TIME_AUTOCLOSE ?? 5) * 1000);
+        syncShellControls();
+        scheduleAutoClose(window.MATRIX_TIME_AUTOCLOSE ?? 5);
     } else {
-        window.CM_APP_STATE = APP_STATES.FAILED;
+        onFailureState();
         if (statusEl) statusEl.innerHTML = `<span style="color:#ff4d4d;">FAILED</span>`;
+        syncShellControls();
     }
 });
 
-hub.on("ENGINE:EXIT_REQUESTED", () => {
-    clearAutoCloseToast(document.getElementById("cm-terminal-toast-slot"));
-});
-
 document.addEventListener("DOMContentLoaded", () => {
-    const hasLedger = Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0;
-    firstLedgerSeen = hasLedger;
-    window.CM_APP_STATE = hasLedger ? APP_STATES.DASHBOARD_READY : APP_STATES.ZERO;
-    setAppState(window.CM_APP_STATE);
+    syncInitialAppState();
 });

@@ -1,20 +1,36 @@
 import { hub } from "../core/eventHub.js";
 
-hub.on("ACTION:TOGGLE_ENGINE", async ({ action }) => {
+async function postEngineControl(action) {
     const urlParams = new URLSearchParams(window.location.search);
-    hub.emit("ENGINE:CONTROL_UPDATING", { action });
+    const repo = urlParams.get("repo") || "commit-matrix";
+    const resp = await fetch(`/api/engine/control?action=${action}&repo=${repo}`, { method: "POST" });
+    return resp.json();
+}
+
+function getScanRequestPayload() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return {
+        repo: urlParams.get("repo") || "commit-matrix",
+        rubric: urlParams.get("rubric") || "",
+        token: urlParams.get("token") || "",
+    };
+}
+
+hub.on("ACTION:TOGGLE_ENGINE", async ({ action }) => {
+    if (action === "pause" && !window.CM_ENGINE_CONTROLLABLE) return;
 
     try {
-        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || 'commit-matrix'}`, {
-            method: "POST"
-        });
-        const data = await resp.json();
+        const data = await postEngineControl(action);
         hub.emit("ENGINE:CONTROL_UPDATED", { action, status: data.status });
     } catch (e) {
-        hub.emit("ENGINE:CONTROL_UPDATED", { action, status: "error" });
+        console.warn("Backend control failed.", e);
     }
 });
 
 hub.on("ACTION:CLOSE_TERMINAL", () => {
     hub.emit("ENGINE:EXIT_REQUESTED");
+});
+
+hub.on("ACTION:REFRESH_LEDGER", () => {
+    hub.emit("ENGINE:SCAN_REQUESTED", getScanRequestPayload());
 });
