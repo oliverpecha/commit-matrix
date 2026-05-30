@@ -11,7 +11,6 @@ hub.on("ACTION:REFRESH_LEDGER", () => {
 hub.on("ACTION:TOGGLE_ENGINE", async (payload) => {
     const { action } = payload;
     const urlParams = new URLSearchParams(window.location.search);
-    hub.emit("ENGINE:CONTROL_UPDATING", { action });
     try {
         const resp = await fetch(`/api/engine/control?action=${action}&token=${urlParams.get("token")}`, { method: "POST" });
         const data = await resp.json();

@@ -189,18 +189,14 @@ document.addEventListener("DOMContentLoaded", function() {
         }, 50);
         
         let timeLeft = 5;
-        const interval = setInterval(() => {
-            timeLeft -= 1;
-            if (timeLeft <= 0) {
-                clearInterval(interval);
-                const t = document.getElementById('cm-btn-text');
-                window.CM_ZERO_AUTO_INIT_USED = window.CM_ZERO_AUTO_INIT_USED || false;
-                if (window.CM_ZERO_AUTO_INIT_USED) return;
-                window.CM_ZERO_AUTO_INIT_USED = true;
-                if (t) t.textContent = "🚀 Initializing...";
-                if (window.hub) window.hub.emit("ACTION:REFRESH_LEDGER");
-            }
-        }, 1000);
+        const interval = setTimeout(() => {
+            const t = document.getElementById('cm-btn-text');
+            window.CM_ZERO_AUTO_INIT_USED = window.CM_ZERO_AUTO_INIT_USED || false;
+            if (window.CM_ZERO_AUTO_INIT_USED) return;
+            window.CM_ZERO_AUTO_INIT_USED = true;
+            if (t) t.textContent = 'Initializing...';
+            if (window.hub && !window.CM_SCAN_IN_FLIGHT) window.hub.emit('ACTION:REFRESH_LEDGER');
+        }, 5000);
     }
 });
 
