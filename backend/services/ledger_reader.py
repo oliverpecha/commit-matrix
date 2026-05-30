@@ -1,11 +1,20 @@
 import csv
 import os
+from datetime import datetime
+
+def parse_date_to_timestamp(date_str):
+    """Convert 'May 30, \'26' format to Unix timestamp"""
+    try:
+        cleaned = date_str.replace("'", "20")
+        dt = datetime.strptime(cleaned, "%b %d, %Y")
+        return int(dt.timestamp())
+    except:
+        return 0
 
 def fetch_ledger(repo):
     p = f"/app/data/{repo}/{repo}_ledger_cirsd.csv"
     if not os.path.exists(p):
         return []
-
     out = []
     try:
         with open(p, mode="r", encoding="utf-8-sig", errors="replace") as f:
@@ -15,13 +24,12 @@ def fetch_ledger(repo):
                         return int(str(r.get(k, d)).replace("+", "").replace("-", "").strip())
                     except Exception:
                         return d
-
                 n_val = r.get("#") or r.get("n")
-
+                date_str = r.get("Date", "")
                 out.append({
                     "n": int(n_val) if n_val and str(n_val).isdigit() else idx + 1,
-                    "ts": 0,
-                    "date": r.get("Date", ""),
+                    "ts": parse_date_to_timestamp(date_str),
+                    "date": date_str,
                     "type": r.get("Type", "commit"),
                     "scope": r.get("Scope", ""),
                     "s": r.get("Subject", ""),
@@ -38,5 +46,4 @@ def fetch_ledger(repo):
                 })
     except Exception as e:
         print(f"LEDGER FETCH ERROR: {e}", flush=True)
-
     return out

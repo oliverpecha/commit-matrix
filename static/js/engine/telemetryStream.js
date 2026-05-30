@@ -7,6 +7,9 @@ window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
 hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
     if (window.CM_SCAN_IN_FLIGHT) return;
     window.CM_SCAN_IN_FLIGHT = true;
+    if (window.setTableStreamMode) {
+        window.setTableStreamMode(true, { asc: true });
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const repoName = repo || urlParams.get("repo") || "commit-matrix";
     const authToken = token || urlParams.get("token") || "";
@@ -24,6 +27,9 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
             });
             window.CM_SCAN_IN_FLIGHT = false;
             hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+if (window.setTableStreamMode) {
+    window.setTableStreamMode(false);
+}
             return;
         }
 
@@ -68,6 +74,9 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
                 if (cleanChunk) hub.emit("ENGINE:CHUNK_RECEIVED", { chunk: cleanChunk });
                 window.CM_SCAN_IN_FLIGHT = false;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: true });
+if (window.setTableStreamMode) {
+    window.setTableStreamMode(false);
+}
                 break;
             }
 
