@@ -17,13 +17,32 @@ def get_commit_diff(commit_hash, repo_path):
     return run_cmd(cmd, cwd=repo_path)
 
 def get_architecture_context(repo_path):
-    """Generate repository architecture context."""
+    """Load architecture context for scoring.
+
+    Priority:
+    1. Use the stored architecture blueprint (architecture.md) if available.
+    2. Fall back to a flat git tree listing if no blueprint exists yet.
+    """
+    import os
+    from pathlib import Path as _Path
+
+    repo_name = os.environ.get("HOST_REPO_NAME") or _Path(repo_path).name or "repo"
+    blueprint_path = _Path("/app/data") / repo_name / f"{repo_name}_architecture.md"
+
+    # Primary: architecture blueprint managed by architecture_generator
+    if blueprint_path.exists():
+        try:
+            content = blueprint_path.read_text(encoding="utf-8").strip()
+            if content:
+                return content
+        except Exception:
+            pass
+
+    # Fallback: flat git tree (legacy behavior)
     tree = run_cmd('git ls-tree -r --name-only HEAD', cwd=repo_path)
-    file_list = tree.split('\n')[:50]  # Limit to 50 files
-    
-    context = "# Project Structure\n"
+    file_list = tree.split('\n')[:50]
+    context = "# Project Structure (fallback)\n"
     for f in file_list:
         if any(f.endswith(ext) for ext in ['.py', '.js', '.json', '.md', '.html', '.css']):
             context += f"- {f}\n"
-    
     return context
