@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from backend.services.architecture_generator import ensure_fresh_architecture_context
+from backend.services.architecture.arch_builder import ensure_fresh_architecture_context
 
 REPO_PATH = "."
 REPO_LABEL = os.path.basename(os.path.abspath(REPO_PATH)) or "repo"

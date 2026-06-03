@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from backend.services.architecture_generator import ensure_fresh_architecture_context, build_arch_gen_trail
+from backend.services.architecture.arch_builder import ensure_fresh_architecture_context, build_arch_gen_trail
 
 REPO_ROOT = Path(".").resolve()
 REPO_LABEL = REPO_ROOT.name

@@ -21,6 +21,22 @@ def get_commit_diff(commit_hash, repo_path):
     cmd = f'git show {commit_hash} --pretty="" --unified=0'
     return run_cmd(cmd, cwd=repo_path)
 
+def get_commit_meta(repo_path, commit_sha):
+    """Get authored date, author, and subject for one commit."""
+    cmd = f'git show -s --format="%H|%ad|%an|%s" --date=format:"%b %d, \'%y" {commit_sha}'
+    out = run_cmd(cmd, cwd=repo_path)
+    if not out or "|" not in out:
+        return None
+    parts = out.split("|", 3)
+    if len(parts) != 4:
+        return None
+    return {
+        "sha": parts[0].strip(),
+        "date": parts[1].strip(),
+        "author": parts[2].strip(),
+        "subject": parts[3].strip(),
+    }
+
 def list_tree_files_at_commit(repo_path, commit_sha):
     """List tracked file paths at a historical commit via git plumbing."""
     cmd = f'git ls-tree -r --name-only {commit_sha}'
