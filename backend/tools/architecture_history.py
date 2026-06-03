@@ -53,7 +53,7 @@ def _compute_generations(snapshots: list[Path]) -> list[tuple[int, Path, dict]]:
 def main(repo_label: str | None = None) -> None:
     repo_label = repo_label or HOST_REPO_NAME
     data_dir = Path("data") / repo_label
-    meta_path = data_dir / f"{repo_label}_architecture.meta.json"
+    meta_path = data_dir / f"{repo_label}_arch_blueprint.meta.json"
     versions_dir = data_dir / "architecture_versions"
 
     current_meta: dict = {}

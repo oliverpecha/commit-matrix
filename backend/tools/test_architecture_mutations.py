@@ -9,7 +9,7 @@ from backend.services.architecture_generator import ensure_fresh_architecture_co
 REPO_ROOT = Path(".").resolve()
 REPO_LABEL = REPO_ROOT.name
 DATA_DIR = Path("data") / REPO_LABEL
-META_PATH = DATA_DIR / f"{REPO_LABEL}_architecture.meta.json"
+META_PATH = DATA_DIR / f"{REPO_LABEL}_arch_blueprint.meta.json"
 VERSIONS_DIR = DATA_DIR / "architecture_versions"
 LAST_SIG_PATH = DATA_DIR / "last_arch_sig"
 

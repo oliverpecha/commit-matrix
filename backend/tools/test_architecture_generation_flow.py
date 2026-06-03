@@ -4,12 +4,17 @@ import json
 import os
 import shutil
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from backend.services.architecture_generator import ensure_fresh_architecture_context
 
 REPO_PATH = "."
 REPO_LABEL = os.path.basename(os.path.abspath(REPO_PATH)) or "repo"
 DATA_DIR = Path("data") / REPO_LABEL
-META_PATH = DATA_DIR / f"{REPO_LABEL}_architecture.meta.json"
+META_PATH = DATA_DIR / f"{REPO_LABEL}_arch_blueprint.meta.json"
 VERSIONS_DIR = DATA_DIR / "architecture_versions"
 LAST_SIG_PATH = DATA_DIR / "last_arch_sig"
 
