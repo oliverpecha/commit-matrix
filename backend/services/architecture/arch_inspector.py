@@ -137,7 +137,7 @@ def select_files_for_blueprint(repo_path: str) -> list[str]:
         add_path(p)
 
     try:
-        from backend.services.parser_config import MATRIX_ARCH_MAX_FILES  # type: ignore
+        from backend.services.pipeline.pipeline_config import MATRIX_ARCH_MAX_FILES  # type: ignore
         max_files = max(1, int(MATRIX_ARCH_MAX_FILES))
     except Exception:
         max_files = 8
@@ -207,7 +207,7 @@ def select_files_for_blueprint_at_commit(repo_path: str, commit_sha: str) -> lis
             add(f)
 
     try:
-        from backend.services.parser_config import MATRIX_ARCH_MAX_FILES  # type: ignore
+        from backend.services.pipeline.pipeline_config import MATRIX_ARCH_MAX_FILES  # type: ignore
         max_files = max(1, int(MATRIX_ARCH_MAX_FILES))
     except Exception:
         max_files = 8

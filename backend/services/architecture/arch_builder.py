@@ -16,15 +16,15 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import json
 
-from backend.services.parser_config import (
+from backend.services.pipeline.pipeline_config import (
     MATRIX_ARCH_ENABLED,
     MATRIX_ARCH_GENERATOR_VERSION,
 )
-from backend.services.architecture_storage import (
+from backend.services.architecture.arch_storage import (
     load_existing_blueprint as _load_existing_blueprint,
     save_blueprint_and_meta as _save_blueprint_and_meta,
 )
-from backend.services.architecture_analysis import (
+from backend.services.architecture.arch_inspector import (
     build_architecture_prompt_context as _build_architecture_prompt_context,
     build_architecture_prompt_context_at_commit as _build_architecture_prompt_context_at_commit,
     call_model_with_retry_stub as _call_model_with_retry_stub,
@@ -52,7 +52,7 @@ class ArchitectureResult:
     reason: Optional[str] = None
 
 
-def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: str | None = None) -> ArchitectureResult:
+def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: str | None = None, topo_id: int | None = None) -> ArchitectureResult:
     repo = Path(repo_path)
 
     if commit_sha:
@@ -94,6 +94,7 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
         top_level_dirs=top_level_dirs,
         change_summary=change_summary,
         commit_sha=commit_sha,
+        topo_id=topo_id,
     )
 
     try:
@@ -106,6 +107,16 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
             versions_dir = meta_path.parent / "architecture_versions"
             snapshot_meta_path = versions_dir / f"arch-{sig_prefix}.meta.json"
             if snapshot_meta_path.exists():
+                try:
+                    snapshot_meta_existing = json.loads(snapshot_meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    snapshot_meta_existing = {}
+                merged_meta = dict(meta)
+                for stable_key in ("commit_sha", "topo_id", "commit_index"):
+                    if stable_key in snapshot_meta_existing:
+                        merged_meta[stable_key] = snapshot_meta_existing[stable_key]
+                snapshot_meta_path.write_text(json.dumps(merged_meta, indent=2, sort_keys=True), encoding="utf-8")
+            else:
                 snapshot_meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
     except Exception:
         pass
@@ -118,26 +129,27 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
     )
 
 
+
 def build_arch_gen_trail(versions_dir: Path, current_gen: int | None, max_entries: int = 5) -> str:
     import json as j
 
     if not versions_dir.exists():
         return ""
 
-    snapshots = sorted(versions_dir.glob("arch-*.md"), reverse=True)
+    snapshots = sorted(versions_dir.glob("arch-*.md"))  # chronological / lexical ascending
     if not snapshots:
         return ""
 
-    lines: list[str] = []
-    current_gen_n = 1
     entries: list[tuple[int, str, str, str, str]] = []
+    gen_n = 1
 
-    for idx, snap in enumerate(sorted(snapshots)):
+    for idx, snap in enumerate(snapshots):
         sidecar = snap.with_suffix(".meta.json")
         shape = "unknown"
         gen_ver = ""
         mode = ""
         gen_at = ""
+
         if sidecar.exists():
             try:
                 m = j.loads(sidecar.read_text(encoding="utf-8"))
@@ -149,22 +161,21 @@ def build_arch_gen_trail(versions_dir: Path, current_gen: int | None, max_entrie
                 pass
 
         if idx > 0 and not shape.startswith("leaf-only"):
-            current_gen_n += 1
+            gen_n += 1
 
-        entries.append((current_gen_n, shape, gen_at, gen_ver, mode))
+        entries.append((gen_n, shape, gen_at, gen_ver, mode))
 
-    entries_desc = list(reversed(entries))[:max_entries]
-    if not entries_desc:
+    display_entries = list(reversed(entries))[:max_entries]
+    if not display_entries:
         return ""
 
-    lines.append("Architecture Generation Trail (latest → oldest):")
-    for gen_n, shape, gen_at, gen_ver, mode in entries_desc:
-        marker = " [current]" if gen_n == current_gen else ""
-        lines.append(f"- Gen #{gen_n}: {shape} · {gen_at} · {gen_ver} · mode={mode}{marker}")
+    lines = ["Architecture Generation Trail (latest → oldest):"]
+    for entry_gen, shape, gen_at, gen_ver, mode in display_entries:
+        marker = " [current]" if current_gen is not None and entry_gen == current_gen else ""
+        lines.append(f"- Gen #{entry_gen}: {shape} · {gen_at} · {gen_ver} · mode={mode}{marker}")
     return "\n".join(lines)
 
-
-def ensure_fresh_architecture_context(repo_path: str, commit_sha: str | None = None) -> ArchitectureResult:
+def ensure_fresh_architecture_context(repo_path: str, commit_sha: str | None = None, topo_id: int | None = None) -> ArchitectureResult:
     if not MATRIX_ARCH_ENABLED:
         return ArchitectureResult(
             status=ArchStatus.READY,
@@ -195,4 +206,4 @@ def ensure_fresh_architecture_context(repo_path: str, commit_sha: str | None = N
                     reason="existing architecture blueprint is current",
                 )
 
-    return generate_architecture_blueprint(repo_path, tree_sig, commit_sha=commit_sha)
+    return generate_architecture_blueprint(repo_path, tree_sig, commit_sha=commit_sha, topo_id=topo_id)
