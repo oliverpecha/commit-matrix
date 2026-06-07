@@ -58,7 +58,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name=CONTAINER_NAME)
         "-e", f"HOST_REPO_NAME={repo}",
         "-e", f"RUBRIC_NAME={rubric}",
         "commit-matrix-core:latest",
-        "python", "-u", "/app/backend/parser.py", "--repo", "/target_repo"
+        "python", "-u", "/app/backend/commit_pipeline.py", "--repo", "/target_repo"
     ]
 
 

@@ -2,6 +2,8 @@ import csv
 import os
 from datetime import datetime
 
+from backend.services.pipeline.pipeline_config import HOST_REPO_NAME, RUBRIC_NAME
+
 def parse_date_to_timestamp(date_str):
     """Convert 'May 30, \'26' format to Unix timestamp"""
     try:
@@ -12,8 +14,15 @@ def parse_date_to_timestamp(date_str):
         return 0
 
 def fetch_ledger(repo):
-    p = f"/app/data/{repo}/{repo}_ledger_cirsd.csv"
-    if not os.path.exists(p):
+    candidates = [
+        f"/app/data/{repo}/{repo}_ledger_cirsd.csv",
+        f"/app/data/{repo}/{repo}_ledger_{RUBRIC_NAME}.csv",
+        f"/app/data/{HOST_REPO_NAME}/{HOST_REPO_NAME}_ledger_cirsd.csv",
+        f"/app/data/{HOST_REPO_NAME}/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}.csv",
+    ]
+
+    p = next((candidate for candidate in candidates if os.path.exists(candidate)), None)
+    if not p:
         return []
     out = []
     try:
