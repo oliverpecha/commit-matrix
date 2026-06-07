@@ -1,4 +1,4 @@
 from .aimd import AIMDController
-from .rate_limits import RateLimitsController
+from .rate_limiter import RateLimitsController
 
 __all__ = ['AIMDController', 'RateLimitsController']
