@@ -24,7 +24,7 @@ from backend.services.docker_runtime import (
     run_docker_detached,
     unpause_container,
 )
-from backend.services.scan_outcome import (
+from backend.utils.scan_outcome import (
     cleanup_race_success_eof,
     docker_invocation_failed,
     failure_eof,
