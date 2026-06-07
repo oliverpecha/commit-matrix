@@ -1,6 +1,8 @@
 import os
 
-from utils.git_ops import get_commits, get_commit_diff
+from backend.utils.git_ops import get_commits, get_commit_diff
+
+QUEUE_ORDER = os.environ.get("MATRIX_QUEUE_ORDER", "chronological").strip().lower()
 
 
 def build_topo_index(repo_path):
@@ -43,20 +45,24 @@ def build_commit_queue(repo_path, existing_hashes):
     commits = discover_unscanned_commits(repo_path, existing_hashes)
 
     commits_with_ids = []
-    seen_topo = set()
     for commit in commits:
         hash_full = commit[0]
         hash_short = hash_full[:7]
         topo_id = topo_map.get(hash_short)
-        if topo_id is None or topo_id in seen_topo:
+        if topo_id is None:
             continue
-        seen_topo.add(topo_id)
         commits_with_ids.append((topo_id, commit))
-
-    commits_with_ids.sort(key=lambda x: x[0], reverse=True)
 
     total_found = len(commits_with_ids)
     max_commits = int(os.environ.get('MATRIX_MAX_COMMITS', '0'))
+
+    if QUEUE_ORDER == "chronological":
+        commits_with_ids.sort(key=lambda x: x[0])
+    elif QUEUE_ORDER == "retrospective":
+        commits_with_ids.sort(key=lambda x: x[0], reverse=True)
+    else:
+        raise ValueError(f"Unsupported MATRIX_QUEUE_ORDER={QUEUE_ORDER!r}; expected 'chronological' or 'retrospective'")
+
     if max_commits > 0 and len(commits_with_ids) > max_commits:
         commits_with_ids = commits_with_ids[:max_commits]
 
