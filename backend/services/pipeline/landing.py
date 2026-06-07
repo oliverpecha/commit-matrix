@@ -1,4 +1,4 @@
-from utils.csv_writer import write_csv_row
+from backend.utils.csv_writer import write_csv_row
 
 
 def init_flush_state(commits_with_ids):
