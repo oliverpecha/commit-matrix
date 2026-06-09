@@ -1,5 +1,5 @@
-import { hub } from "../core/eventHub.js";
-import { APP_STATES } from "../core/state.js";
+import { hub } from "../core/eventHub.js?v=0.1.5";
+import { APP_STATES } from "../core/state.js?v=0.1.5";
 import {
     getAppState,
     setAppState,
@@ -7,7 +7,7 @@ import {
     hasSeenLedger,
     initAppStateFromLedger,
 } from "../core/appStateCtrl.js";
-import { renderCliOverlay } from "./terminalCliOverlay.js";
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.5";
 import {
     renderShell,
     appendTerminalChunk,

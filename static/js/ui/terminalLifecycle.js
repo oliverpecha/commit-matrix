@@ -1,5 +1,5 @@
-import { hub } from "../core/eventHub.js";
-import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js";
+import { hub } from "../core/eventHub.js?v=0.1.5";
+import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.1.5";
 
 let closeInFlight = false;
 let closeTimer = null;

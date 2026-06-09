@@ -1,15 +1,15 @@
-import { hub } from "./core/eventHub.js";
-import "./core/appStateCtrl.js";
-import "./engine/repoManager.js";
-import "./engine/telemetryStream.js";
-import "./engine/engineControl.js";
-import "./ui/terminalView.js";
+import { hub } from "./core/eventHub.js?v=0.1.5";
+import "./core/appStateCtrl.js?v=0.1.5";
+import "./engine/repoManager.js?v=0.1.5";
+import "./engine/telemetryStream.js?v=0.1.5";
+import "./engine/engineControl.js?v=0.1.5";
+import "./ui/terminalView.js?v=0.1.5";
 
-import { processCommits } from './core/dataEngine.js';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js';
-import { renderHeatmap } from './ui/heatmap.js';
-import { renderTable } from './ui/tableCtrl.js';
-import { UI_STATE } from './core/state.js';
+import { processCommits } from './core/dataEngine.js?v=0.1.5';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.5';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.5';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.5';
+import { UI_STATE } from './core/state.js?v=0.1.5';
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");

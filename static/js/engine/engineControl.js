@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js";
+import { hub } from "../core/eventHub.js?v=0.1.5";
 
 async function postEngineControl(action) {
     const urlParams = new URLSearchParams(window.location.search);
