@@ -3,8 +3,8 @@
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/css/matrix.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.5"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.5">
 
 <div class="cm-top-bar" style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
@@ -102,9 +102,9 @@
 
 {% block scripts %}
 <script id="cm-page-payload" type="application/json">{{ {'commits_data': commits_data, 'time_autoclose': time_autoclose} | tojson | safe }}</script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js"></script>
-<script type="module" src="/static/js/app.js?v=1780075021"></script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.5"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.5"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.5"></script>
+<script type="module" src="/static/js/app.js?v=0.1.5"></script>
 
 {% endblock %}

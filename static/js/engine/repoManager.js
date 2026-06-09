@@ -1,5 +1,5 @@
 console.log('📦 Module Boot: repoManager.js loaded and active.');
-import { hub } from "../core/eventHub.js";
+import { hub } from "../core/eventHub.js?v=0.1.5";
 
 hub.on("ACTION:REFRESH_LEDGER", () => {
     const urlParams = new URLSearchParams(window.location.search);

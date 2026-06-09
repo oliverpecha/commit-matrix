@@ -1,4 +1,4 @@
-import { toggleDashboardLayout } from "../ui/dashboardLayout.js";
+import { toggleDashboardLayout } from "../ui/dashboardLayout.js?v=0.1.5";
 
 document.addEventListener("DOMContentLoaded", () => {
     const setups = [
