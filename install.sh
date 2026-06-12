@@ -119,6 +119,13 @@ docker run --rm \
   python -u /app/calibration/calibrate.py "$@"
 CALIBRATE_WRAPPER
 
+# --- 3. ARCH HISTORY COMMAND ---
+cat << 'ARCH_WRAPPER' > /tmp/arch-history
+#!/bin/bash
+cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matrix"; exit 1; }
+PYTHONPATH=. python3 backend/cli/arch_history/main.py "$@"
+ARCH_WRAPPER
+
 sed -i "s/\$MATRIX_TOKEN/$MATRIX_TOKEN/g" /tmp/commit-matrix
 sed -i "s/\$APP_VERSION/$APP_VERSION/g" /tmp/commit-matrix
 
@@ -127,5 +134,8 @@ sudo chmod +x /usr/local/bin/commit-matrix
 
 sudo mv /tmp/calibrate-matrix /usr/local/bin/calibrate-matrix
 sudo chmod +x /usr/local/bin/calibrate-matrix
+
+sudo mv /tmp/arch-history /usr/local/bin/arch-history
+sudo chmod +x /usr/local/bin/arch-history
 
 echo "✅ Installation Complete! v$APP_VERSION is now active."
