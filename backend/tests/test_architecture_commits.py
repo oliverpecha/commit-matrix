@@ -78,7 +78,7 @@ def show_state(label: str) -> None:
 def show_history(label: str) -> None:
     print(f"=== history: {label} ===")
     proc = subprocess.run(
-        ["env", "PYTHONPATH=.", "python3", "backend/tools/architecture_history.py"],
+        ["env", "PYTHONPATH=.", "python3", "backend/cli/arch_history/main.py"],
         cwd=REPO_ROOT,
         check=True,
         text=True,

@@ -87,17 +87,28 @@ def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, m
     badges = []
     if entry.dominance:
         if entry.dominance.is_dominant: badges.append("[dominant]")
-        if entry.dominance.is_long_lived: badges.append("[long-lived]")
-        if entry.dominance.is_short_lived: badges.append("[short-lived]")
-    if entry.lifespan and entry.lifespan.run_count > 1: badges.append("[repeat]")
-    if entry.is_current: badges.append("            ← [CURRENT]")
+    if entry.lifespan and entry.lifespan.run_count > 1: badges.append("[reappeared]")
+    
+    # Build clean string sequence to prevent dangling middle dot formatting noise
+    badge_str = f" · {' · '.join(badges)}" if badges else ""
+    if entry.is_current:
+        badge_str += "             ← [CURRENT]"
+        
     marker = markers.get_snapshot_marker(entry.trigger.topo_id) if entry.trigger else ""
-    print(f" {branch} {icon} {entry.snapshot_sig[:24]:<26} [{entry.shape_label or entry.shape or 'unknown'}]{(' · ' + ' · '.join(badges)) if badges else ''}{marker}")
+    print(f" {branch} {icon} {entry.snapshot_sig[:24]:<26} [{entry.shape_label or entry.shape or 'unknown'}]{badge_str}{marker}")
     if entry.lifespan:
+        # Determine classification label to print inline with raw lifespan analytics
+        life_label = ""
+        if entry.dominance and not entry.is_current:
+            if entry.dominance.is_long_lived:
+                life_label = " [long-lived]"
+            elif entry.dominance.is_short_lived:
+                life_label = " [short-lived]"
+
         if entry.lifespan.run_count <= 1:
-            print(f" {trunk}   ├- Lifespan: {entry.lifespan.total_commits} commit{'s' if entry.lifespan.total_commits != 1 else ''} · {_format_lifespan_date_span(entry.lifespan.first_seen_date, entry.lifespan.last_seen_date)}")
+            print(f" {trunk}   ├- Lifespan: {entry.lifespan.total_commits} commit{'s' if entry.lifespan.total_commits != 1 else ''} · {_format_lifespan_date_span(entry.lifespan.first_seen_date, entry.lifespan.last_seen_date)}{life_label}")
         else:
-            print(f" {trunk}   ├- Lifespan: {entry.lifespan.total_commits} commits across {entry.lifespan.run_count} runs · first {entry.lifespan.first_seen_date} · last {entry.lifespan.last_seen_date}")
+            print(f" {trunk}   ├- Lifespan: {entry.lifespan.total_commits} commits across {entry.lifespan.run_count} runs · first {entry.lifespan.first_seen_date} · last {entry.lifespan.last_seen_date}{life_label}")
 
 def _render_commit_line(ref, trunk: str, annotate_operational: bool = False, markers: TimelineMarkers = None) -> None:
     rid_label = f"ID #{ref.topo_id}" if ref.topo_id is not None else f"commit {ref.commit_sig}"
@@ -116,7 +127,7 @@ def _render_trigger(entry: SnapshotEntry, trunk: str, markers: TimelineMarkers) 
         print(f" {trunk}   │      {f'ID #{entry.trigger.topo_id}' if entry.trigger.topo_id is not None else 'ID #?'} · {entry.trigger.date} · {entry.trigger.commit_sig}{markers.get_commit_marker(entry.trigger.topo_id)}")
         print(f" {trunk}   │      {fmt_subject(entry.trigger.subject)}")
     else:
-        print(f" {trunk}   │      unavailable")
+        print(f" {trunk}   │      unscored workspace state (run scoring pipeline to link)")
 
 def _render_also_used(entry: SnapshotEntry, trunk: str, show_operational: bool = True, compact: bool = False, reverse: bool = False, markers: TimelineMarkers = None) -> None:
     s = list(reversed(entry.successive_used_by)) if reverse and entry.successive_used_by else list(entry.successive_used_by or [])
