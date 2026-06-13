@@ -494,6 +494,12 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
 
     _assign_dominant_flags(entries_out)
 
+    # Filter out zombie blueprints that have zero corresponding ledger history records
+    entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
+
+    # Filter out zombie blueprints that have zero corresponding ledger history records
+    entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
+
     generation_summaries = _compute_generation_summaries(entries_out)
     topo_ids = [e.trigger.topo_id for e in entries_out if e.trigger and e.trigger.topo_id is not None]
     if topo_ids:
@@ -523,10 +529,19 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
             f"eff={dom.effective_commits if dom else '?'} dominant={dom.is_dominant if dom else '?'}"
         )
 
+    try:
+        import subprocess
+        # Stripped -C argument to rely on native CWD inheritance, making it VPS bulletproof
+        proc = subprocess.run(["git", "rev-list", "--count", "HEAD"], capture_output=True, text=True, check=True)
+        real_commit_count = int(proc.stdout.strip())
+    except Exception as e:
+        print(f"[arch-history debug] git commit count fallback triggered: {e}")
+        real_commit_count = len(all_used_commits)
+
     report = HistoryReport(
         repo_label=repo_label,
         repo_display=repo_display,
-        total_commits=len(all_used_commits),
+        total_commits=real_commit_count,
         total_blueprints=len(snapshots),
         total_generations=max_gen,
         current=current,

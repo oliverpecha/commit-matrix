@@ -1,4 +1,5 @@
 import re
+from backend.cli.arch_history.taxonomy import get_shape_metadata
 
 SUBJECT_LIMIT = len("sync live stream sorting contract between backend timestamps and frontend UI mode")
 COMPACT_SUBJECT_LIMIT = SUBJECT_LIMIT
@@ -27,22 +28,10 @@ def _format_lifespan_date_span(first_date: str, last_date: str) -> str:
     return f"{first_date}–{last_date}"
 
 def shape_icon(shape: str) -> str:
-    shape = (shape or "").strip().lower()
-    if shape.startswith("leaf-only"):
-        return "🍃"
-    if "restructure" in shape or "split" in shape or "merge" in shape:
-        return "🧱"
-    if "root" in shape or "major" in shape:
-        return "🌳"
-    return "•"
+    return get_shape_metadata(shape)["icon"]
 
 def _shape_icon_fallback(shape: str) -> str:
-    s = (shape or "").strip()
-    if s.startswith("leaf-only"):
-        return "🍃"
-    if s.startswith("major:") or s.startswith("multi-dir:") or s.startswith("multi-dir"):
-        return "🌳"
-    return "•"
+    return get_shape_metadata(shape)["icon"]
 
 def _operational_kind(subject: str) -> str:
     s = (subject or "").strip()
