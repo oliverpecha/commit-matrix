@@ -531,11 +531,11 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
 
     try:
         import subprocess
-        # Stripped -C argument to rely on native CWD inheritance, making it VPS bulletproof
-        proc = subprocess.run(["git", "rev-list", "--count", "HEAD"], capture_output=True, text=True, check=True)
+        # Native, non-hack query to fetch every commit node across all graph branches combined
+        proc = subprocess.run(["git", "rev-list", "--all", "--count"], capture_output=True, text=True, check=True)
         real_commit_count = int(proc.stdout.strip())
     except Exception as e:
-        print(f"[arch-history debug] git commit count fallback triggered: {e}")
+        print(f"[arch-history debug] git total graph count failed: {e}")
         real_commit_count = len(all_used_commits)
 
     report = HistoryReport(
