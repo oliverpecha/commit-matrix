@@ -60,7 +60,7 @@ def save_blueprint_and_meta(
     md_path.write_text(content, encoding="utf-8")
 
     meta = {
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.datetime.now(datetime.UTC).isoformat() + "Z",
         "tree_signature": tree_signature,
         "generator_version": MATRIX_ARCH_GENERATOR_VERSION,
         "model": model_name,
