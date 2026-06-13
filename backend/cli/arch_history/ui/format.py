@@ -15,6 +15,8 @@ def truncate_subject(subject: str, limit: int = SUBJECT_LIMIT) -> str:
 
 def fmt_subject(raw: str, limit: int = SUBJECT_LIMIT) -> str:
     s = (raw or "").strip()
+    # Isolate only the primary row of hybrid commits to protect terminal layout borders
+    s = s.splitlines()[0] if s else ""
     s = re.sub(r"^(?:[a-z]+\([^)]*\):\s*|[a-z]+:\s*)", "", s, count=1)
     return truncate_subject(s, limit=limit) if s else "no subject"
 
