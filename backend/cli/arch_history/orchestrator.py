@@ -8,7 +8,10 @@ from pathlib import Path
 from backend.services.pipeline.pipeline_config import HOST_REPO_NAME
 
 from backend.cli.arch_history.models import (
+    BoundaryInfo,
+    BoundaryScope,
     CurrentBlueprint,
+    DisplacedSnapshot,
     GenerationSummaryMetrics,
     HistoryReport,
     SnapshotEntry,
@@ -17,6 +20,7 @@ from backend.cli.arch_history.models import (
 from backend.cli.arch_history.taxonomy import (
     normalize_cause_tag,
     get_boundary_cause_label,
+    get_boundary_magnitude,
 )
 from backend.cli.arch_history.arch_selectors import Selector, SelectorCategory, parse_selector, resolve_sig_category
 from backend.cli.arch_history.data.loader import (
@@ -156,7 +160,7 @@ def _matches_selector_value(entry: SnapshotEntry, selector: str) -> bool:
 
     lowered = value.lower()
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", lowered):
-        return (trigger.date_iso or "") == lowered
+        return (trigger.date or "") == lowered
 
     if re.fullmatch(r"[0-9a-f]{6,40}", lowered):
         return (trigger.commit_sig or "").lower().startswith(lowered)
@@ -260,9 +264,9 @@ def filter_history_report(
         entries = [e for e in entries if e.lifespan is not None and e.lifespan.run_count > 1]
 
     if since:
-        entries = [e for e in entries if e.trigger and e.trigger.date_iso and e.trigger.date_iso >= since]
+        entries = [e for e in entries if e.trigger and e.trigger.date and e.trigger.date >= since]
     if until:
-        entries = [e for e in entries if e.trigger and e.trigger.date_iso and e.trigger.date_iso <= until]
+        entries = [e for e in entries if e.trigger and e.trigger.date and e.trigger.date <= until]
 
     generation_summaries = _compute_generation_summaries(entries) if entries else {}
     total_generations = max((e.generation for e in entries), default=0)
@@ -651,7 +655,6 @@ def _serialize_commit_ref(ref: CommitRef) -> dict:
         "commit_sig": ref.commit_sig,
         "topo_id":    ref.topo_id,
         "date":       ref.date,
-        "date_iso":   ref.date_iso,
         "subject":    ref.subject,
     }
 
@@ -710,9 +713,139 @@ def _serialize_snapshot_entry(entry: SnapshotEntry) -> dict:
     }
 
 
-def _serialize_generation_summary(summary: GenerationSummaryMetrics) -> dict:
-    tag = normalize_cause_tag(summary.cause_tag)
+def _load_snapshot_sidecar(snapshot_sig: str) -> dict:
+    """Load the .meta.json sidecar for a snapshot, if it exists."""
+    from backend.services.pipeline.pipeline_config import HOST_REPO_NAME
+    repo_label = HOST_REPO_NAME
+    versions_dir = Path("data") / repo_label / "architecture_versions"
+    prefix = snapshot_sig[:16]
+    sidecar = versions_dir / f"arch-{prefix}.meta.json"
+    if sidecar.exists():
+        try:
+            import json as _json
+            return _json.loads(sidecar.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _compute_generation_boundaries(
+    entries: list[SnapshotEntry],
+    generation_summaries: dict[int, GenerationSummaryMetrics],
+) -> dict[int, BoundaryInfo]:
+    """Compute boundary rationale for each generation.
+
+    For each generation:
+      - cause_tag/cause_label: from the generation summary (already normalized)
+      - magnitude: derived from taxonomy family mapping
+      - commit: trigger of the first structural snapshot in the generation
+      - scope: top_level_dirs and file_count from the boundary snapshot's sidecar
+      - displaced: last snapshot of the previous generation
+    """
+    if not entries:
+        return {}
+
+    # Group entries by generation
+    by_gen: dict[int, list[SnapshotEntry]] = {}
+    for e in entries:
+        by_gen.setdefault(e.generation, []).append(e)
+
+    # Sort each generation's entries by topo_id
+    for gen_entries in by_gen.values():
+        gen_entries.sort(
+            key=lambda e: e.trigger.topo_id if e.trigger and e.trigger.topo_id is not None else 10_000_000
+        )
+
+    sorted_gens = sorted(by_gen.keys())
+    boundaries: dict[int, BoundaryInfo] = {}
+
+    for idx, gen_id in enumerate(sorted_gens):
+        summary = generation_summaries.get(gen_id)
+        if summary is None:
+            continue
+
+        tag = normalize_cause_tag(summary.cause_tag)
+        label = get_boundary_cause_label(tag)
+        magnitude = get_boundary_magnitude(tag)
+
+        gen_entries = by_gen[gen_id]
+
+        # Boundary commit: trigger of the first entry in this generation
+        boundary_commit = gen_entries[0].trigger if gen_entries else None
+
+        # Scope: from the first entry's meta sidecar
+        scope = None
+        if gen_entries:
+            sidecar = _load_snapshot_sidecar(gen_entries[0].snapshot_sig)
+            if sidecar:
+                scope = BoundaryScope(
+                    top_level_dirs=sidecar.get("top_level_dirs", []),
+                    file_count=sidecar.get("file_count") or (sidecar.get("change_summary") or {}).get("total_files"),
+                )
+
+        # Displaced: last snapshot of the previous generation
+        displaced = None
+        if idx > 0:
+            prev_gen = sorted_gens[idx - 1]
+            prev_entries = by_gen.get(prev_gen, [])
+            if prev_entries:
+                prev_last = prev_entries[-1]
+                prev_dom = prev_last.dominance
+
+                if prev_dom:
+                    if prev_dom.is_long_lived:
+                        lc = "long"
+                    elif prev_dom.is_short_lived:
+                        lc = "short"
+                    else:
+                        lc = "standard"
+                else:
+                    lc = "standard"
+
+                displaced = DisplacedSnapshot(
+                    snapshot_sig=prev_last.snapshot_sig,
+                    lifespan_class=lc,
+                    was_dominant=prev_dom.is_dominant if prev_dom else False,
+                )
+
+        boundaries[gen_id] = BoundaryInfo(
+            cause_tag=tag,
+            cause_label=label,
+            magnitude=magnitude,
+            commit=boundary_commit,
+            scope=scope,
+            displaced=displaced,
+        )
+
+    return boundaries
+
+
+def _serialize_boundary(boundary: BoundaryInfo | None) -> dict | None:
+    if boundary is None:
+        return None
     return {
+        "cause_tag":   boundary.cause_tag,
+        "cause_label": boundary.cause_label,
+        "magnitude":   boundary.magnitude,
+        "commit":      _serialize_commit_ref(boundary.commit) if boundary.commit else None,
+        "scope": {
+            "top_level_dirs": boundary.scope.top_level_dirs,
+            "file_count":     boundary.scope.file_count,
+        } if boundary.scope else None,
+        "displaced": {
+            "snapshot_sig":   boundary.displaced.snapshot_sig,
+            "lifespan_class": boundary.displaced.lifespan_class,
+            "was_dominant":   boundary.displaced.was_dominant,
+        } if boundary.displaced else None,
+    }
+
+
+def _serialize_generation_summary(
+    summary: GenerationSummaryMetrics,
+    boundary: BoundaryInfo | None = None,
+) -> dict:
+    tag = normalize_cause_tag(summary.cause_tag)
+    result = {
         "generation":                       summary.generation,
         "cause_tag":                        tag,
         "cause_label":                      get_boundary_cause_label(tag),
@@ -725,6 +858,10 @@ def _serialize_generation_summary(summary: GenerationSummaryMetrics) -> dict:
         "dominant_share_of_generation":      summary.dominant_share_of_generation,
         "repeated_treesig_count":           summary.repeated_treesig_count,
     }
+    serialized_boundary = _serialize_boundary(boundary)
+    if serialized_boundary is not None:
+        result["boundary"] = serialized_boundary
+    return result
 
 
 def serialize_history_report_to_contract(report: HistoryReport) -> dict:
@@ -758,14 +895,18 @@ def serialize_history_report_to_contract(report: HistoryReport) -> dict:
             "selected_files":    report.current.selected_files,
         },
         "entries": [_serialize_snapshot_entry(e) for e in report.entries],
-        # JSON object keys are always strings.  Serialize integer
-        # generation IDs deliberately rather than relying on implicit
-        # coercion.  Sorted for deterministic output.
-        "generation_summaries": {
-            str(gen_id): _serialize_generation_summary(summary)
+        # Compute boundary rationale for each generation
+        "generation_summaries": (lambda: {
+            str(gen_id): _serialize_generation_summary(
+                summary,
+                boundary=_compute_generation_boundaries(
+                    report.entries,
+                    report.generation_summaries or {},
+                ).get(gen_id),
+            )
             for gen_id, summary in sorted(
                 (report.generation_summaries or {}).items()
             )
-        },
+        })(),
     }
 

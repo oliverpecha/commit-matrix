@@ -5,10 +5,9 @@ from dataclasses import asdict, dataclass, field
 @dataclass
 class CommitRef:
     commit_sig: str        # currently the Git commit hash (Git commit hash today)
-    date: str              # human display, e.g. "May 16, '26"
     subject: str
     topo_id: int | None = None
-    date_iso: str | None = None  # canonical, e.g. "2026-05-16"
+    date: str | None = None  # ISO format, e.g. "2026-05-16"
 
 @dataclass
 class SnapshotLifespanMetrics:
@@ -39,6 +38,34 @@ class SnapshotDominanceMetrics:
     is_dominant: bool
     is_long_lived: bool
     is_short_lived: bool
+
+@dataclass
+@dataclass
+@dataclass
+class BoundaryScope:
+    """What directories and file counts characterize the boundary snapshot."""
+    top_level_dirs: list[str]
+    file_count: int | None = None
+
+
+@dataclass
+class DisplacedSnapshot:
+    """What snapshot the new generation replaced."""
+    snapshot_sig: str | None = None
+    lifespan_class: str | None = None
+    was_dominant: bool | None = None
+
+
+@dataclass
+class BoundaryInfo:
+    """Full rationale for why a generation boundary exists."""
+    cause_tag: str
+    cause_label: str
+    magnitude: str
+    commit: CommitRef | None = None
+    scope: BoundaryScope | None = None
+    displaced: DisplacedSnapshot | None = None
+
 
 @dataclass
 class GenerationSummaryMetrics:

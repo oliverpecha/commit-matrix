@@ -131,3 +131,37 @@ def get_boundary_cause_label(normalized_tag: str) -> str:
         return label
     return normalized_tag.replace("_", " ").title()
 
+
+# ─── Boundary Magnitude ──────────────────────────────────────────────────────
+#
+# Maps taxonomy family to a magnitude bucket.  This avoids numeric
+# thresholds entirely — the family classification already encodes
+# structural breadth vs depth vs incremental, so we reuse it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+MAGNITUDE_BY_NORMALIZED_TAG: dict[str, str] = {
+    # Directly map each normalized API token to its magnitude bucket.
+    # This avoids fragile reverse-lookups through SHAPE_ALIAS_MAP.
+    #
+    # major:  broad structural changes affecting directory layout or multi-area scope
+    # moderate: single-area depth changes (file count spikes)
+    # minor:  leaf-only / incremental refinements
+    "genesis":              "major",
+    "major_dirs":           "major",
+    "major_selected_files": "major",
+    "multi_dir_dirs":       "major",
+    "multi_dir_coverage":   "major",
+    "multi_dir_default":    "major",
+    "major_file_count":     "moderate",
+    "leaf_only":            "minor",
+}
+
+
+def get_boundary_magnitude(normalized_cause_tag: str) -> str:
+    """Derive boundary magnitude bucket from normalized cause tag.
+
+    Direct lookup — no reverse-mapping through SHAPE_ALIAS_MAP.
+    Falls back to "moderate" for unknown tags (safe middle ground).
+    """
+    return MAGNITUDE_BY_NORMALIZED_TAG.get(normalized_cause_tag, "moderate")
+

@@ -110,10 +110,22 @@ def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, m
         else:
             print(f" {trunk}   ├- Lifespan: {entry.lifespan.total_commits} commits across {entry.lifespan.run_count} runs · first {entry.lifespan.first_seen_date} · last {entry.lifespan.last_seen_date}{life_label}")
 
+def _fmt_date(iso_date: str | None) -> str:
+    """Format ISO date (2026-05-16) to human display (May 16, '26)."""
+    if not iso_date:
+        return "?"
+    try:
+        from datetime import datetime
+        dt = datetime.strptime(iso_date, "%Y-%m-%d")
+        return dt.strftime("%b %d, '%y")
+    except (ValueError, TypeError):
+        return iso_date
+
+
 def _render_commit_line(ref, trunk: str, annotate_operational: bool = False, markers: TimelineMarkers = None) -> None:
     rid_label = f"ID #{ref.topo_id}" if ref.topo_id is not None else f"commit {ref.commit_sig}"
     kind = _operational_kind(ref.subject) if annotate_operational and _is_operational_ref(ref) else ""
-    print(f" {trunk}   │      {rid_label} · {ref.date} · {ref.commit_sig}{f' · [operational: {kind}]' if kind else ''}{markers.get_commit_marker(ref.topo_id) if markers else ''}\n {trunk}   │      {fmt_subject(ref.subject)}")
+    print(f" {trunk}   │      {rid_label} · {_fmt_date(ref.date)} · {ref.commit_sig}{f' · [operational: {kind}]' if kind else ''}{markers.get_commit_marker(ref.topo_id) if markers else ''}\n {trunk}   │      {fmt_subject(ref.subject)}")
 
 def _render_commit_block(rows: list, trunk: str, show_operational: bool = True, compact: bool = False, markers: TimelineMarkers = None) -> None:
     vis = [r for r in rows if not _is_operational_ref(r) or show_operational]
@@ -124,7 +136,7 @@ def _render_commit_block(rows: list, trunk: str, show_operational: bool = True, 
 def _render_trigger(entry: SnapshotEntry, trunk: str, markers: TimelineMarkers) -> None:
     print(f" {trunk}   ├- Trigger:")
     if entry.trigger and entry.trigger.commit_sig:
-        print(f" {trunk}   │      {f'ID #{entry.trigger.topo_id}' if entry.trigger.topo_id is not None else 'ID #?'} · {entry.trigger.date} · {entry.trigger.commit_sig}{markers.get_commit_marker(entry.trigger.topo_id)}")
+        print(f" {trunk}   │      {f'ID #{entry.trigger.topo_id}' if entry.trigger.topo_id is not None else 'ID #?'} · {_fmt_date(entry.trigger.date)} · {entry.trigger.commit_sig}{markers.get_commit_marker(entry.trigger.topo_id)}")
         print(f" {trunk}   │      {fmt_subject(entry.trigger.subject)}")
     else:
         print(f" {trunk}   │      unscored workspace state (run scoring pipeline to link)")

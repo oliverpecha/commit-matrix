@@ -49,12 +49,12 @@ class TimelineMarkers:
         elif since or until:
             if since:
                 for e in report.entries:
-                    if e.trigger and e.trigger.date_iso and e.trigger.date_iso >= since:
+                    if e.trigger and e.trigger.date and e.trigger.date >= since:
                         self.start = {'topo': e.trigger.topo_id, 'type': 'commit'}
                         break
             if until:
                 for e in reversed(list(report.entries)):
-                    if e.trigger and e.trigger.date_iso and e.trigger.date_iso <= until:
+                    if e.trigger and e.trigger.date and e.trigger.date <= until:
                         self.end = {'topo': e.trigger.topo_id, 'type': 'commit'}
                         break
 
