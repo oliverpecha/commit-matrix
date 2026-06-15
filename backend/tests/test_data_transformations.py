@@ -36,8 +36,7 @@ def _make_entry(topo_id=10, snapshot_sig="sig_parent_10") -> SnapshotEntry:
             topo_id=topo_id,
             commit_sig="a1b2c3d",
             subject="sample commit",
-            date="Jun 13, '26",
-            date_iso="2026-06-13",
+            date="2026-06-13",
         ),
         successive_used_by=[],
         also_used_by=[],
@@ -148,8 +147,7 @@ def test_hex_prefix_matches_commit_sig():
     ref = CommitRef(
         commit_sig="a1b2c3d4e5f6",
         topo_id=1,
-        date="Jun 13, '26",
-        date_iso="2026-06-13",
+        date="2026-06-13",
         subject="test commit",
     )
     prefix = "a1b2c3d"

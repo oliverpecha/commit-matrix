@@ -73,10 +73,9 @@ def _make_entry(
         total_files=50,
         trigger=CommitRef(
             commit_sig="ff00ff00",
-            date="Jun 15, '26",
             subject="initial commit",
             topo_id=1,
-            date_iso="2026-06-15",
+            date="2026-06-15",
         ),
         is_current=is_current,
         lifespan=SnapshotLifespanMetrics(
@@ -346,4 +345,148 @@ class TestFieldsFiltering:
         assert "contract_version" in payload
         assert "repo_label" in payload
         assert "generation_summaries" in payload
+
+
+# ── Boundary rationale tests ─────────────────────────────────────────────────
+
+from backend.cli.arch_history.taxonomy import get_boundary_magnitude
+
+
+class TestBoundaryMagnitude:
+
+    def test_genesis_is_major(self):
+        assert get_boundary_magnitude("genesis") == "major"
+
+    def test_leaf_only_is_minor(self):
+        assert get_boundary_magnitude("leaf_only") == "minor"
+
+    def test_major_dirs_is_major(self):
+        assert get_boundary_magnitude("major_dirs") == "major"
+
+    def test_major_file_count_is_moderate(self):
+        assert get_boundary_magnitude("major_file_count") == "moderate"
+
+    def test_multi_dir_dirs_is_major(self):
+        assert get_boundary_magnitude("multi_dir_dirs") == "major"
+
+    def test_unknown_defaults_to_moderate(self):
+        assert get_boundary_magnitude("something_unknown") == "moderate"
+
+
+class TestBoundaryInGenerationSummary:
+
+    def _make_multi_gen_report(self):
+        """Two generations: gen 1 with one entry, gen 2 with one entry."""
+        e1 = _make_entry(is_dominant=True, is_short_lived=True)
+        e1.generation = 1
+        e1.snapshot_sig = "sig_gen1_dominant"
+
+        e2 = _make_entry(is_dominant=True)
+        e2.generation = 2
+        e2.snapshot_sig = "sig_gen2_boundary"
+        e2.shape = "major:file-count"
+
+        s1 = GenerationSummaryMetrics(
+            generation=1, cause_tag="major:first-generation",
+            cause_label="internal", generation_distinct_commit_count=1,
+            snapshot_count=1, structural_count=1, incremental_count=0,
+            dominant_snapshot_sig="sig_gen1_dominant",
+            dominant_effective_commits=1, dominant_share_of_generation=1.0,
+            repeated_treesig_count=0,
+        )
+        s2 = GenerationSummaryMetrics(
+            generation=2, cause_tag="major:file-count",
+            cause_label="internal", generation_distinct_commit_count=2,
+            snapshot_count=1, structural_count=1, incremental_count=0,
+            dominant_snapshot_sig="sig_gen2_boundary",
+            dominant_effective_commits=2, dominant_share_of_generation=1.0,
+            repeated_treesig_count=0,
+        )
+
+        return HistoryReport(
+            repo_label="test-repo", repo_display="test-repo",
+            total_commits=3, total_blueprints=2, total_generations=2,
+            current=CurrentBlueprint(
+                snapshot_sig="sig_gen2_boundary", generated_at="2026-06-15",
+                generator_version="1.0", mode="full", shape="major:file-count",
+                total_files=50, selected_files=10,
+            ),
+            entries=[e1, e2],
+            generation_summaries={1: s1, 2: s2},
+        )
+
+    def test_boundary_present_on_gen2(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        gen2 = payload["generation_summaries"]["2"]
+        assert "boundary" in gen2
+
+    def test_boundary_has_expected_keys(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["2"]["boundary"]
+        expected_keys = {"cause_tag", "cause_label", "magnitude", "commit", "scope", "displaced"}
+        assert set(boundary.keys()) == expected_keys
+
+    def test_boundary_cause_tag_normalized(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["2"]["boundary"]
+        assert boundary["cause_tag"] == "major_file_count"
+        assert ":" not in boundary["cause_tag"]
+
+    def test_boundary_magnitude_from_taxonomy(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["2"]["boundary"]
+        assert boundary["magnitude"] == "moderate"
+
+    def test_boundary_commit_is_trigger(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["2"]["boundary"]
+        assert boundary["commit"] is not None
+        assert boundary["commit"]["commit_sig"] == "ff00ff00"
+
+    def test_displaced_references_previous_gen(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["2"]["boundary"]
+        displaced = boundary["displaced"]
+        assert displaced is not None
+        assert displaced["snapshot_sig"] == "sig_gen1_dominant"
+        assert displaced["was_dominant"] is True
+        assert displaced["lifespan_class"] == "short"
+
+    def test_gen1_has_no_displaced(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["1"]["boundary"]
+        assert boundary["displaced"] is None
+
+    def test_gen1_boundary_is_genesis(self):
+        report = self._make_multi_gen_report()
+        payload = serialize_history_report_to_contract(report)
+        boundary = payload["generation_summaries"]["1"]["boundary"]
+        assert boundary["cause_tag"] == "genesis"
+        assert boundary["magnitude"] == "major"
+
+
+# ── CommitRef serialization ──────────────────────────────────────────────────
+
+class TestCommitRefSerialization:
+
+    def test_date_is_iso_format(self):
+        """Serialized commit refs should carry ISO date, not human display format."""
+        entry = _make_entry()
+        serialized = _serialize_snapshot_entry(entry)
+        trigger = serialized["trigger"]
+        assert trigger["date"] == "2026-06-15"
+        assert "date_iso" not in trigger
+
+    def test_commit_ref_has_expected_keys(self):
+        entry = _make_entry()
+        serialized = _serialize_snapshot_entry(entry)
+        trigger = serialized["trigger"]
+        assert set(trigger.keys()) == {"commit_sig", "topo_id", "date", "subject"}
 

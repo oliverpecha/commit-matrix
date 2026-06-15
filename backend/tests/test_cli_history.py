@@ -32,8 +32,7 @@ def _make_trigger(
         topo_id=topo_id,
         commit_sig=commit_sig,
         subject=subject,
-        date="Jun 13, '26",
-        date_iso="2026-06-13",
+        date="2026-06-13",
     )
 
 
