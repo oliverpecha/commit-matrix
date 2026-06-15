@@ -7,7 +7,17 @@ from pathlib import Path
 
 from backend.services.pipeline.pipeline_config import HOST_REPO_NAME
 
-from backend.cli.arch_history.models import CurrentBlueprint, HistoryReport, SnapshotEntry, CommitRef
+from backend.cli.arch_history.models import (
+    CurrentBlueprint,
+    GenerationSummaryMetrics,
+    HistoryReport,
+    SnapshotEntry,
+    CommitRef,
+)
+from backend.cli.arch_history.taxonomy import (
+    normalize_cause_tag,
+    get_boundary_cause_label,
+)
 from backend.cli.arch_history.arch_selectors import Selector, SelectorCategory, parse_selector, resolve_sig_category
 from backend.cli.arch_history.data.loader import (
     _load_used_by_map,
@@ -269,6 +279,18 @@ def filter_history_report(
     )
 
 def history_report_to_dict(report: HistoryReport) -> dict:
+    """DEPRECATED — use serialize_history_report_to_contract().
+
+    Raw ``dataclasses.asdict()`` pass-through with no schema stability
+    guarantees.  Scheduled for removal once all consumers migrate to C1.
+    """
+    import warnings
+    warnings.warn(
+        "history_report_to_dict() is deprecated; "
+        "use serialize_history_report_to_contract()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return asdict(report)
 
 def build_history_report(repo_label: str | None = None, debug: bool | None = None) -> HistoryReport:
@@ -552,3 +574,198 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     # Validate commit→snapshot invariant (warn by default, raise in debug mode).
     validate_commit_snapshot_invariant(report, debug=_debug)
     return report
+
+
+# ─── C1 Contract Serialization ───────────────────────────────────────────────
+#
+# Design: canonical state (flags) + derived view (badges).
+#   * flags  — authoritative typed booleans; agents/CI/policy use these.
+#   * badges — read-only presentation tokens derived deterministically
+#              from flags; UI renders these directly.  Never accepted as
+#              input.  On conflict, flags wins.
+#
+# cause_tag / cause_label in generation summaries are routed through
+# taxonomy.py boundary functions so internal classification changes
+# never break the external contract.
+#
+# See: docs/architecture_history_metric_contract.md (ADR)
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONTRACT_VERSION = "1.0"
+
+_BOOLEAN_BADGE_RULES: list[tuple[str, str]] = [
+    # (badge_token, flags_key)
+    ("current",  "is_current"),
+    ("dominant", "is_dominant"),
+]
+
+_LIFESPAN_BADGE_MAP: dict[str, str] = {
+    "long":  "long_lived",
+    "short": "short_lived",
+}
+
+
+def derive_badges(flags: dict) -> list[str]:
+    """Deterministic derivation: flags dict -> badge token list.
+
+    Handles boolean flags and the lifespan_class enum.
+    Public so contract tests can assert:
+        snapshot["badges"] == derive_badges(snapshot["flags"])
+    """
+    badges = [token for token, key in _BOOLEAN_BADGE_RULES if flags.get(key, False)]
+    lc = flags.get("lifespan_class", "standard")
+    if lc in _LIFESPAN_BADGE_MAP:
+        badges.append(_LIFESPAN_BADGE_MAP[lc])
+    return badges
+
+
+def _build_snapshot_flags(entry: SnapshotEntry) -> dict:
+    """Collapse scattered booleans into a single canonical flags dict.
+
+    Internal model uses separate is_long_lived / is_short_lived booleans.
+    External contract consolidates into a single lifespan_class enum:
+      "long"     -- effective_commits >= 3 and longest_streak >= 3
+      "short"    -- total_commits == 1
+      "standard" -- everything else
+    """
+    dom = entry.dominance
+    if dom:
+        if dom.is_long_lived:
+            lifespan_class = "long"
+        elif dom.is_short_lived:
+            lifespan_class = "short"
+        else:
+            lifespan_class = "standard"
+    else:
+        lifespan_class = "standard"
+
+    return {
+        "is_current":     entry.is_current,
+        "is_dominant":    dom.is_dominant if dom else False,
+        "lifespan_class": lifespan_class,
+    }
+
+
+def _serialize_commit_ref(ref: CommitRef) -> dict:
+    return {
+        "commit_sig": ref.commit_sig,
+        "topo_id":    ref.topo_id,
+        "date":       ref.date,
+        "date_iso":   ref.date_iso,
+        "subject":    ref.subject,
+    }
+
+
+def _serialize_snapshot_entry(entry: SnapshotEntry) -> dict:
+    flags = _build_snapshot_flags(entry)
+
+    return {
+        "generation":        entry.generation,
+        "generation_index":  entry.generation_index,
+        "snapshot_sig":      entry.snapshot_sig,
+        "shape":             entry.shape,
+        "shape_label":       entry.shape_label,
+        "generator_version": entry.generator_version,
+        "mode":              entry.mode,
+        "generated_at":      entry.generated_at,
+        "size_bytes":        entry.size_bytes,
+        "selected_files":    entry.selected_files,
+        "total_files":       entry.total_files,
+
+        # -- commit graph --
+        "trigger":            _serialize_commit_ref(entry.trigger) if entry.trigger else None,
+        "also_used_by":       [_serialize_commit_ref(r) for r in entry.also_used_by],
+        "successive_used_by": [_serialize_commit_ref(r) for r in entry.successive_used_by],
+        "reappeared_runs":    [
+            [_serialize_commit_ref(r) for r in run]
+            for run in entry.reappeared_runs
+        ],
+
+        # -- canonical state + derived view --
+        "flags":  flags,
+        "badges": derive_badges(flags),
+
+        # -- metrics (numerical only; booleans live in flags) --
+        "lifespan_metrics": {
+            "total_commits":      entry.lifespan.total_commits,
+            "run_count":          entry.lifespan.run_count,
+            "first_seen_topo_id": entry.lifespan.first_seen_topo_id,
+            "last_seen_topo_id":  entry.lifespan.last_seen_topo_id,
+            "first_seen_date":    entry.lifespan.first_seen_date,
+            "last_seen_date":     entry.lifespan.last_seen_date,
+            "longest_streak":     entry.lifespan.longest_streak,
+        } if entry.lifespan else None,
+
+        "composition_metrics": {
+            "successive_commit_count":  entry.composition.successive_commit_count,
+            "reappeared_commit_count":  entry.composition.reappeared_commit_count,
+            "operational_commit_count": entry.composition.operational_commit_count,
+            "development_commit_count": entry.composition.development_commit_count,
+        } if entry.composition else None,
+
+        "dominance_metrics": {
+            "effective_commits":   entry.dominance.effective_commits,
+            "share_of_generation": entry.dominance.share_of_generation,
+        } if entry.dominance else None,
+    }
+
+
+def _serialize_generation_summary(summary: GenerationSummaryMetrics) -> dict:
+    tag = normalize_cause_tag(summary.cause_tag)
+    return {
+        "generation":                       summary.generation,
+        "cause_tag":                        tag,
+        "cause_label":                      get_boundary_cause_label(tag),
+        "generation_distinct_commit_count": summary.generation_distinct_commit_count,
+        "snapshot_count":                   summary.snapshot_count,
+        "structural_count":                 summary.structural_count,
+        "incremental_count":                summary.incremental_count,
+        "dominant_snapshot_sig":             summary.dominant_snapshot_sig,
+        "dominant_effective_commits":        summary.dominant_effective_commits,
+        "dominant_share_of_generation":      summary.dominant_share_of_generation,
+        "repeated_treesig_count":           summary.repeated_treesig_count,
+    }
+
+
+def serialize_history_report_to_contract(report: HistoryReport) -> dict:
+    """C1 contract serializer -- hand-rolled, stable external schema.
+
+    Replaces the legacy ``history_report_to_dict()`` (raw asdict).
+
+    Key differences from the legacy serializer:
+      * ``contract_version`` field for consumer version-gating.
+      * Snapshot booleans consolidated into ``flags`` (authoritative).
+      * ``badges`` derived deterministically from ``flags`` (readOnly view).
+      * Metrics namespaced: ``lifespan_metrics``, ``composition_metrics``,
+        ``dominance_metrics`` -- dominance booleans excluded from metrics.
+      * cause_tag / cause_label routed through taxonomy.py boundary layer.
+      * Internal dataclass field names decoupled from external contract keys.
+    """
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "repo_label":        report.repo_label,
+        "repo_display":      report.repo_display,
+        "total_commits":     report.total_commits,
+        "total_blueprints":  report.total_blueprints,
+        "total_generations": report.total_generations,
+        "current": {
+            "snapshot_sig":      report.current.snapshot_sig,
+            "generated_at":      report.current.generated_at,
+            "generator_version": report.current.generator_version,
+            "mode":              report.current.mode,
+            "shape":             report.current.shape,
+            "total_files":       report.current.total_files,
+            "selected_files":    report.current.selected_files,
+        },
+        "entries": [_serialize_snapshot_entry(e) for e in report.entries],
+        # JSON object keys are always strings.  Serialize integer
+        # generation IDs deliberately rather than relying on implicit
+        # coercion.  Sorted for deterministic output.
+        "generation_summaries": {
+            str(gen_id): _serialize_generation_summary(summary)
+            for gen_id, summary in sorted(
+                (report.generation_summaries or {}).items()
+            )
+        },
+    }
+
