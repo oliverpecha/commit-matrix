@@ -40,8 +40,6 @@ class SnapshotDominanceMetrics:
     is_short_lived: bool
 
 @dataclass
-@dataclass
-@dataclass
 class BoundaryScope:
     """What directories and file counts characterize the boundary snapshot."""
     top_level_dirs: list[str]

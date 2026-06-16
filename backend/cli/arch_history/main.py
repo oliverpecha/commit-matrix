@@ -36,6 +36,7 @@ Options:
   --fields <list>           Comma-separated entry fields to include (json mode only).
                             e.g. --fields flags,badges,lifespan_metrics
                             Always includes: generation, snapshot_sig.
+  --db-path <path>          SQLite database path (default: data/{repo}/commit_matrix.db).
   --llm-summarize           Reserved later-phase flag; not implemented yet.
   --help                    Show this help text.
 """
@@ -56,6 +57,7 @@ def _parse_args(argv: list[str]) -> tuple:
     only_reappeared = False
     llm_summarize = False
     fields = None
+    db_path = None
 
     i = 0
     while i < len(argv):
@@ -81,6 +83,8 @@ def _parse_args(argv: list[str]) -> tuple:
             llm_summarize = True
         elif arg == "--fields":
             fields = argv[i + 1]; i += 1
+        elif arg == "--db-path":
+            db_path = argv[i + 1]; i += 1
         elif arg == "--since":
             since = argv[i + 1]; i += 1
         elif arg == "--until":
@@ -106,7 +110,7 @@ def _parse_args(argv: list[str]) -> tuple:
 
     return (
         repo_label, reverse, compact, show_operational, debug, json_mode,
-        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields
+        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields, db_path
     )
 
 def main(
@@ -116,6 +120,7 @@ def main(
     snapshot_prefix: str | None = None, commit_target: str | None = None,
     smart_target: str | None = None, only_reappeared: bool = False, llm_summarize: bool = False,
     fields: str | None = None,
+    db_path: str | None = None,
 ) -> None:
     if llm_summarize:
         raise SystemExit("--llm-summarize is reserved for a later phase and is not implemented yet.")
@@ -150,7 +155,17 @@ def main(
                 for entry in payload["entries"]
             ]
         print(json.dumps(payload, indent=2, ensure_ascii=False))
+        # Always persist to DB
+        from backend.services.db.writer import write_architecture_run
+        resolved_db = db_path or f"data/{report.repo_label}/commit_matrix.db"
+        write_architecture_run(resolved_db, payload)
         return
+
+    # Always persist to DB
+    from backend.services.db.writer import write_architecture_run
+    from backend.cli.arch_history.orchestrator import serialize_history_report_to_contract as _ser
+    _db_path = db_path or f"data/{report.repo_label}/commit_matrix.db"
+    write_architecture_run(_db_path, _ser(report))
 
     render_history_report(
         report, reverse=reverse, compact=compact, show_operational=show_operational,
@@ -161,12 +176,13 @@ def main(
 if __name__ == "__main__":
     (
         repo_label, reverse, compact, show_operational, debug, json_mode,
-        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields
+        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields, db_path
     ) = _parse_args(sys.argv[1:])
     
     main(
         repo_label, reverse=reverse, compact=compact, show_operational=show_operational,
         debug=debug, json_mode=json_mode, since=since, until=until, generation=generation,
         snapshot_prefix=snapshot_prefix, commit_target=commit_target, smart_target=smart_target,
-        only_reappeared=only_reappeared, llm_summarize=llm_summarize, fields=fields
+        only_reappeared=only_reappeared, llm_summarize=llm_summarize, fields=fields,
+        db_path=db_path
     )

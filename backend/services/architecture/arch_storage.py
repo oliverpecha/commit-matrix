@@ -86,11 +86,9 @@ def save_blueprint_and_meta(
             versions_dir = meta_path.parent / "architecture_versions"
             versions_dir.mkdir(exist_ok=True)
             snapshot_path = versions_dir / f"arch-{sig_prefix}.md"
-            snapshot_meta_path = versions_dir / f"arch-{sig_prefix}.meta.json"
+            # .meta.json sidecar generation removed — DB is canonical (M1)
             if not snapshot_path.exists():
                 snapshot_path.write_text(content, encoding="utf-8")
-            if not snapshot_meta_path.exists():
-                snapshot_meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
     except Exception:
         pass
 
