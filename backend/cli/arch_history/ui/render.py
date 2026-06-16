@@ -17,7 +17,7 @@ def render_summary(report: HistoryReport) -> None:
     print(f"   {'─' * 83}")
     print(f"   💾 Commits       {report.total_commits:<3}  (raw history)")
     print(f"   📐 Snapshots     {report.total_blueprints:<3}  (architecture artifacts)")
-    print(f"   🕰️  Generations  {report.total_generations:<3}  (grouped by change_shape)")
+    print(f"   🕰️  Boundaries   {report.total_generations:<3}  (structural shifts)")
     print()
 
 def _render_filtered_header(
@@ -31,7 +31,7 @@ def _render_filtered_header(
         if markers.start: topo_ids.append(markers.start['topo'])
         if markers.end: topo_ids.append(markers.end['topo'])
     generations = sorted({e.generation for e in report.entries})
-    generation_label = (f"{generations[0]}" if len(generations) == 1 else f"{generations[0]}..{generations[-1]}") if generations else "?"
+    generation_label = (f"{generations[0]}" if len(generations) == 1 else f"last {len(generations)} ({generations[0]}..{generations[-1]})") if generations else "?"
     range_label = f"topo IDs {min(topo_ids)}..{max(topo_ids)}" if topo_ids else "selected history window"
     filters = []
     if since: filters.append(f"since={since}")
@@ -42,44 +42,74 @@ def _render_filtered_header(
     if only_reappeared: filters.append("only_reappeared")
     filter_label = ", ".join(filters) if filters else "none"
     order_label = ", ".join(["newest → oldest" if reverse else "oldest → newest"] + (["compact"] if compact else []))
-    print(f"\n🔎 Architecture Blueprint Slice — [{report.repo_display}]\n   Filters: {filter_label}\n   Range: {range_label}\n   Generations: {generation_label}\n   Order: {order_label}")
+    print(f"\n🔎 Architecture Blueprint Slice — [{report.repo_display}]\n   Filters: {filter_label}\n   Range: {range_label}\n   Boundaries: {generation_label}\n   Order: {order_label}")
     if compact:
-        print("   Note: Compact mode displays only dominant snapshots per generation.\n         Lifespan and reappearance metadata preserve full historical context\n         and may extend outside the exact numeric filter bounds.")
+        print("   Note: Compact mode displays only dominant snapshots per boundary era.\n         Lifespan and reappearance metadata preserve full historical context\n         and may extend outside the exact numeric filter bounds.")
     else:
         print("   Note: Snapshot lifespan and reappearance metadata may extend beyond the selected range.\n         This intentionally preserves the full lifecycle of any snapshot overlapping the window.")
     print()
 
 def _render_generation_panel(report: HistoryReport, generation: int, compact: bool = False, filtered: bool = False) -> None:
     summary = (report.generation_summaries or {}).get(generation)
-    if summary is None:
-        print(f" 🕰️  Architecture Generation #{generation}")
-        return
+    max_gen = max((e.generation for e in report.entries), default=generation)
+    back_n = max_gen - generation + 1
+    unit = "Boundary" if back_n == 1 else "Boundaries"
+    back_title = f" {back_n} {unit} back "
     panel_width = 56
+
+    if summary is None:
+        print(f"\U0001f570\ufe0f  \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
+        print(f" \u2502  \u2514{'\u2500' * panel_width}\u2518\n \u2502")
+        return
+
     def row(label: str, value: str) -> None:
         inner = f" {label:<16} {value}"
-        print(f" │  │{inner:<{panel_width}}│")
+        # Emoji takes 2 display cols but more bytes — truncate by display width
+        display_len = len(inner)
+        # Count emojis (rough: any char > 0xFFFF adds 1 extra display col)
+        extra = sum(1 for c in inner if ord(c) > 0x2600)
+        effective = display_len + extra
+        if effective > panel_width:
+            # Truncate to fit
+            over = effective - panel_width + 1
+            inner = inner[:len(inner) - over] + "\u2026"
+        # Pad to panel_width accounting for emoji
+        pad_needed = panel_width - (len(inner) + sum(1 for c in inner if ord(c) > 0x2600))
+        if pad_needed > 0:
+            inner = inner + " " * pad_needed
+        print(f" \u2502  \u2502{inner}\u2502")
+
+    from backend.cli.arch_history.ui.format import shape_icon as _cause_icon
+    cause_emoji = _cause_icon(summary.cause_tag)
+
+    era_share_pct = int(round(summary.dominant_share_of_generation * 100)) if summary.dominant_share_of_generation > 0 else 0
+    repo_share_pct = int(round((summary.generation_distinct_commit_count / report.total_commits) * 100)) if report.total_commits > 0 else 0
+
     def structural_mix_value() -> str:
         parts = []
         if summary.incremental_count: parts.append(f"{summary.incremental_count} incremental")
         if summary.structural_count: parts.append(f"{summary.structural_count} structural")
-        return " / ".join(parts) if parts else "0"
+        return " + ".join(parts) if parts else "0"
+
     dom_sig = summary.dominant_snapshot_sig[:24] if summary.dominant_snapshot_sig else "n/a"
-    generation_share_pct = int(round(summary.dominant_share_of_generation * 100)) if summary.dominant_share_of_generation > 0 else 0
-    repo_share_pct = int(round((summary.generation_distinct_commit_count / report.total_commits) * 100)) if report.total_commits > 0 else 0
-    print(f" 🕰️  Architecture Generation #{generation}\n │")
-    title_padded = " Generation Summary "
-    print(f" │  ┌{title_padded}{'─' * (56 - len(title_padded))}┐")
-    row("Boundary cause", summary.cause_label)
-    snapshots_value = str(summary.snapshot_count) + (f" · {summary.repeated_treesig_count} {'TreeSig' if summary.repeated_treesig_count == 1 else 'TreeSigs'}" if summary.repeated_treesig_count else "")
-    row("Snapshots", snapshots_value)
-    row("Generation span", f"{summary.generation_distinct_commit_count} commits")
+
+    # Top border with clock emoji and back label
+    print(f"\U0001f570\ufe0f  \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
+    row("Boundary cause", f"{cause_emoji} {summary.cause_label}")
     row("Repo share", f"{repo_share_pct}%")
+    snapshots_value = str(summary.snapshot_count) + (f" \u00b7 {summary.repeated_treesig_count} {'TreeSig' if summary.repeated_treesig_count == 1 else 'TreeSigs'}" if summary.repeated_treesig_count else "")
+    row("Snapshots", snapshots_value)
     row("Structural mix", structural_mix_value())
-    print(" │  │-- Dominant snapshot -----------------------------------│\n │  │ " + f"{dom_sig:<55}│")
+    row("Era span", f"{summary.generation_distinct_commit_count} commits")
+    print(f" \u2502  \u2502{'-- Dominant snapshot -----------------------------------'}\u2502")
+    print(f" \u2502  \u2502 {dom_sig:<{panel_width - 1}}\u2502")
+    row("Era share", f"{era_share_pct}%")
     row("Lifespan", f"{summary.dominant_effective_commits} commits")
-    row("Generation share", f"{generation_share_pct}%")
-    if summary.repeated_treesig_count: row("Repeated TreeSigs", str(summary.repeated_treesig_count))
-    print(" │  └────────────────────────────────────────────────────────┘\n │")
+    if summary.repeated_treesig_count:
+        row("Repeated TreeSigs", str(summary.repeated_treesig_count))
+    print(f" \u2502  \u2514{'\u2500' * panel_width}\u2518")
+    print(" \u2502")
+
 
 def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, markers: TimelineMarkers) -> None:
     icon = shape_icon(entry.shape) or _shape_icon_fallback(entry.shape)
@@ -161,7 +191,13 @@ def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | No
     if open_g != entry.generation:
         if open_g is not None: print()
         if show_sum: _render_generation_panel(report, entry.generation, compact, filtered_g)
-        else: print(f" 🕰️  Architecture Generation #{entry.generation}\n │")
+        else:
+            max_gen = max((e.generation for e in report.entries), default=entry.generation)
+            back_n = max_gen - entry.generation + 1
+            unit = "Boundary" if back_n == 1 else "Boundaries"
+            back_title = f" {back_n} {unit} back "
+            print(f" │  ┌{back_title}{chr(9472) * max(0, 56 - len(back_title))}┐")
+            print(f" │  └{chr(9472) * 56}┘\n │")
         if early_omit > 0: print(f" │  … {early_omit} {'later' if reverse else 'earlier'} snapshots compacted{early_m}")
         open_g = entry.generation
     _render_lifespan_and_badges(entry, b, t, markers)
@@ -202,13 +238,15 @@ def render_history_report(report: HistoryReport, reverse: bool = False, compact:
         se_s, sl_s = (ls if reverse else es), (es if reverse else ls)
         next_g = entries[idx + 1].generation if idx + 1 < len(entries) else None
         open_g = render_entry(report, entry, next_g, open_g, compact, show_operational, len(entries) < len(report.entries), not (len(report.entries) != report.total_blueprints or len({e.generation for e in report.entries}) != report.total_generations) or generation is not None, len(se_s), reverse, get_hidden_m(se_s), markers)
-        if next_g != entry.generation and sl_s: print(f" │  … {len(sl_s)} {'earlier' if reverse else 'later'} snapshots compacted{get_hidden_m(sl_s)}")
+        if next_g != entry.generation and sl_s:
+            trail_trunk = "│" if next_g is not None else " "
+            print(f" {trail_trunk}  … {len(sl_s)} {'earlier' if reverse else 'later'} snapshots compacted{get_hidden_m(sl_s)}")
     if compact: print()
     else:
         latest = entries[-1] if entries else None
         if latest and not (len(report.entries) != report.total_blueprints):
-            print(f"\n   Current Blueprint  arch-G{latest.generation}-{latest.snapshot_sig[:16]}.md")
-            for cand in [Path(f"arch-G{latest.generation}-{latest.snapshot_sig[:16]}.md"), Path(".architecture") / f"arch-G{latest.generation}-{latest.snapshot_sig[:16]}.md"]:
+            print(f"\n   Current Blueprint  arch-{latest.snapshot_sig[:16]}.md")
+            for cand in [Path(f"arch-{latest.snapshot_sig[:16]}.md"), Path(".architecture") / f"arch-{latest.snapshot_sig[:16]}.md"]:
                 if cand.exists():
                     try: print(cand.read_text().rstrip())
                     except: pass

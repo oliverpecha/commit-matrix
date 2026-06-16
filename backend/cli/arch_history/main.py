@@ -21,9 +21,12 @@ def _usage() -> str:
     return """usage: backend/cli/arch_history/main.py [repo_label] [options]
 
 Options:
-  --reverse                 Show newest entries first.
+  --chronological           Sort oldest boundary first (default is newest first).
   --compact                 Compact snapshot blocks and shorten commit rows.
-  --generation <n|n-m>      Filter by generation or range (e.g., 5-8).
+  --back <n>                Show only the last N boundaries from HEAD.
+  --back-snapshot <n>       Show only the last N snapshots from HEAD.
+  --back-commit <n>         Show only the last N commits from HEAD.
+  --boundary <n|n-m>        Filter by boundary number or range (e.g., 5-8).
   --snapshot <sig|sig-sig>  Filter by snapshot signature or range (e.g., a1b2-c3d4).
   --commit <id|id-id>       Filter by commit ID or range (e.g., 15-25 or a55a-b8bc).
   --since <date>            Filter entries from this YYYY-MM-DD date.
@@ -43,7 +46,7 @@ Options:
 
 def _parse_args(argv: list[str]) -> tuple:
     repo_label = None
-    reverse = False
+    reverse = True
     compact = False
     show_operational = True
     debug = False
@@ -57,6 +60,7 @@ def _parse_args(argv: list[str]) -> tuple:
     only_reappeared = False
     llm_summarize = False
     fields = None
+    back = None
     db_path = None
 
     i = 0
@@ -65,8 +69,10 @@ def _parse_args(argv: list[str]) -> tuple:
         if arg == "--help":
             print(_usage())
             raise SystemExit(0)
-        elif arg == "--reverse":
-            reverse = True
+        elif arg == "--reverse" or arg == "--chronological":
+            reverse = False
+        elif arg == "--back":
+            back = argv[i + 1]; i += 1
         elif arg == "--compact":
             compact = True
         elif arg == "--show-operational":
@@ -89,8 +95,12 @@ def _parse_args(argv: list[str]) -> tuple:
             since = argv[i + 1]; i += 1
         elif arg == "--until":
             until = argv[i + 1]; i += 1
-        elif arg == "--generation":
+        elif arg == "--generation" or arg == "--boundary":
             generation = argv[i + 1]; i += 1
+        elif arg == "--back-snapshot":
+            back = f"snapshot:{argv[i + 1]}"; i += 1
+        elif arg == "--back-commit":
+            back = f"commit:{argv[i + 1]}"; i += 1
         elif arg == "--snapshot":
             snapshot_prefix = argv[i + 1]; i += 1
         elif arg == "--commit":
@@ -110,7 +120,7 @@ def _parse_args(argv: list[str]) -> tuple:
 
     return (
         repo_label, reverse, compact, show_operational, debug, json_mode,
-        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields, db_path
+        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields, db_path, back
     )
 
 def main(
@@ -121,6 +131,7 @@ def main(
     smart_target: str | None = None, only_reappeared: bool = False, llm_summarize: bool = False,
     fields: str | None = None,
     db_path: str | None = None,
+    back: str | None = None,
 ) -> None:
     if llm_summarize:
         raise SystemExit("--llm-summarize is reserved for a later phase and is not implemented yet.")
@@ -132,6 +143,36 @@ def main(
             snapshot_prefix=snapshot_prefix, commit_target=commit_target,
             smart_target=smart_target, only_reappeared=only_reappeared,
         )
+        # --back N: limit results to N most recent items from HEAD
+        if back is not None:
+            if back.startswith("snapshot:"):
+                n = int(back.split(":")[1])
+                sorted_entries = sorted(
+                    report.entries,
+                    key=lambda e: e.trigger.topo_id if e.trigger and e.trigger.topo_id is not None else 0,
+                    reverse=True,
+                )[:n]
+                keep_sigs = {e.snapshot_sig for e in sorted_entries}
+                report.entries = [e for e in report.entries if e.snapshot_sig in keep_sigs]
+            elif back.startswith("commit:"):
+                n = int(back.split(":")[1])
+                # Filter entries whose trigger is within the last N topo_ids
+                all_topos = sorted(
+                    [e.trigger.topo_id for e in report.entries if e.trigger and e.trigger.topo_id is not None],
+                    reverse=True,
+                )
+                cutoff = all_topos[min(n - 1, len(all_topos) - 1)] if all_topos else 0
+                report.entries = [e for e in report.entries if e.trigger and e.trigger.topo_id is not None and e.trigger.topo_id >= cutoff]
+            else:
+                n = int(back)
+                gens = sorted({e.generation for e in report.entries}, reverse=True)[:n]
+                if gens:
+                    report.entries = [e for e in report.entries if e.generation in set(gens)]
+            # Recompute summaries after filtering
+            from backend.cli.arch_history.data.metrics import _compute_generation_summaries
+            report.generation_summaries = _compute_generation_summaries(report.entries) if report.entries else {}
+            report.total_blueprints = len(report.entries)
+            report.total_generations = len({e.generation for e in report.entries})
     except ValueError as e:
         raise SystemExit(f"Invalid selector: {e}")
     except (AmbiguousSigError, UnknownSigError) as e:
@@ -176,7 +217,7 @@ def main(
 if __name__ == "__main__":
     (
         repo_label, reverse, compact, show_operational, debug, json_mode,
-        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields, db_path
+        since, until, generation, snapshot_prefix, commit_target, smart_target, only_reappeared, llm_summarize, fields, db_path, back
     ) = _parse_args(sys.argv[1:])
     
     main(
@@ -184,5 +225,6 @@ if __name__ == "__main__":
         debug=debug, json_mode=json_mode, since=since, until=until, generation=generation,
         snapshot_prefix=snapshot_prefix, commit_target=commit_target, smart_target=smart_target,
         only_reappeared=only_reappeared, llm_summarize=llm_summarize, fields=fields,
-        db_path=db_path
+        db_path=db_path,
+        back=back
     )
