@@ -78,12 +78,12 @@ def save_blueprint_and_meta(
         meta["topo_id"] = topo_id
         meta["commit_index"] = topo_id
 
-    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
+    # meta_path file write removed — state pointer stored in DB (M1)
 
     try:
         sig_prefix = tree_signature[:16]
         if sig_prefix and not tree_signature.startswith("git-error"):
-            versions_dir = meta_path.parent / "architecture_versions"
+            versions_dir = meta_path.parent / "past_blueprints"
             versions_dir.mkdir(exist_ok=True)
             snapshot_path = versions_dir / f"arch-{sig_prefix}.md"
             # .meta.json sidecar generation removed — DB is canonical (M1)

@@ -58,25 +58,22 @@ def _render_generation_panel(report: HistoryReport, generation: int, compact: bo
     panel_width = 56
 
     if summary is None:
-        print(f"\U0001f570\ufe0f  \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
+        print(f"\U0001f570\ufe0f   \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
         print(f" \u2502  \u2514{'\u2500' * panel_width}\u2518\n \u2502")
         return
 
     def row(label: str, value: str) -> None:
         inner = f" {label:<16} {value}"
-        # Emoji takes 2 display cols but more bytes — truncate by display width
-        display_len = len(inner)
-        # Count emojis (rough: any char > 0xFFFF adds 1 extra display col)
-        extra = sum(1 for c in inner if ord(c) > 0x2600)
-        effective = display_len + extra
-        if effective > panel_width:
-            # Truncate to fit
-            over = effective - panel_width + 1
+        # Count emoji chars for width adjustment
+        emoji_extra = sum(1 for c in inner if ord(c) > 0x2600)
+        effective_len = len(inner) + emoji_extra
+        if effective_len > panel_width:
+            over = effective_len - panel_width + 1
             inner = inner[:len(inner) - over] + "\u2026"
-        # Pad to panel_width accounting for emoji
-        pad_needed = panel_width - (len(inner) + sum(1 for c in inner if ord(c) > 0x2600))
-        if pad_needed > 0:
-            inner = inner + " " * pad_needed
+            emoji_extra = sum(1 for c in inner if ord(c) > 0x2600)
+        pad = panel_width - len(inner) - emoji_extra
+        if pad > 0:
+            inner = inner + " " * pad
         print(f" \u2502  \u2502{inner}\u2502")
 
     from backend.cli.arch_history.ui.format import shape_icon as _cause_icon
@@ -93,8 +90,7 @@ def _render_generation_panel(report: HistoryReport, generation: int, compact: bo
 
     dom_sig = summary.dominant_snapshot_sig[:24] if summary.dominant_snapshot_sig else "n/a"
 
-    # Top border with clock emoji and back label
-    print(f"\U0001f570\ufe0f  \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
+    print(f"\U0001f570\ufe0f   \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
     row("Boundary cause", f"{cause_emoji} {summary.cause_label}")
     row("Repo share", f"{repo_share_pct}%")
     snapshots_value = str(summary.snapshot_count) + (f" \u00b7 {summary.repeated_treesig_count} {'TreeSig' if summary.repeated_treesig_count == 1 else 'TreeSigs'}" if summary.repeated_treesig_count else "")

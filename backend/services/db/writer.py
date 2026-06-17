@@ -20,7 +20,7 @@ from backend.services.db.taxonomy_sync import sync_taxonomy
 
 def _blueprint_hash(snapshot_sig: str, repo_label: str) -> str | None:
     prefix = snapshot_sig[:16]
-    md_path = Path("data") / repo_label / "architecture_versions" / f"arch-{prefix}.md"
+    md_path = Path("data") / repo_label / "past_blueprints" / f"arch-{prefix}.md"
     if md_path.exists():
         return hashlib.sha256(md_path.read_bytes()).hexdigest()
     return None
@@ -28,7 +28,7 @@ def _blueprint_hash(snapshot_sig: str, repo_label: str) -> str | None:
 
 def _snapshot_path(snapshot_sig: str, repo_label: str) -> str:
     prefix = snapshot_sig[:16]
-    return f"data/{repo_label}/architecture_versions/arch-{prefix}.md"
+    return f"data/{repo_label}/past_blueprints/arch-{prefix}.md"
 
 
 def _extract_commits(entry: dict, run_id: int) -> list[tuple]:
@@ -281,3 +281,155 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
 
     conn.close()
     return run_id
+
+
+def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
+    """Write a single snapshot's metadata to the DB.
+
+    Called by arch_builder.py after each architecture generation.
+    This populates the DB incrementally so the orchestrator's reader
+    can find metadata without sidecars.
+    """
+    from backend.services.architecture.arch_storage import repo_id_from_path
+    repo_label = repo_id_from_path(repo_path)
+    db = Path("data") / repo_label / "commit_matrix.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.executescript(SCHEMA_SQL)
+
+    conn.execute(
+        "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",
+        ("schema_version", str(SCHEMA_VERSION)),
+    )
+    sync_taxonomy(conn)
+
+    # Ensure run exists
+    existing = conn.execute(
+        "SELECT run_id FROM architecture_runs WHERE repo_label = ? LIMIT 1",
+        (repo_label,),
+    ).fetchone()
+
+    if existing:
+        run_id = existing[0]
+    else:
+        from datetime import datetime, UTC
+        now = datetime.now(UTC).isoformat()
+        cur = conn.execute(
+            """INSERT INTO architecture_runs
+            (repo_label, generated_at, contract_version, computation_version,
+             last_recomputed_at)
+            VALUES (?, ?, ?, 1, ?)""",
+            (repo_label, now, "1.0", now),
+        )
+        run_id = cur.lastrowid
+
+    prefix = snapshot_sig[:16]
+    change_summary = meta.get("change_summary") or {}
+    shape = change_summary.get("change_shape", "unknown")
+    mode = change_summary.get("mode", "unknown")
+
+    # Check if this snapshot already exists
+    exists = conn.execute(
+        "SELECT id FROM architecture_snapshots WHERE run_id = ? AND snapshot_sig = ?",
+        (run_id, snapshot_sig),
+    ).fetchone()
+
+    if exists:
+        # Update shape if it was classified
+        conn.execute(
+            "UPDATE architecture_snapshots SET shape = ?, generator_mode = ? WHERE id = ?",
+            (shape, mode, exists[0]),
+        )
+    else:
+        from backend.cli.arch_history.data.loader import human_shape_label
+        conn.execute(
+            """INSERT INTO architecture_snapshots
+            (run_id, snapshot_sig, snapshot_path, shape, shape_label,
+             generator_version, generator_mode, blueprint_grade, blueprint_hash,
+             size_bytes, selected_files, total_files,
+             is_current, is_dominant, lifespan_class)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_id, snapshot_sig,
+                f"data/{repo_label}/past_blueprints/arch-{prefix}.md",
+                shape, human_shape_label(shape),
+                meta.get("generator_version", "unknown"),
+                mode, "programmatic",
+                _blueprint_hash(snapshot_sig, repo_label),
+                0, change_summary.get("selected_files_count", 0),
+                change_summary.get("total_files", 0),
+                False, False, "standard",
+            ),
+        )
+
+    # Also insert the trigger commit if we have commit_sha
+    commit_sha = meta.get("commit_sha", "")
+    topo_id = meta.get("topo_id")
+    if commit_sha:
+        commit_exists = conn.execute(
+            "SELECT id FROM architecture_commits WHERE run_id = ? AND commit_sig = ? AND snapshot_sig = ?",
+            (run_id, commit_sha[:7], snapshot_sig),
+        ).fetchone()
+        if not commit_exists:
+            conn.execute(
+                """INSERT INTO architecture_commits
+                (run_id, snapshot_sig, topo_id, commit_sig, role)
+                VALUES (?, ?, ?, ?, 'trigger')""",
+                (run_id, snapshot_sig, topo_id, commit_sha[:7]),
+            )
+
+    conn.commit()
+    conn.close()
+
+
+def write_state_pointer(repo_path: str, meta: dict) -> None:
+    """Store the current blueprint state pointer in the DB.
+
+    Called by arch_builder after each snapshot generation. This replaces
+    the root-level _arch_blueprint.meta.json file. The next pipeline run
+    reads this to determine change_shape by comparing against the previous state.
+    """
+    import json as _json
+    from backend.services.architecture.arch_storage import repo_id_from_path
+    repo_label = repo_id_from_path(repo_path)
+    db = Path("data") / repo_label / "commit_matrix.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.executescript(SCHEMA_SQL)
+
+    conn.execute(
+        "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",
+        ("current_blueprint_meta", _json.dumps(meta)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def read_state_pointer(repo_path: str) -> dict | None:
+    """Read the current blueprint state pointer from the DB.
+
+    Returns the meta dict stored by the last pipeline run, or None if
+    no state pointer exists (cold start).
+    """
+    import json as _json
+    from backend.services.architecture.arch_storage import repo_id_from_path
+    repo_label = repo_id_from_path(repo_path)
+    db = Path("data") / repo_label / "commit_matrix.db"
+
+    if not db.exists():
+        return None
+
+    conn = sqlite3.connect(str(db))
+    row = conn.execute(
+        "SELECT value FROM schema_meta WHERE key = 'current_blueprint_meta'"
+    ).fetchone()
+    conn.close()
+
+    if row and row[0]:
+        return _json.loads(row[0])
+    return None
+

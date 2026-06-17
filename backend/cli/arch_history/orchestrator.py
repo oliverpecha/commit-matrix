@@ -311,15 +311,26 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
 
     data_dir = Path("data") / repo_label
     meta_path = data_dir / f"{repo_label}_arch_blueprint.meta.json"
-    versions_dir = data_dir / "architecture_versions"
+    versions_dir = data_dir / "past_blueprints"
     used_by_map, topo_by_commit_sig, ledger_rows = _load_used_by_map(repo_label)
 
     _dbg(f"ledger: {len(used_by_map)} unique TreeSigs (legacy ArchSig compatible), {len(topo_by_commit_sig)//2} commit signatures in topo map")
     era_by_sha, runs_by_sig = _compute_tree_sig_eras(ledger_rows)
     _dbg(f"eras: {sum(len(runs) for runs in runs_by_sig.values())} contiguous TreeSig eras across {len(ledger_rows)} ledger rows")
 
+    # Read current blueprint info from DB (primary) or root meta.json (fallback)
     current_meta: dict = {}
-    if meta_path.exists():
+    try:
+        from backend.services.db.reader import load_all_snapshot_meta
+        db_meta = load_all_snapshot_meta(repo_label)
+        if db_meta:
+            # Find the snapshot marked as current, or use the most recent
+            for prefix, meta in db_meta.items():
+                current_meta = meta  # last one wins (they're ordered by insertion)
+    except Exception:
+        pass
+
+    if not current_meta and meta_path.exists():
         try:
             raw = meta_path.read_text(encoding="utf-8").strip()
             if raw:
@@ -717,7 +728,7 @@ def _load_snapshot_sidecar(snapshot_sig: str) -> dict:
     """Load the .meta.json sidecar for a snapshot, if it exists."""
     from backend.services.pipeline.pipeline_config import HOST_REPO_NAME
     repo_label = HOST_REPO_NAME
-    versions_dir = Path("data") / repo_label / "architecture_versions"
+    versions_dir = Path("data") / repo_label / "past_blueprints"
     prefix = snapshot_sig[:16]
     sidecar = versions_dir / f"arch-{prefix}.meta.json"
     if sidecar.exists():
