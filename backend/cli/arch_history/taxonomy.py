@@ -11,6 +11,7 @@ SHAPE_ALIAS_MAP = {
     "multi-dir:default": "fallback-shift",
     "multi-dirdefault": "fallback-shift",
     "leaf-only": "leaf-only",
+    "major:head": "head",
 }
 
 CANONICAL_TAXONOMY = {
@@ -48,6 +49,11 @@ CANONICAL_TAXONOMY = {
         "family": "incremental",
         "label": "Stable Implementation Refinement",
         "icon": "🍃"
+    },
+    "head": {
+        "family": "temporal",
+        "label": "Current Architecture Head",
+        "icon": "📍"
     }
 }
 
@@ -85,6 +91,7 @@ BOUNDARY_CAUSE_TAG_MAP: dict[str, str] = {
     "multi-dir:default":            "multi_dir_default",
     "multi-dirdefault":             "multi_dir_default",
     "leaf-only":                    "leaf_only",
+    "major:head":                   "head",
 }
 
 BOUNDARY_CAUSE_LABEL_MAP: dict[str, str] = {
@@ -97,6 +104,7 @@ BOUNDARY_CAUSE_LABEL_MAP: dict[str, str] = {
     "multi_dir_coverage":           "Multi-Directory Coverage Expansion",
     "multi_dir_default":            "Broad Baseline Architectural Shift",
     "leaf_only":                    "Stable Leaf-Level Implementation Refinement",
+    "head":                         "Current Architecture Head",
 }
 
 
@@ -154,6 +162,7 @@ MAGNITUDE_BY_NORMALIZED_TAG: dict[str, str] = {
     "multi_dir_default":    "major",
     "major_file_count":     "moderate",
     "leaf_only":            "minor",
+    "head":                 "major",
 }
 
 

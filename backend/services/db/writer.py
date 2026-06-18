@@ -433,3 +433,127 @@ def read_state_pointer(repo_path: str) -> dict | None:
         return _json.loads(row[0])
     return None
 
+
+def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
+    """Update scan head/tail and track previous head for reclassification."""
+    db = Path("data") / repo_label / "commit_matrix.db"
+    if not db.exists():
+        return
+
+    conn = sqlite3.connect(str(db))
+
+    current = conn.execute(
+        "SELECT scan_head_topo FROM architecture_runs WHERE repo_label = ?",
+        (repo_label,),
+    ).fetchone()
+
+    previous_head = current[0] if current and current[0] else None
+
+    # Expand tail to min of existing and new
+    conn.execute("""
+        UPDATE architecture_runs SET
+            scan_head_topo = ?,
+            scan_tail_topo = CASE
+                WHEN scan_tail_topo IS NULL THEN ?
+                WHEN ? < scan_tail_topo THEN ?
+                ELSE scan_tail_topo
+            END,
+            previous_head_topo = ?
+        WHERE repo_label = ?
+    """, (scan_head, scan_tail, scan_tail, scan_tail, previous_head, repo_label))
+
+    conn.commit()
+    conn.close()
+
+
+def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int) -> None:
+    """Detect gaps in commit coverage and record as vacuums."""
+    db = Path("data") / repo_label / "commit_matrix.db"
+    if not db.exists():
+        return
+
+    conn = sqlite3.connect(str(db))
+
+    run_row = conn.execute(
+        "SELECT run_id FROM architecture_runs WHERE repo_label = ?",
+        (repo_label,),
+    ).fetchone()
+    if not run_row:
+        conn.close()
+        return
+    run_id = run_row[0]
+
+    processed = set(
+        row[0] for row in conn.execute(
+            "SELECT DISTINCT topo_id FROM architecture_commits "
+            "WHERE run_id = ? AND topo_id IS NOT NULL",
+            (run_id,),
+        ).fetchall()
+    )
+
+    if not processed:
+        conn.close()
+        return
+
+    min_topo = min(processed)
+    max_topo = max(processed)
+
+    # Gaps within the processed range
+    all_expected = set(range(min_topo, max_topo + 1))
+    missing = sorted(all_expected - processed)
+
+    vacuums: list[tuple[int, int]] = []
+    if missing:
+        start = missing[0]
+        prev = missing[0]
+        for topo in missing[1:]:
+            if topo == prev + 1:
+                prev = topo
+            else:
+                vacuums.append((start, prev))
+                start = topo
+                prev = topo
+        vacuums.append((start, prev))
+
+    # Vacuum below min_topo if min_topo > 1
+    if min_topo > 1:
+        vacuums.append((1, min_topo - 1))
+
+    from datetime import datetime, UTC
+    now = datetime.now(UTC).isoformat()
+
+    # Resolve existing vacuums that are now covered
+    existing = conn.execute(
+        "SELECT id, vacuum_start_topo, vacuum_end_topo FROM scan_vacuums "
+        "WHERE run_id = ? AND resolved_at IS NULL",
+        (run_id,),
+    ).fetchall()
+
+    for vac_id, vac_start, vac_end in existing:
+        vac_range = set(range(vac_start, vac_end + 1))
+        if vac_range.issubset(processed):
+            conn.execute(
+                "UPDATE scan_vacuums SET resolved_at = ? WHERE id = ?",
+                (now, vac_id),
+            )
+
+    # Record new vacuums
+    for vac_start, vac_end in vacuums:
+        already = conn.execute(
+            "SELECT id FROM scan_vacuums "
+            "WHERE run_id = ? AND vacuum_start_topo = ? AND vacuum_end_topo = ? "
+            "AND resolved_at IS NULL",
+            (run_id, vac_start, vac_end),
+        ).fetchone()
+
+        if not already:
+            conn.execute(
+                """INSERT INTO scan_vacuums
+                (run_id, vacuum_start_topo, vacuum_end_topo, commit_count, detected_at)
+                VALUES (?, ?, ?, ?, ?)""",
+                (run_id, vac_start, vac_end, vac_end - vac_start + 1, now),
+            )
+
+    conn.commit()
+    conn.close()
+

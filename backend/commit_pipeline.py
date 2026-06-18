@@ -172,6 +172,19 @@ def main():
             for output in ready_outputs:
                 print(output, flush=True)
 
+    # Record scan range and detect vacuums (M3)
+    processed_topos = [topo_id for topo_id, _ in commits_with_ids]
+    if processed_topos:
+        _scan_head = max(processed_topos)
+        _scan_tail = min(processed_topos)
+        try:
+            from backend.services.db.writer import update_scan_range, detect_and_record_vacuums
+            update_scan_range(repo_label, _scan_head, _scan_tail)
+            detect_and_record_vacuums(repo_label, _scan_head, _scan_tail)
+        except Exception as _e:
+            import sys as _sys
+            print(f"[arch-history] scan range recording failed: {_e}", file=_sys.stderr)
+
     error_count = flush_state["error_count"]
     success_count = flush_state["success_count"]
 

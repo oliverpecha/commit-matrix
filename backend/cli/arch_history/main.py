@@ -23,6 +23,7 @@ def _usage() -> str:
 Options:
   --chronological           Sort oldest boundary first (default is newest first).
   --compact                 Compact snapshot blocks and shorten commit rows.
+  --last <n>                Scan only the last N commits from HEAD (pipeline-level).
   --back <n>                Show only the last N boundaries from HEAD.
   --back-snapshot <n>       Show only the last N snapshots from HEAD.
   --back-commit <n>         Show only the last N commits from HEAD.
@@ -71,6 +72,9 @@ def _parse_args(argv: list[str]) -> tuple:
             raise SystemExit(0)
         elif arg == "--reverse" or arg == "--chronological":
             reverse = False
+        elif arg == "--last":
+            import os as _os
+            _os.environ["MATRIX_MAX_COMMITS"] = argv[i + 1]; i += 1
         elif arg == "--back":
             back = argv[i + 1]; i += 1
         elif arg == "--compact":

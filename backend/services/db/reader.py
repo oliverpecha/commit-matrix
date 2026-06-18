@@ -107,3 +107,57 @@ def load_all_snapshot_meta(repo_label: str, db_path: str | None = None) -> dict[
         result[prefix] = meta
 
     return result
+
+
+def read_scan_range(repo_label: str, db_path: str | None = None) -> dict | None:
+    """Read the current scan head/tail/previous_head from the DB."""
+    db = db_path or _default_db_path(repo_label)
+    if not Path(db).exists():
+        return None
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT scan_head_topo, scan_tail_topo, previous_head_topo "
+        "FROM architecture_runs WHERE repo_label = ?",
+        (repo_label,),
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        return None
+    return {
+        "scan_head_topo": row[0],
+        "scan_tail_topo": row[1],
+        "previous_head_topo": row[2],
+    }
+
+
+def read_vacuums(repo_label: str, db_path: str | None = None) -> list[dict]:
+    """Read all unresolved vacuums for this repo."""
+    db = db_path or _default_db_path(repo_label)
+    if not Path(db).exists():
+        return []
+
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+
+    run_row = conn.execute(
+        "SELECT run_id FROM architecture_runs WHERE repo_label = ? LIMIT 1",
+        (repo_label,),
+    ).fetchone()
+
+    if not run_row:
+        conn.close()
+        return []
+
+    rows = conn.execute(
+        """SELECT vacuum_start_topo, vacuum_end_topo, commit_count, detected_at
+        FROM scan_vacuums
+        WHERE run_id = ? AND resolved_at IS NULL
+        ORDER BY vacuum_start_topo""",
+        (run_row["run_id"],),
+    ).fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]
+

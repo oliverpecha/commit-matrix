@@ -15,9 +15,27 @@ def render_summary(report: HistoryReport) -> None:
     print()
     print("   Snapshot Summary")
     print(f"   {'─' * 83}")
-    print(f"   💾 Commits       {report.total_commits:<3}  (raw history)")
+    _p_topos = [e.trigger.topo_id for e in report.entries if e.trigger and e.trigger.topo_id is not None]
+    if _p_topos:
+        _p_range = f"#{min(_p_topos)}-#{max(_p_topos)}"
+        _p_count = max(_p_topos) - min(_p_topos) + 1
+    else:
+        _p_range = "none"
+        _p_count = 0
+    print(f"   💾 Commits       {report.total_commits:<3}  (total repo history)")
+    if 0 < _p_count < report.total_commits:
+        print(f"   📊 Processed     {_p_count:<3}  ({_p_range})")
     print(f"   📐 Snapshots     {report.total_blueprints:<3}  (architecture artifacts)")
     print(f"   🕰️  Boundaries   {report.total_generations:<3}  (structural shifts)")
+    try:
+        from backend.services.db.reader import read_vacuums
+        _vacs = read_vacuums(report.repo_label)
+        if _vacs:
+            _v_total = sum(v["commit_count"] for v in _vacs)
+            _v_ranges = ", ".join(f"#{v['vacuum_start_topo']}-#{v['vacuum_end_topo']}" for v in _vacs)
+            print(f"   ⚠️  Vacuums       {len(_vacs):<3}  ({_v_total} commits: {_v_ranges})")
+    except Exception:
+        pass
     print()
 
 def _render_filtered_header(

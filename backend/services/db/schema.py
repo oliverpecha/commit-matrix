@@ -6,7 +6,7 @@ Boundaries replace stored generation IDs.
 Generation numbers computed at display time from boundary topo_id ordering.
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -34,7 +34,10 @@ CREATE TABLE IF NOT EXISTS architecture_runs (
     total_blueprints INTEGER,
     total_generations INTEGER,
     first_topo_id INTEGER,
-    last_topo_id INTEGER
+    last_topo_id INTEGER,
+    scan_head_topo INTEGER,
+    scan_tail_topo INTEGER,
+    previous_head_topo INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS architecture_snapshots (
@@ -117,4 +120,18 @@ CREATE INDEX IF NOT EXISTS idx_commits_topo ON architecture_commits(run_id, topo
 CREATE INDEX IF NOT EXISTS idx_commits_role ON architecture_commits(run_id, role);
 CREATE INDEX IF NOT EXISTS idx_boundaries_run ON architecture_boundaries(run_id);
 CREATE INDEX IF NOT EXISTS idx_boundaries_topo ON architecture_boundaries(run_id, boundary_commit_topo_id);
+
+CREATE TABLE IF NOT EXISTS scan_vacuums (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES architecture_runs(run_id),
+    vacuum_start_topo INTEGER NOT NULL,
+    vacuum_end_topo INTEGER NOT NULL,
+    commit_count INTEGER,
+    detected_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_vacuums_run ON scan_vacuums(run_id);
+CREATE INDEX IF NOT EXISTS idx_vacuums_range ON scan_vacuums(vacuum_start_topo, vacuum_end_topo);
+
 """
