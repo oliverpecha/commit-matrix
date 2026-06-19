@@ -52,7 +52,7 @@ def _reassign_generations(entries: list[SnapshotEntry]) -> list[SnapshotEntry]:
     current_gen = 1
     gen_idx = 0
     for idx, entry in enumerate(ordered):
-        if idx > 0 and not (entry.shape or "").startswith("leaf-only"):
+        if idx > 0 and not (entry.shape or "").startswith("leaf-only") and (entry.shape or "") != "major:head":
             current_gen += 1
             gen_idx = 0
         entry.generation = current_gen
@@ -310,7 +310,7 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     repo_display = derive_repo_display(repo_path, repo_label)
 
     data_dir = Path("data") / repo_label
-    meta_path = data_dir / f"{repo_label}_arch_blueprint.meta.json"
+    meta_path = data_dir / f"{repo_label}_current_arch_blueprint.meta.json"
     versions_dir = data_dir / "past_blueprints"
     used_by_map, topo_by_commit_sig, ledger_rows = _load_used_by_map(repo_label)
 

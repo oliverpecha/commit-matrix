@@ -13,7 +13,7 @@ from backend.cli.arch_history.ui.markers import TimelineMarkers
 def render_summary(report: HistoryReport) -> None:
     print(f"\n🏗️  Architecture Blueprint History — [{report.repo_display}]")
     print()
-    print("   Snapshot Summary")
+    print("   Summary")
     print(f"   {'─' * 83}")
     _p_topos = [e.trigger.topo_id for e in report.entries if e.trigger and e.trigger.topo_id is not None]
     if _p_topos:
@@ -24,9 +24,10 @@ def render_summary(report: HistoryReport) -> None:
         _p_count = 0
     print(f"   💾 Commits       {report.total_commits:<3}  (total repo history)")
     if 0 < _p_count < report.total_commits:
-        print(f"   📊 Processed     {_p_count:<3}  ({_p_range})")
+        _p_range_desc = f"#{max(_p_topos)} to #{min(_p_topos)}"
+        print(f"   📊 Processed     {_p_count:<3}  ({_p_range_desc})")
     print(f"   📐 Snapshots     {report.total_blueprints:<3}  (architecture artifacts)")
-    print(f"   🕰️  Boundaries   {report.total_generations:<3}  (structural shifts)")
+    print(f"   🕰️  Boundaries    {report.total_generations:<3} (structural shifts)")
     try:
         from backend.services.db.reader import read_vacuums
         _vacs = read_vacuums(report.repo_label)
@@ -67,22 +68,44 @@ def _render_filtered_header(
         print("   Note: Snapshot lifespan and reappearance metadata may extend beyond the selected range.\n         This intentionally preserves the full lifecycle of any snapshot overlapping the window.")
     print()
 
-def _render_generation_panel(report: HistoryReport, generation: int, compact: bool = False, filtered: bool = False) -> None:
+def _render_era_panel(report: HistoryReport, generation: int, compact: bool = False, filtered: bool = False) -> None:
     summary = (report.generation_summaries or {}).get(generation)
     max_gen = max((e.generation for e in report.entries), default=generation)
-    back_n = max_gen - generation + 1
-    unit = "Boundary" if back_n == 1 else "Boundaries"
-    back_title = f" {back_n} {unit} back "
+    is_head_era = (generation == max_gen)
+
+    head_is_structural = False
+    if is_head_era:
+        head_entries = [e for e in report.entries if e.generation == generation]
+        if head_entries:
+            head_shape = head_entries[0].shape or ""
+            head_is_structural = any(
+                head_shape.startswith(p) for p in ("major:", "multi-dir:")
+            ) and head_shape != "major:head"
+
     panel_width = 56
 
+    # Build title and top border line
+    if is_head_era:
+        if head_is_structural:
+            title = " Current Architecture Head \u2014 structural shift "
+        else:
+            title = " Current Architecture Head "
+        dashes = "\u2500" * max(0, panel_width - len(title))
+        top_line = f" \U0001f4cd \u250c{title}{dashes}\u2510"
+    else:
+        back_n = max_gen - generation
+        unit = "Boundary" if back_n == 1 else "Boundaries"
+        title = f" {back_n} {unit} back "
+        dashes = "\u2500" * max(0, panel_width - len(title))
+        top_line = f"\U0001f570\ufe0f   \u250c{title}{dashes}\u2510"
+
     if summary is None:
-        print(f"\U0001f570\ufe0f   \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
+        print(top_line)
         print(f" \u2502  \u2514{'\u2500' * panel_width}\u2518\n \u2502")
         return
 
     def row(label: str, value: str) -> None:
         inner = f" {label:<16} {value}"
-        # Count emoji chars for width adjustment
         emoji_extra = sum(1 for c in inner if ord(c) > 0x2600)
         effective_len = len(inner) + emoji_extra
         if effective_len > panel_width:
@@ -108,7 +131,7 @@ def _render_generation_panel(report: HistoryReport, generation: int, compact: bo
 
     dom_sig = summary.dominant_snapshot_sig[:24] if summary.dominant_snapshot_sig else "n/a"
 
-    print(f"\U0001f570\ufe0f   \u250c{back_title}{'\u2500' * max(0, panel_width - len(back_title))}\u2510")
+    print(top_line)
     row("Boundary cause", f"{cause_emoji} {summary.cause_label}")
     row("Repo share", f"{repo_share_pct}%")
     snapshots_value = str(summary.snapshot_count) + (f" \u00b7 {summary.repeated_treesig_count} {'TreeSig' if summary.repeated_treesig_count == 1 else 'TreeSigs'}" if summary.repeated_treesig_count else "")
@@ -126,8 +149,14 @@ def _render_generation_panel(report: HistoryReport, generation: int, compact: bo
 
 
 def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, markers: TimelineMarkers) -> None:
-    icon = shape_icon(entry.shape) or _shape_icon_fallback(entry.shape)
-    if icon == "•": icon = _shape_icon_fallback(entry.shape)
+    # HEAD snapshot uses line chars instead of emoji
+    if entry.shape == "major:head":
+        icon = "──"
+        icon_pad = ""  # no space before ── (connects to ├)
+    else:
+        icon = shape_icon(entry.shape) or _shape_icon_fallback(entry.shape)
+        if icon == "•": icon = _shape_icon_fallback(entry.shape)
+        icon_pad = " "  # space before emoji
     badges = []
     if entry.dominance:
         if entry.dominance.is_dominant: badges.append("[dominant]")
@@ -139,7 +168,7 @@ def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, m
         badge_str += "             ← [CURRENT]"
         
     marker = markers.get_snapshot_marker(entry.trigger.topo_id) if entry.trigger else ""
-    print(f" {branch} {icon} {entry.snapshot_sig[:24]:<26} [{entry.shape_label or entry.shape or 'unknown'}]{badge_str}{marker}")
+    print(f" {branch}{icon_pad}{icon} {entry.snapshot_sig[:24]:<26} [{entry.shape_label or entry.shape or 'unknown'}]{badge_str}{marker}")
     if entry.lifespan:
         # Determine classification label to print inline with raw lifespan analytics
         life_label = ""
@@ -195,7 +224,7 @@ def _render_also_used(entry: SnapshotEntry, trunk: str, show_operational: bool =
         print(f" {trunk}   ├- Reappeared in {len(run)} later {'commit' if len(run) == 1 else 'commits'}:")
         _render_commit_block(run, trunk, show_operational, compact, markers)
 
-def _generation_clip_counts(report: HistoryReport, entries: list[SnapshotEntry], generation: int) -> tuple[list[SnapshotEntry], list[SnapshotEntry]]:
+def _era_clip_counts(report: HistoryReport, entries: list[SnapshotEntry], generation: int) -> tuple[list[SnapshotEntry], list[SnapshotEntry]]:
     all_gen = [e for e in report.entries if e.generation == generation]
     v = sorted([e for e in entries if e.generation == generation], key=lambda x: x.generation_index)
     return (all_gen[:v[0].generation_index] if v else [], all_gen[v[-1].generation_index + 1:] if v else [])
@@ -204,14 +233,9 @@ def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | No
     b, t = ("└" if next_gen != entry.generation else "├"), (" " if next_gen != entry.generation else "│")
     if open_g != entry.generation:
         if open_g is not None: print()
-        if show_sum: _render_generation_panel(report, entry.generation, compact, filtered_g)
+        if show_sum: _render_era_panel(report, entry.generation, compact, filtered_g)
         else:
-            max_gen = max((e.generation for e in report.entries), default=entry.generation)
-            back_n = max_gen - entry.generation + 1
-            unit = "Boundary" if back_n == 1 else "Boundaries"
-            back_title = f" {back_n} {unit} back "
-            print(f" │  ┌{back_title}{chr(9472) * max(0, 56 - len(back_title))}┐")
-            print(f" │  └{chr(9472) * 56}┘\n │")
+            _render_era_panel(report, entry.generation, compact, filtered_g)
         if early_omit > 0: print(f" │  … {early_omit} {'later' if reverse else 'earlier'} snapshots compacted{early_m}")
         open_g = entry.generation
     _render_lifespan_and_badges(entry, b, t, markers)
@@ -248,7 +272,7 @@ def render_history_report(report: HistoryReport, reverse: bool = False, compact:
         return ""
     open_g = None
     for idx, entry in enumerate(entries):
-        es, ls = _generation_clip_counts(report, entries, entry.generation)
+        es, ls = _era_clip_counts(report, entries, entry.generation)
         se_s, sl_s = (ls if reverse else es), (es if reverse else ls)
         next_g = entries[idx + 1].generation if idx + 1 < len(entries) else None
         open_g = render_entry(report, entry, next_g, open_g, compact, show_operational, len(entries) < len(report.entries), not (len(report.entries) != report.total_blueprints or len({e.generation for e in report.entries}) != report.total_generations) or generation is not None, len(se_s), reverse, get_hidden_m(se_s), markers)
@@ -257,12 +281,31 @@ def render_history_report(report: HistoryReport, reverse: bool = False, compact:
             print(f" {trail_trunk}  … {len(sl_s)} {'earlier' if reverse else 'later'} snapshots compacted{get_hidden_m(sl_s)}")
     if compact: print()
     else:
-        latest = entries[-1] if entries else None
-        if latest and not (len(report.entries) != report.total_blueprints):
-            print(f"\n   Current Blueprint  arch-{latest.snapshot_sig[:16]}.md")
-            for cand in [Path(f"arch-{latest.snapshot_sig[:16]}.md"), Path(".architecture") / f"arch-{latest.snapshot_sig[:16]}.md"]:
-                if cand.exists():
-                    try: print(cand.read_text().rstrip())
-                    except: pass
-                    break
+        pass
+
+
+    # Vacuum warning at the bottom
+    try:
+        from backend.services.db.reader import read_vacuums
+        _bottom_vacs = read_vacuums(report.repo_label)
+        if _bottom_vacs:
+            _bv_total = sum(v.get("commit_count", 0) for v in _bottom_vacs)
+            _bv_parts = []
+            for v in _bottom_vacs:
+                s = v.get("vacuum_end_topo", "?")
+                e = v.get("vacuum_start_topo", "?")
+                _bv_parts.append(f"#{s} to #{e}")
+            print(f"\n \u26a0\ufe0f  Vacuum: {_bv_total} unscanned commits ({', '.join(_bv_parts)})")
+    except Exception as _ve:
+        import sys as _s
+        print(f"[vacuum-warn] {_ve}", file=_s.stderr)
+
+    # Also check if tail doesn't reach commit 1
+    _p_topos2 = [e2.trigger.topo_id for e2 in report.entries if e2.trigger and e2.trigger.topo_id is not None]
+    if _p_topos2:
+        _min_topo = min(_p_topos2)
+        if _min_topo > 1:
+            _unscanned = _min_topo - 1
+            print(f"\n \u26a0\ufe0f  Vacuum: {_unscanned} unscanned commits (#{_min_topo - 1} to #1)")
+
     print()

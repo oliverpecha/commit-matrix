@@ -24,8 +24,8 @@ def architecture_paths(repo_path: str) -> tuple[Path, Path]:
     repo_id = repo_id_from_path(repo_path)
     data_dir = Path("data") / repo_id
     data_dir.mkdir(parents=True, exist_ok=True)
-    md_path = data_dir / f"{repo_id}_arch_blueprint.md"
-    meta_path = data_dir / f"{repo_id}_arch_blueprint.meta.json"
+    md_path = data_dir / f"{repo_id}_current_arch_blueprint.md"
+    meta_path = data_dir / f"{repo_id}_current_arch_blueprint.meta.json"
     return md_path, meta_path
 
 
@@ -57,7 +57,15 @@ def save_blueprint_and_meta(
     topo_id: int | None = None,
 ) -> tuple[Path, Path, dict]:
     md_path, meta_path = architecture_paths(repo_path)
-    md_path.write_text(content, encoding="utf-8")
+    # In retrospective mode, only write current blueprint for the first commit (HEAD)
+    # In chronological mode, overwrite each time (last commit = current)
+    import os as _os
+    _queue_order = _os.environ.get("MATRIX_QUEUE_ORDER", "retrospective").strip().lower()
+    if _queue_order == "retrospective":
+        if not md_path.exists():
+            md_path.write_text(content, encoding="utf-8")
+    else:
+        md_path.write_text(content, encoding="utf-8")
 
     meta = {
         "generated_at": datetime.datetime.now(datetime.UTC).isoformat() + "Z",

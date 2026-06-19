@@ -33,7 +33,7 @@ CANONICAL_TAXONOMY = {
     "critical-file-shift": {
         "family": "breadth",
         "label": "Critical Asset Tracking Realignment",
-        "icon": "📌"
+        "icon": "💎"
     },
     "global-dir-change": {
         "family": "breadth",
