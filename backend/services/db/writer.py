@@ -384,6 +384,86 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
     conn.close()
 
 
+def write_boundary_state(repo_label: str, trigger_topo: int, trigger_hash: str,
+                         change_shape: str, mode: str, db_path: str) -> None:
+    """Write an architectural boundary detection to the DB immediately.
+    
+    Called by commit_pipeline when arch_state.advanced=True (boundary detected).
+    Creates minimal boundary record; full metrics populated later by CLI run.
+    """
+    import json as _json
+    from datetime import datetime, UTC
+    
+    db = Path(db_path)
+    db.parent.mkdir(parents=True, exist_ok=True)
+    
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.executescript(SCHEMA_SQL)
+    
+    conn.execute(
+        "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",
+        ("schema_version", str(SCHEMA_VERSION)),
+    )
+    sync_taxonomy(conn)
+    
+    # Get or create run_id
+    existing = conn.execute(
+        "SELECT run_id FROM architecture_runs WHERE repo_label = ? LIMIT 1",
+        (repo_label,),
+    ).fetchone()
+    
+    if existing:
+        run_id = existing[0]
+    else:
+        now = datetime.now(UTC).isoformat()
+        cur = conn.execute(
+            """INSERT INTO architecture_runs
+            (repo_label, generated_at, contract_version, computation_version,
+             last_recomputed_at)
+            VALUES (?, ?, ?, 1, ?)""",
+            (repo_label, now, "1.0", now),
+        )
+        run_id = cur.lastrowid
+    
+    # Determine magnitude from change_shape
+    if str(change_shape).startswith("major:"):
+        magnitude = "major"
+    elif str(change_shape).startswith("multi-dir:"):
+        magnitude = "multi-dir"
+    else:
+        magnitude = "minor"
+    
+    # Check if boundary already exists (avoid duplicates)
+    existing_boundary = conn.execute(
+        "SELECT id FROM architecture_boundaries WHERE run_id = ? AND boundary_commit_topo_id = ?",
+        (run_id, trigger_topo),
+    ).fetchone()
+    
+    if existing_boundary:
+        # Update existing boundary (rare case)
+        conn.execute(
+            """UPDATE architecture_boundaries SET
+               cause_tag = ?, magnitude = ?
+               WHERE id = ?""",
+            (change_shape, magnitude, existing_boundary[0]),
+        )
+    else:
+        # Insert new boundary
+        conn.execute(
+            """INSERT INTO architecture_boundaries
+            (run_id, boundary_commit_sig, boundary_commit_topo_id,
+             cause_tag, magnitude, snapshot_count, structural_count, incremental_count,
+             repeated_treesig_count, dominant_share)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (run_id, trigger_hash[:7] if trigger_hash else None, trigger_topo,
+             change_shape, magnitude, 0, 0, 0, 0, 0.0),
+        )
+    
+    conn.commit()
+    conn.close()
+
+
 def write_state_pointer(repo_path: str, meta: dict) -> None:
     """Store the current blueprint state pointer in the DB.
 
