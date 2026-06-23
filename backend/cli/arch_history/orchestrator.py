@@ -297,7 +297,7 @@ def history_report_to_dict(report: HistoryReport) -> dict:
     )
     return asdict(report)
 
-def build_history_report(repo_label: str | None = None, debug: bool | None = None) -> HistoryReport:
+def build_history_report(repo_label: str | None = None, debug: bool | None = None, on_progress=None) -> HistoryReport:
     import os
     _debug = debug if debug is not None else os.environ.get("ARCH_DEBUG", "").strip() == "1"
 
@@ -315,8 +315,12 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     used_by_map, topo_by_commit_sig, ledger_rows = _load_used_by_map(repo_label)
 
     _dbg(f"ledger: {len(used_by_map)} unique TreeSigs (legacy ArchSig compatible), {len(topo_by_commit_sig)//2} commit signatures in topo map")
+    if on_progress:
+        on_progress("ledger_loaded", {"commit_count": len(ledger_rows)})
     era_by_sha, runs_by_sig = _compute_tree_sig_eras(ledger_rows)
     _dbg(f"eras: {sum(len(runs) for runs in runs_by_sig.values())} contiguous TreeSig eras across {len(ledger_rows)} ledger rows")
+    if on_progress:
+        on_progress("eras_computed", {"unique_sigs": len(runs_by_sig)})
 
     # Read current blueprint info from DB (primary) or root meta.json (fallback)
     current_meta: dict = {}
@@ -370,7 +374,9 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     max_gen = generations[-1][0] if generations else 0
 
     _dbg(f"snapshots: {len(snapshots)}  generations span: 1..{max_gen}")
-    for gen_num, snap, meta in generations:
+    for _loop_idx, (gen_num, snap, meta) in enumerate(generations):
+        if on_progress:
+            on_progress("building_entries", {"current": _loop_idx + 1, "total": len(generations)})
         sig = meta.get("tree_signature", snap.stem[len("arch-"):])
         shape = (meta.get("change_summary") or {}).get("change_shape", "unknown")
         _dbg(f"  snap [{gen_num}] {sig[:16]}... shape={shape} file={snap.name}")
@@ -530,6 +536,8 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
         )
 
     _assign_dominant_flags(entries_out)
+    if on_progress:
+        on_progress("computing_metrics", {})
 
     # Filter out zombie blueprints that have zero corresponding ledger history records
     entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
@@ -588,6 +596,27 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
 
     # Validate commit→snapshot invariant (warn by default, raise in debug mode).
     validate_commit_snapshot_invariant(report, debug=_debug)
+    if on_progress:
+        _latest_label = None
+        _latest_date = None
+        if generation_summaries:
+            _max_g = max(generation_summaries.keys())
+            _latest_s = generation_summaries.get(_max_g)
+            if _latest_s:
+                _latest_label = _latest_s.cause_label
+        if entries_out:
+            for _pe in reversed(entries_out):
+                if _pe.trigger and _pe.trigger.date:
+                    _latest_date = _pe.trigger.date
+                    break
+        on_progress("build_complete", {
+            "boundaries": max_gen,
+            "snapshots": len(entries_out),
+            "commits": real_commit_count,
+            "latest_boundary_label": _latest_label,
+            "latest_boundary_date": _latest_date,
+        })
+
     return report
 
 

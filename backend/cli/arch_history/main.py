@@ -141,7 +141,12 @@ def main(
         raise SystemExit("--llm-summarize is reserved for a later phase and is not implemented yet.")
 
     try:
-        report = build_history_report(repo_label, debug=debug)
+        if not json_mode:
+            from backend.cli.arch_history.ui.progress import render_progress
+            _progress_cb = render_progress
+        else:
+            _progress_cb = None
+        report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
         report = filter_history_report(
             report, since=since, until=until, generation=generation,
             snapshot_prefix=snapshot_prefix, commit_target=commit_target,
@@ -177,6 +182,11 @@ def main(
             report.generation_summaries = _compute_generation_summaries(report.entries) if report.entries else {}
             report.total_blueprints = len(report.entries)
             report.total_generations = len({e.generation for e in report.entries})
+        if _progress_cb and any([since, until, generation, snapshot_prefix, commit_target]):
+            _progress_cb("filter_applied", {
+                "since": since, "until": until, "generation": generation,
+                "snapshot": snapshot_prefix, "commit": commit_target,
+            })
     except ValueError as e:
         raise SystemExit(f"Invalid selector: {e}")
     except (AmbiguousSigError, UnknownSigError) as e:

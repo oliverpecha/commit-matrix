@@ -25,7 +25,9 @@ def render_summary(report: HistoryReport) -> None:
     print(f"   💾 Commits       {report.total_commits:<3}  (total repo history)")
     if 0 < _p_count < report.total_commits:
         _p_range_desc = f"#{max(_p_topos)} to #{min(_p_topos)}"
-        print(f"   📊 Processed     {_p_count:<3}  ({_p_range_desc})")
+        # Count includes both trigger and successive-use commits
+        _total_processed = len(getattr(report, 'processed_commits', []))
+        print(f"   📊 Processed     {_total_processed:<3}  ({_p_range_desc})")
     print(f"   📐 Snapshots     {report.total_blueprints:<3}  (architecture artifacts)")
     print(f"   🕰️  Boundaries    {report.total_generations:<3} (structural shifts)")
     try:
