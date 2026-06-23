@@ -59,22 +59,23 @@ class ArchitectureResolver:
             gen = 1
             established = True
             advanced = False
-            summary = "Initial architecture context set for subsequent commits in this run."
+            change_shape = "major:head"
+            summary = "Architecture Head established for this scan."
         elif sig == self.prev_signature:
             gen = self.prev_gen
             established = False
             advanced = False
-            summary = "Architecture context unchanged."
-        elif str(change_shape).startswith("major:"):
+            summary = "Architecture unchanged — same era."
+        elif str(change_shape).startswith("major:") or str(change_shape).startswith("multi-dir:"):
             gen = self.prev_gen + 1
             established = False
             advanced = True
-            summary = "Top-level structure changed; subsequent commits use updated architecture context."
+            summary = "New architectural boundary — structural shift detected."
         else:
             gen = self.prev_gen
             established = False
             advanced = False
-            summary = "Architecture context updated without starting a new generation."
+            summary = "Architecture updated — incremental change within current era."
 
         self.prev_signature = sig
         self.prev_gen = gen

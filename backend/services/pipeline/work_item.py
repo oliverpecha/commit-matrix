@@ -16,4 +16,5 @@ class CommitWorkItem:
     arch_context: str
     arch_tree_signature: str | None
     arch_gen: int | None
-    arch_meta: dict[str, Any]
+    arch_meta: dict[str, Any] | None = None
+    arch_change_shape: str | None = None
