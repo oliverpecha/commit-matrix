@@ -16,6 +16,7 @@ class ArchitectureState:
     established: bool
     advanced: bool
     available: bool
+    reappeared: bool = False
 
 
 class ArchitectureResolver:
@@ -24,6 +25,7 @@ class ArchitectureResolver:
         self.max_retries = max_retries
         self.prev_signature: str | None = None
         self.prev_gen = 0
+        self.seen_signatures: set[str] = set()
 
     def resolve_for_commit(self, commit_sha: str, topo_id: int | None = None) -> tuple[ArchitectureState, dict[str, Any]]:
         result = None
@@ -59,24 +61,35 @@ class ArchitectureResolver:
             gen = 1
             established = True
             advanced = False
+            reappeared = False
             change_shape = "major:head"
             summary = "Architecture Head established for this scan."
         elif sig == self.prev_signature:
             gen = self.prev_gen
             established = False
             advanced = False
+            reappeared = False
             summary = "Architecture unchanged — same era."
         elif str(change_shape).startswith("major:") or str(change_shape).startswith("multi-dir:"):
             gen = self.prev_gen + 1
             established = False
-            advanced = True
-            summary = "New architectural boundary — structural shift detected."
+            if sig in self.seen_signatures:
+                advanced = False
+                reappeared = True
+                summary = "Architecture signature reappeared — prior era resumed."
+            else:
+                advanced = True
+                reappeared = False
+                summary = "New architectural boundary — structural shift detected."
         else:
             gen = self.prev_gen
             established = False
             advanced = False
+            reappeared = False
             summary = "Architecture updated — incremental change within current era."
 
+        if sig:
+            self.seen_signatures.add(sig)
         self.prev_signature = sig
         self.prev_gen = gen
 
@@ -89,5 +102,6 @@ class ArchitectureResolver:
             established=established,
             advanced=advanced,
             available=True,
+            reappeared=reappeared,
         )
         return state, meta

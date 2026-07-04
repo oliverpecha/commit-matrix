@@ -93,7 +93,7 @@ def save_blueprint_and_meta(
         if sig_prefix and not tree_signature.startswith("git-error"):
             versions_dir = meta_path.parent / "past_blueprints"
             versions_dir.mkdir(exist_ok=True)
-            snapshot_path = versions_dir / f"arch-{sig_prefix}.md"
+            snapshot_path = versions_dir / f"arch_snapshot-{sig_prefix}.md"
             # .meta.json sidecar generation removed — DB is canonical (M1)
             if not snapshot_path.exists():
                 snapshot_path.write_text(content, encoding="utf-8")

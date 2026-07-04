@@ -17,10 +17,20 @@ from pathlib import Path
 from backend.services.db.schema import SCHEMA_SQL, SCHEMA_VERSION
 from backend.services.db.taxonomy_sync import sync_taxonomy
 
+def _latest_run_id(conn, repo_label: str):
+    """Return latest run_id for a repo_label, or None if none exist."""
+    row = conn.execute(
+        "SELECT run_id FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1",
+        (repo_label,),
+    ).fetchone()
+    return row[0] if row else None
+
+
+
 
 def _blueprint_hash(snapshot_sig: str, repo_label: str) -> str | None:
     prefix = snapshot_sig[:16]
-    md_path = Path("data") / repo_label / "past_blueprints" / f"arch-{prefix}.md"
+    md_path = Path("data") / repo_label / "past_blueprints" / f"arch_snapshot-{prefix}.md"
     if md_path.exists():
         return hashlib.sha256(md_path.read_bytes()).hexdigest()
     return None
@@ -28,7 +38,7 @@ def _blueprint_hash(snapshot_sig: str, repo_label: str) -> str | None:
 
 def _snapshot_path(snapshot_sig: str, repo_label: str) -> str:
     prefix = snapshot_sig[:16]
-    return f"data/{repo_label}/past_blueprints/arch-{prefix}.md"
+    return f"arch_snapshot-{prefix}.md"
 
 
 def _extract_commits(entry: dict, run_id: int) -> list[tuple]:
@@ -39,26 +49,26 @@ def _extract_commits(entry: dict, run_id: int) -> list[tuple]:
     if trigger:
         rows.append((
             run_id, sig, trigger.get("topo_id"), trigger.get("commit_sig"),
-            trigger.get("date"), trigger.get("subject"), "trigger",
+            trigger.get("date"), trigger.get("subject"), "trigger", None
         ))
 
     for ref in entry.get("also_used_by", []):
         rows.append((
             run_id, sig, ref.get("topo_id"), ref.get("commit_sig"),
-            ref.get("date"), ref.get("subject"), "also_used_by",
+            ref.get("date"), ref.get("subject"), "successive", None
         ))
 
     for ref in entry.get("successive_used_by", []):
         rows.append((
             run_id, sig, ref.get("topo_id"), ref.get("commit_sig"),
-            ref.get("date"), ref.get("subject"), "successive",
+            ref.get("date"), ref.get("subject"), "successive", None
         ))
 
-    for run_list in entry.get("reappeared_runs", []):
+    for run_idx, run_list in enumerate(entry.get("reappeared_runs", [])):
         for ref in run_list:
             rows.append((
                 run_id, sig, ref.get("topo_id"), ref.get("commit_sig"),
-                ref.get("date"), ref.get("subject"), "reappeared",
+                ref.get("date"), ref.get("subject"), "reappeared", run_idx
             ))
 
     return rows
@@ -141,7 +151,23 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
     # Insert snapshots + commits
     all_inserted_topos: set[int] = set()
 
-    for entry in payload.get("entries", []):
+    entries = payload.get("entries", [])
+    if entries:
+        sample = entries[0]
+        print(
+            "[arch-db] payload entries="
+            f"{len(entries)} sample_keys={sorted(sample.keys())} "
+            f"has_trigger={bool(sample.get('trigger'))} "
+            f"also_used_by={len(sample.get('also_used_by', []))} "
+            f"successive_used_by={len(sample.get('successive_used_by', []))} "
+            f"reappeared_runs={len(sample.get('reappeared_runs', []))}",
+            file=sys.stderr,
+            flush=True,
+        )
+    else:
+        print("[arch-db] payload entries=0", file=sys.stderr, flush=True)
+
+    for entry in entries:
         flags = entry.get("flags", {})
         dom = entry.get("dominance_metrics") or {}
         life = entry.get("lifespan_metrics") or {}
@@ -185,8 +211,8 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
         commit_rows = _extract_commits(entry, run_id)
         conn.executemany(
             """INSERT INTO architecture_commits
-            (run_id, snapshot_sig, topo_id, commit_sig, date, subject, role)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (run_id, snapshot_sig, topo_id, commit_sig, date, subject, role, run_index)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             commit_rows,
         )
         for row in commit_rows:
@@ -233,6 +259,11 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
     ledger_path = Path("data") / repo_label / f"{repo_label}_ledger_cirsd.csv"
     unmapped_count = 0
     if ledger_path.exists():
+        print(
+            f"[arch-db] inserted snapshot-linked topo count={len(all_inserted_topos)} min={min(all_inserted_topos) if all_inserted_topos else None} max={max(all_inserted_topos) if all_inserted_topos else None}",
+            file=sys.stderr,
+            flush=True,
+        )
         with open(ledger_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -353,7 +384,7 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 run_id, snapshot_sig,
-                f"data/{repo_label}/past_blueprints/arch-{prefix}.md",
+                f"arch_snapshot-{prefix}.md",
                 shape, human_shape_label(shape),
                 meta.get("generator_version", "unknown"),
                 mode, "programmatic",
@@ -365,6 +396,8 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
         )
 
     # Also insert the trigger commit if we have commit_sha
+    # Note: Phase 2A (write_commit_relationships) will write this row during pipeline teardown.
+    # This fallback only fires when called outside a full pipeline run (e.g. arch_builder standalone).
     commit_sha = meta.get("commit_sha", "")
     topo_id = meta.get("topo_id")
     if commit_sha:
@@ -384,84 +417,120 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
     conn.close()
 
 
-def write_boundary_state(repo_label: str, trigger_topo: int, trigger_hash: str,
-                         change_shape: str, mode: str, db_path: str) -> None:
-    """Write an architectural boundary detection to the DB immediately.
-    
-    Called by commit_pipeline when arch_state.advanced=True (boundary detected).
-    Creates minimal boundary record; full metrics populated later by CLI run.
-    """
-    import json as _json
-    from datetime import datetime, UTC
-    
-    db = Path(db_path)
-    db.parent.mkdir(parents=True, exist_ok=True)
-    
-    conn = sqlite3.connect(str(db))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.executescript(SCHEMA_SQL)
-    
-    conn.execute(
-        "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",
-        ("schema_version", str(SCHEMA_VERSION)),
-    )
-    sync_taxonomy(conn)
-    
-    # Get or create run_id
-    existing = conn.execute(
-        "SELECT run_id FROM architecture_runs WHERE repo_label = ? LIMIT 1",
-        (repo_label,),
-    ).fetchone()
-    
-    if existing:
-        run_id = existing[0]
-    else:
-        now = datetime.now(UTC).isoformat()
-        cur = conn.execute(
-            """INSERT INTO architecture_runs
-            (repo_label, generated_at, contract_version, computation_version,
-             last_recomputed_at)
-            VALUES (?, ?, ?, 1, ?)""",
-            (repo_label, now, "1.0", now),
-        )
-        run_id = cur.lastrowid
-    
-    # Determine magnitude from change_shape
-    if str(change_shape).startswith("major:"):
-        magnitude = "major"
-    elif str(change_shape).startswith("multi-dir:"):
-        magnitude = "multi-dir"
-    else:
-        magnitude = "minor"
-    
-    # Check if boundary already exists (avoid duplicates)
-    existing_boundary = conn.execute(
-        "SELECT id FROM architecture_boundaries WHERE run_id = ? AND boundary_commit_topo_id = ?",
-        (run_id, trigger_topo),
-    ).fetchone()
-    
-    if existing_boundary:
-        # Update existing boundary (rare case)
+def write_commit_relationships(db_path, run_id, snapshot_commits):
+    # Write all commit->snapshot relationships accumulated during a pipeline scan.
+    # snapshot_commits keys are (snapshot_sig, gen) tuples.
+    # Each value is a list of dicts:
+    #   {topo_id: int, commit_hash: str, reappeared: bool}
+    # Returns count of rows inserted/updated.
+    import sqlite3
+    import sys as _sys
+    written = 0
+    with sqlite3.connect(db_path) as conn:
+        conn.execute('PRAGMA journal_mode=WAL')
+        # Phase 2A owns the full commit graph — wipe all prior rows for this run
+        # (write_snapshot_meta may have inserted partial trigger rows during scan)
         conn.execute(
-            """UPDATE architecture_boundaries SET
-               cause_tag = ?, magnitude = ?
-               WHERE id = ?""",
-            (change_shape, magnitude, existing_boundary[0]),
+            "DELETE FROM architecture_commits WHERE run_id=?",
+            (run_id,),
         )
-    else:
-        # Insert new boundary
-        conn.execute(
-            """INSERT INTO architecture_boundaries
-            (run_id, boundary_commit_sig, boundary_commit_topo_id,
-             cause_tag, magnitude, snapshot_count, structural_count, incremental_count,
-             repeated_treesig_count, dominant_share)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (run_id, trigger_hash[:7] if trigger_hash else None, trigger_topo,
-             change_shape, magnitude, 0, 0, 0, 0, 0.0),
-        )
-    
-    conn.commit()
-    conn.close()
+        _role_counts = {"trigger": 0, "successive": 0, "reappeared": 0}
+        for (snapshot_sig, gen), commits in snapshot_commits.items():
+            ordered = sorted(
+                commits,
+                key=lambda x: (
+                    x.get('topo_id') is None,
+                    x.get('topo_id') if x.get('topo_id') is not None else 10**9,
+                ),
+            )
+            print(
+                f"[arch-db] relationship bucket sig={snapshot_sig[:12]} gen={gen} size={len(ordered)}",
+                file=_sys.stderr,
+            )
+            for idx, entry in enumerate(ordered):
+                topo_id = entry.get('topo_id')
+                commit_sig = (entry.get('commit_hash') or '')[:7]
+                is_reappeared = bool(entry.get('reappeared', False))
+                if idx == 0:
+                    role = 'trigger'
+                elif is_reappeared:
+                    role = 'reappeared'
+                else:
+                    role = 'successive'
+                _role_counts[role] += 1
+
+                existing = conn.execute(
+                    'SELECT id FROM architecture_commits '
+                    'WHERE run_id=? AND commit_sig=? AND snapshot_sig=?',
+                    (run_id, commit_sig, snapshot_sig),
+                ).fetchone()
+                if existing:
+                    conn.execute(
+                        'UPDATE architecture_commits SET role=?, topo_id=? WHERE id=?',
+                        (role, topo_id, existing[0]),
+                    )
+                else:
+                    conn.execute(
+                        'INSERT INTO architecture_commits '
+                        '(run_id, snapshot_sig, topo_id, commit_sig, role) '
+                        'VALUES (?,?,?,?,?)',
+                        (run_id, snapshot_sig, topo_id, commit_sig, role),
+                    )
+                written += 1
+        conn.commit()
+        print(f"[arch-db] relationship role counts: {_role_counts}", file=_sys.stderr)
+    return written
+
+
+def update_generation_summary(db_path, run_id, gen_stats, snapshot_commits, gen_boundaries):
+    # Update architecture_boundaries with real Phase 2B metrics keyed by boundary_commit_topo_id.
+    import sqlite3
+    with sqlite3.connect(db_path) as conn:
+        for gen, stats in gen_stats.items():
+            boundary_topo = gen_boundaries.get(gen)
+            if boundary_topo is None:
+                continue
+
+            structural_count = stats.get("structural_count", 0)
+            incremental_count = stats.get("incremental_count", 0)
+            snapshot_count = len(stats.get("snapshot_sigs", set()))
+            dominant_snapshot_sig = None
+            dominant_count = -1
+
+            for (sig, sig_gen), commits in snapshot_commits.items():
+                if sig_gen != gen:
+                    continue
+                commit_count = len(commits)
+                if commit_count > dominant_count:
+                    dominant_count = commit_count
+                    dominant_snapshot_sig = sig
+
+            cur = conn.execute(
+                """UPDATE architecture_boundaries
+                   SET structural_count = ?,
+                       incremental_count = ?,
+                       snapshot_count = ?,
+                       dominant_snapshot_sig = ?,
+                       distinct_commit_count = ?
+                   WHERE run_id = ? AND boundary_commit_topo_id = ?""",
+                (
+                    structural_count,
+                    incremental_count,
+                    snapshot_count,
+                    dominant_snapshot_sig,
+                    structural_count + incremental_count,
+                    run_id,
+                    boundary_topo,
+                ),
+            )
+            import sys as _sys
+            print(
+                f"[arch] generation summary update gen={gen} topo={boundary_topo} rows={cur.rowcount}",
+                file=_sys.stderr,
+            )
+        conn.commit()
+
+
 
 
 def write_state_pointer(repo_path: str, meta: dict) -> None:
