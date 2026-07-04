@@ -5,14 +5,20 @@ Architecture Blueprint history utility.
 
 import json
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+# DB-first history loader is now the default. Legacy filesystem reconstruction
+# is available only when MATRIX_LEGACY_HISTORY is set.
+USE_DB_HISTORY = True
+USE_LEGACY_HISTORY = bool(os.environ.get("MATRIX_LEGACY_HISTORY", "").strip())
 
 from backend.cli.arch_history.orchestrator import (
     build_history_report,
     filter_history_report,
     serialize_history_report_to_contract,
+    load_history_report_from_db,
 )
 from backend.cli.arch_history.ui.render import render_history_report
 from backend.cli.arch_history.arch_selectors import AmbiguousSigError, UnknownSigError
@@ -146,7 +152,23 @@ def main(
             _progress_cb = render_progress
         else:
             _progress_cb = None
-        report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
+        if USE_LEGACY_HISTORY:
+            # Legacy builder path (CSV/filesystem reconstruction)
+            report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
+        else:
+            # DB-first history loader (default)
+            try:
+                report = load_history_report_from_db(repo_label, db_path=db_path)
+            except RuntimeError as e:
+                msg = str(e)
+                if "No commit_matrix.db found" in msg:
+                    print(
+                        "\n  No architecture runs are available yet; "
+                        "run `commit-matrix .` to populate the database,\n"
+                        "  or `arch-history --help` for usage details.\n"
+                    )
+                    return
+                raise
         report = filter_history_report(
             report, since=since, until=until, generation=generation,
             snapshot_prefix=snapshot_prefix, commit_target=commit_target,
@@ -210,18 +232,11 @@ def main(
                 for entry in payload["entries"]
             ]
         print(json.dumps(payload, indent=2, ensure_ascii=False))
-        # Always persist to DB
-        from backend.services.db.writer import write_architecture_run
-        resolved_db = db_path or f"data/{report.repo_label}/commit_matrix.db"
-        write_architecture_run(resolved_db, payload)
+        # JSON mode is strictly read-only; no DB writes here.
         return
 
-    # Always persist to DB
-    from backend.services.db.writer import write_architecture_run
-    from backend.cli.arch_history.orchestrator import serialize_history_report_to_contract as _ser
-    _db_path = db_path or f"data/{report.repo_label}/commit_matrix.db"
-    write_architecture_run(_db_path, _ser(report))
-
+    # arch-history default path is now read-only; DB rebuild is reserved for a separate maintenance tool.
+    # If a rebuild mode is added later, it should live in a distinct command and never run on simple view invocations.
     render_history_report(
         report, reverse=reverse, compact=compact, show_operational=show_operational,
         since=since, until=until, generation=generation, snapshot_prefix=snapshot_prefix,

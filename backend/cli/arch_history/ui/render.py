@@ -15,6 +15,10 @@ def render_summary(report: HistoryReport) -> None:
     print()
     print("   Summary")
     print(f"   {'─' * 83}")
+    # Safeguard against None totals in DB-first reports.
+    total_commits = report.total_commits or 0
+    total_blueprints = report.total_blueprints or 0
+    total_generations = report.total_generations or 0
     _p_topos = [e.trigger.topo_id for e in report.entries if e.trigger and e.trigger.topo_id is not None]
     if _p_topos:
         _p_range = f"#{min(_p_topos)}-#{max(_p_topos)}"
@@ -22,14 +26,14 @@ def render_summary(report: HistoryReport) -> None:
     else:
         _p_range = "none"
         _p_count = 0
-    print(f"   💾 Commits       {report.total_commits:<3}  (total repo history)")
-    if 0 < _p_count < report.total_commits:
+    print(f"   💾 Commits       {total_commits:<3}  (total repo history)")
+    if 0 < _p_count < total_commits:
         _p_range_desc = f"#{max(_p_topos)} to #{min(_p_topos)}"
         # Count includes both trigger and successive-use commits
         _total_processed = len(getattr(report, 'processed_commits', []))
         print(f"   📊 Processed     {_total_processed:<3}  ({_p_range_desc})")
-    print(f"   📐 Snapshots     {report.total_blueprints:<3}  (architecture artifacts)")
-    print(f"   🕰️  Boundaries    {report.total_generations:<3} (structural shifts)")
+    print(f"   📐 Snapshots     {total_blueprints:<3}  (architecture artifacts)")
+    print(f"   🕰️  Boundaries    {total_generations:<3} (structural shifts)")
     try:
         from backend.services.db.reader import read_vacuums
         _vacs = read_vacuums(report.repo_label)
@@ -85,6 +89,7 @@ def _render_era_panel(report: HistoryReport, generation: int, compact: bool = Fa
             ) and head_shape != "major:head"
 
     panel_width = 56
+    dash_char = '\u2500'
 
     # Build title and top border line
     if is_head_era:
@@ -103,7 +108,8 @@ def _render_era_panel(report: HistoryReport, generation: int, compact: bool = Fa
 
     if summary is None:
         print(top_line)
-        print(f" \u2502  \u2514{'\u2500' * panel_width}\u2518\n \u2502")
+        dash = '\u2500'
+        print(f" \u2502  \u2514{dash_char * panel_width}\u2518")
         return
 
     def row(label: str, value: str) -> None:
@@ -123,7 +129,9 @@ def _render_era_panel(report: HistoryReport, generation: int, compact: bool = Fa
     cause_emoji = _cause_icon(summary.cause_tag)
 
     era_share_pct = int(round(summary.dominant_share_of_generation * 100)) if summary.dominant_share_of_generation > 0 else 0
-    repo_share_pct = int(round((summary.generation_distinct_commit_count / report.total_commits) * 100)) if report.total_commits > 0 else 0
+    # Safeguard against None total_commits in DB-first reports.
+    total_commits = report.total_commits or 0
+    repo_share_pct = int(round((summary.generation_distinct_commit_count / total_commits) * 100)) if total_commits > 0 else 0
 
     def structural_mix_value() -> str:
         parts = []
@@ -146,39 +154,44 @@ def _render_era_panel(report: HistoryReport, generation: int, compact: bool = Fa
     row("Lifespan", f"{summary.dominant_effective_commits} commits")
     if summary.repeated_treesig_count:
         row("Repeated TreeSigs", str(summary.repeated_treesig_count))
-    print(f" \u2502  \u2514{'\u2500' * panel_width}\u2518")
+    print(f" \u2502  \u2514{dash_char * panel_width}\u2518")
     print(" \u2502")
 
 
 def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, markers: TimelineMarkers) -> None:
-    # HEAD snapshot uses line chars instead of emoji
-    if entry.shape == "major:head":
-        icon = "──"
-        icon_pad = ""  # no space before ── (connects to ├)
-    else:
-        icon = shape_icon(entry.shape) or _shape_icon_fallback(entry.shape)
-        if icon == "•": icon = _shape_icon_fallback(entry.shape)
-        icon_pad = " "  # space before emoji
-    badges = []
-    if entry.dominance:
-        if entry.dominance.is_dominant: badges.append("[dominant]")
-    if entry.lifespan and entry.lifespan.run_count > 1: badges.append("[reappeared]")
+    from backend.cli.arch_history.taxonomy import get_shape_metadata
     
-    # Build clean string sequence to prevent dangling middle dot formatting noise
+    raw_shape = entry.shape or ""
+    meta = get_shape_metadata(raw_shape)
+    
+    if raw_shape == "major:head":
+        icon = "──"
+        icon_pad = ""
+    else:
+        icon = meta.get("icon", "•")
+        icon_pad = " "
+
+    badges = []
+    if entry.dominance and entry.dominance.is_dominant:
+        badges.append("[dominant]")
+    if entry.lifespan and entry.lifespan.run_count > 1:
+        badges.append("[reappeared]")
+
     badge_str = f" · {' · '.join(badges)}" if badges else ""
     if entry.is_current:
-        badge_str += "             ← [CURRENT]"
-        
+        badge_str += "            ← [CURRENT]"
+
     marker = markers.get_snapshot_marker(entry.trigger.topo_id) if entry.trigger else ""
-    print(f" {branch}{icon_pad}{icon} {entry.snapshot_sig[:24]:<26} [{entry.shape_label or entry.shape or 'unknown'}]{badge_str}{marker}")
+    
+    display_label = entry.shape_label or meta.get("label", raw_shape or "unknown")
+    
+    print(f" {branch}{icon_pad}{icon} {entry.snapshot_sig[:24]:<26} [{display_label}]{badge_str}{marker}")
+
     if entry.lifespan:
-        # Determine classification label to print inline with raw lifespan analytics
         life_label = ""
         if entry.dominance and not entry.is_current:
-            if entry.dominance.is_long_lived:
-                life_label = " [long-lived]"
-            elif entry.dominance.is_short_lived:
-                life_label = " [short-lived]"
+            if entry.dominance.is_long_lived: life_label = " [long-lived]"
+            elif entry.dominance.is_short_lived: life_label = " [short-lived]"
 
         if entry.lifespan.run_count <= 1:
             print(f" {trunk}   ├- Lifespan: {entry.lifespan.total_commits} commit{'s' if entry.lifespan.total_commits != 1 else ''} · {_format_lifespan_date_span(entry.lifespan.first_seen_date, entry.lifespan.last_seen_date)}{life_label}")
@@ -243,11 +256,25 @@ def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | No
     _render_lifespan_and_badges(entry, b, t, markers)
     _render_trigger(entry, t, markers)
     _render_also_used(entry, t, show_op, compact, reverse, markers)
-    print(f" {t}   └ Details: {entry.generator_version} · {entry.mode} · {entry.selected_files}/{entry.total_files} files · {entry.size_bytes}B" if compact else f" {t}   ├- Details: {entry.generator_version} · {entry.mode} · sampled {entry.selected_files} of {entry.total_files} files\n {t}   └- Debug: generated {entry.generated_at}{f' · validation={entry.mode.split("-")[-1]}' if "-" in entry.mode else ''} · {entry.size_bytes}B")
+    import os
+    is_debug = str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes", "on")
+    if compact:
+        print(f" {t}   └ Details: {entry.generator_version} · {entry.mode} · {entry.selected_files}/{entry.total_files} files · {entry.size_bytes}B")
+    else:
+        if is_debug:
+            print(f" {t}   ├- Details: {entry.generator_version} · {entry.mode} · sampled {entry.selected_files} of {entry.total_files} files")
+            val_mode = f' · validation={entry.mode.split("-")[-1]}' if '-' in entry.mode else ''
+            print(f' {t}   └- Debug: generated {entry.generated_at}{val_mode} · {entry.size_bytes}B')
+        else:
+            # Cap the branch visually if Debug is suppressed
+            print(f" {t}   └ Details: {entry.generator_version} · {entry.mode} · sampled {entry.selected_files} of {entry.total_files} files")
     return open_g
 
 def render_history_report(report: HistoryReport, reverse: bool = False, compact: bool = False, show_operational: bool = True, since: str | None = None, until: str | None = None, generation: str | None = None, snapshot_prefix: str | None = None, commit_target: str | None = None, smart_target: str | None = None, only_reappeared: bool = False) -> None:
-    if report.total_blueprints == 0 and report.total_commits == 0:
+    # Safeguard totals for DB-first reports; treat None as 0 for summary purposes.
+    total_blueprints = report.total_blueprints or 0
+    total_commits = report.total_commits or 0
+    if total_blueprints == 0 and total_commits == 0:
         print("\n  (no snapshot files found)\n")
         return
     markers = TimelineMarkers(report, commit_target=commit_target, snapshot_prefix=snapshot_prefix, smart_target=smart_target, since=since, until=until)

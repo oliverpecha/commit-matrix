@@ -289,6 +289,7 @@ def history_report_to_dict(report: HistoryReport) -> dict:
     guarantees.  Scheduled for removal once all consumers migrate to C1.
     """
     import warnings
+    # Suppress if Phase 2A has written full commit coverage (unmapped count will be 0)
     warnings.warn(
         "history_report_to_dict() is deprecated; "
         "use serialize_history_report_to_contract()",
@@ -325,13 +326,20 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     # Read current blueprint info from DB (primary) or root meta.json (fallback)
     current_meta: dict = {}
     try:
-        from backend.services.db.reader import load_all_snapshot_meta
-        db_meta = load_all_snapshot_meta(repo_label)
-        if db_meta:
-            # Find the snapshot marked as current, or use the most recent
-            for prefix, meta in db_meta.items():
-                current_meta = meta  # last one wins (they're ordered by insertion)
-    except Exception:
+        import sqlite3
+        db_path = Path("data") / repo_label / "commit_matrix.db"
+        if db_path.exists():
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                # Select the snapshot matching the highest topological commit ID
+                res = conn.execute("""
+                    SELECT snapshot_sig, shape, shape_label, generator_version, mode, selected_files, total_files, size_bytes, generated_at 
+                    FROM architecture_snapshots 
+                    ORDER BY topo_id DESC LIMIT 1
+                """).fetchone()
+                if res:
+                    current_meta = dict(res)
+    except Exception as e:
         pass
 
     if not current_meta and meta_path.exists():
@@ -388,191 +396,106 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
             if sha:
                 all_used_commits.add(sha)
 
-    entries_out: list[SnapshotEntry] = []
-
+    snapshot_metas = {}
     for gen_num, snap, meta in generations:
         sig = meta.get("tree_signature", snap.stem[len("arch-"):])
-        shape = (meta.get("change_summary") or {}).get("change_shape", "—")
-        mode = (meta.get("change_summary") or {}).get("mode", "—")
-        generated_at = meta.get("generated_at", "—")[:19].replace("T", " ")
-        size = snap.stat().st_size
-
-        is_current = bool(
+        normalized_meta = dict(meta)
+        normalized_meta["shape"] = (meta.get("change_summary") or {}).get("change_shape", "—")
+        normalized_meta["mode"] = _display_mode((meta.get("change_summary") or {}).get("mode", "—"))
+        if "generated_at" in meta:
+            normalized_meta["generated_at"] = meta["generated_at"][:19].replace("T", " ")
+        normalized_meta["size_bytes"] = snap.stat().st_size
+        normalized_meta["selected_files"] = (meta.get("change_summary") or {}).get("selected_files_count", "—")
+        normalized_meta["total_files"] = (meta.get("change_summary") or {}).get("total_files", "—")
+        
+        normalized_meta["is_current"] = bool(
             current.snapshot_sig and (
                 current.snapshot_sig == sig
                 or current.snapshot_sig.startswith(sig[:16])
                 or sig.startswith(current.snapshot_sig[:16])
             )
         )
+        normalized_meta["shape_label"] = (
+            meta.get("shape_label") 
+            or (meta.get("change_summary") or {}).get("change_shape_label") 
+            or human_shape_label(normalized_meta["shape"])
+        )
+        snapshot_metas[sig] = normalized_meta
 
-        _dbg(f"\n  --- building entry gen={gen_num} sig={sig[:16]}... shape={shape}")
-
-        all_used_rows = used_by_map.get(sig, [])
-        _dbg(f"      ledger rows for sig: {len(all_used_rows)}")
-        for r in all_used_rows:
-            _dbg(f"        topo={r.get('topo_id')} sha={r.get('sha','')[:7]} subj={r.get('subject','')[:50]}")
-
-        cleaned_rows: list[dict] = []
-        seen_shas: set[str] = set()
+    from backend.cli.arch_history.data.normalize import NormalizedCommitRow
+    commit_rows_by_snapshot: dict[str, list[NormalizedCommitRow]] = {}
+    
+    for sig, all_used_rows in used_by_map.items():
+        cleaned_rows = []
+        seen_shas = set()
         for row in all_used_rows:
-            subj = row.get("subject") or ""
             sha_full = (row.get("sha") or "").strip()
             sha7 = sha_full[:7]
             if not sha7 or sha7 in seen_shas:
-                _dbg(f"        skip sha={sha7} (dup={sha7 in seen_shas})")
                 continue
             seen_shas.add(sha7)
-            row = dict(row)
-            row["is_operational"] = _is_operational(subj)
-            if row["is_operational"]:
-                _dbg(f"        operational sha={sha7} subj={subj[:60]}")
-            cleaned_rows.append(row)
-
-        _dbg(f"      cleaned rows: {len(cleaned_rows)}")
-
-        for row in cleaned_rows:
-            sha_full = (row.get("sha") or "").strip()
-            row["era_index"] = era_by_sha.get(sha_full) or era_by_sha.get(sha_full[:7]) or 1
+            cleaned_rows.append(dict(row))
 
         trigger_row = None
         if cleaned_rows:
             rows_with_topo = [r for r in cleaned_rows if isinstance(r.get("topo_id"), int)]
             trigger_row = min(rows_with_topo, key=lambda r: r["topo_id"]) if rows_with_topo else cleaned_rows[0]
-            _dbg(
-                f"      trigger_row: topo={trigger_row.get('topo_id')} "
-                f"sha={trigger_row.get('sha','')[:7]} "
-                f"subj={trigger_row.get('subject','')[:50]}"
-            )
-        else:
-            _dbg("      no cleaned_rows — trigger unavailable")
 
-        trigger = _resolve_commit_ref(repo_path, trigger_row, topo_by_commit_sig) if trigger_row else None
-
-        also_used_by: list[CommitRef] = []
-        successive_used_by: list[CommitRef] = []
-        reappeared_runs: list[list[CommitRef]] = []
-
+        trigger_sha = (trigger_row.get("sha") or "").strip() if trigger_row else None
         runs = runs_by_sig.get(sig, [])
-        trigger_sha = ((trigger_row or {}).get("sha") or "").strip()
-        matched_run_index = None
-        current_run_rows: list[dict] = []
 
+        matched_run_index = None
+        current_run_rows = []
         for idx, run in enumerate(runs):
-            if any(((row.get("sha") or "").strip() == trigger_sha) for row in run):
+            if any(((r.get("sha") or "").strip() == trigger_sha) for r in run):
                 matched_run_index = idx
                 current_run_rows = run
                 break
 
-        if trigger_row:
-            for row in cleaned_rows:
-                if row is trigger_row:
+        successive_shas = set()
+        if current_run_rows:
+            seen_trigger = False
+            for row in current_run_rows:
+                sha = (row.get("sha") or "").strip()
+                if sha == trigger_sha:
+                    seen_trigger = True
                     continue
-                ref = _resolve_commit_ref(repo_path, row, topo_by_commit_sig)
-                _dbg(f"      also_used: topo={ref.topo_id} sig={ref.commit_sig} subj={ref.subject[:50]}")
-                also_used_by.append(ref)
+                if seen_trigger:
+                    successive_shas.add(sha)
 
-            if current_run_rows:
-                seen_trigger = False
-                for row in current_run_rows:
-                    sha = (row.get("sha") or "").strip()
-                    if sha == trigger_sha:
-                        seen_trigger = True
-                        continue
-                    if seen_trigger:
-                        successive_used_by.append(_resolve_commit_ref(repo_path, row, topo_by_commit_sig))
+        reappeared_runs_shas = []
+        if matched_run_index is not None:
+            for run in runs[matched_run_index + 1:]:
+                run_shas = [(r.get("sha") or "").strip() for r in run if (r.get("sha") or "").strip()]
+                if run_shas:
+                    reappeared_runs_shas.append(run_shas)
 
-            if matched_run_index is not None:
-                for run in runs[matched_run_index + 1:]:
-                    run_refs = [
-                        _resolve_commit_ref(repo_path, row, topo_by_commit_sig)
-                        for row in run
-                        if (row.get("sha") or "").strip()
-                    ]
-                    if run_refs:
-                        reappeared_runs.append(run_refs)
+        norm_rows = []
+        for row in cleaned_rows:
+            sha = (row.get("sha") or "").strip()
+            role = "unmapped"
+            run_index = None
 
-        entries_out.append(
-            SnapshotEntry(
-                generation=gen_num,
-                generation_index=0,
-                snapshot_sig=sig,
-                shape=shape,
-                generator_version=meta.get("generator_version", "—"),
-                mode=_display_mode(mode),
-                generated_at=generated_at,
-                size_bytes=size,
-                selected_files=(meta.get("change_summary") or {}).get("selected_files_count", "—"),
-                total_files=(meta.get("change_summary") or {}).get("total_files", "—"),
-                trigger=trigger,
-                also_used_by=also_used_by,
-                successive_used_by=successive_used_by,
-                reappeared_runs=reappeared_runs,
-                is_current=is_current,
-                shape_label=meta.get("shape_label")
-                or (meta.get("change_summary") or {}).get("change_shape_label")
-                or human_shape_label(shape),
-            )
-        )
+            if sha == trigger_sha:
+                role = "trigger"
+            elif sha in successive_shas:
+                role = "successive"
+            else:
+                for idx, run_shas in enumerate(reappeared_runs_shas):
+                    if sha in run_shas:
+                        role = "reappeared"
+                        run_index = idx
+                        break
 
-    entries_out = _reanchor_reuse_by_signature(entries_out)
-    entries_out = _reassign_generations(entries_out)
-    max_gen = entries_out[-1].generation if entries_out else 0
-
-    for entry in entries_out:
-        entry.lifespan = _compute_snapshot_lifespan_metrics(entry)
-        entry.composition = _compute_snapshot_composition_metrics(entry)
-
-    generation_effective_totals: dict[int, int] = {}
-    for entry in entries_out:
-        if entry.lifespan is None or entry.composition is None:
-            raise ValueError("snapshot metrics missing before dominance pass")
-        effective = max(0, entry.lifespan.total_commits - entry.composition.operational_commit_count)
-        generation_effective_totals[entry.generation] = generation_effective_totals.get(entry.generation, 0) + effective
-
-    for entry in entries_out:
-        entry.dominance = _compute_snapshot_dominance_metrics(
-            entry,
-            generation_effective_total=generation_effective_totals.get(entry.generation, 0),
-        )
-
-    _assign_dominant_flags(entries_out)
-    if on_progress:
-        on_progress("computing_metrics", {})
-
-    # Filter out zombie blueprints that have zero corresponding ledger history records
-    entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
-
-    # Filter out zombie blueprints that have zero corresponding ledger history records
-    entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
-
-    generation_summaries = _compute_generation_summaries(entries_out)
-    topo_ids = [e.trigger.topo_id for e in entries_out if e.trigger and e.trigger.topo_id is not None]
-    if topo_ids:
-        _dbg(
-            f"\n  coverage: {len(entries_out)} entries, topo range {min(topo_ids)}..{max(topo_ids)}"
-        )
-    else:
-        _dbg("\n  coverage: no topo ids present on final entries")
-
-    gen_sizes: dict[int, int] = {}
-    for e in entries_out:
-        gen_sizes[e.generation] = gen_sizes.get(e.generation, 0) + 1
-    _dbg(f"  generation sizes: {gen_sizes}")
-
-    _dbg(f"\n  total entries built: {len(entries_out)}")
-    for entry in entries_out:
-        topo = entry.trigger.topo_id if entry.trigger else None
-        reuse_topos = [ref.topo_id for ref in entry.also_used_by if ref.topo_id is not None]
-        dom = entry.dominance
-        life = entry.lifespan
-        comp = entry.composition
-        _dbg(
-            f"  final entry gen={entry.generation} topo={topo} "
-            f"sig={entry.snapshot_sig[:16]}... shape={entry.shape} reuse={reuse_topos} "
-            f"runs={life.run_count if life else '?'} total={life.total_commits if life else '?'} "
-            f"op={comp.operational_commit_count if comp else '?'} "
-            f"eff={dom.effective_commits if dom else '?'} dominant={dom.is_dominant if dom else '?'}"
-        )
+            norm_rows.append({
+                "sha": sha,
+                "subject": row.get("subject") or "",
+                "topo_id": row.get("topo_id"),
+                "date": row.get("date"),
+                "role": role,
+                "run_index": run_index
+            })
+        commit_rows_by_snapshot[sig] = norm_rows
 
     try:
         import subprocess
@@ -583,17 +506,19 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
         print(f"[arch-history debug] git total graph count failed: {e}")
         real_commit_count = len(all_used_commits)
 
-    report = HistoryReport(
+    report = assemble_history_report(
         repo_label=repo_label,
         repo_display=repo_display,
-        total_commits=real_commit_count,
-        total_blueprints=len(snapshots),
-        total_generations=max_gen,
         current=current,
-        entries=entries_out,
-        generation_summaries=generation_summaries,
+        snapshot_metas=snapshot_metas,
+        commit_rows_by_snapshot=commit_rows_by_snapshot,
+        runs_by_sig=runs_by_sig,
+        real_commit_count=real_commit_count,
     )
 
+    entries_out = report.entries
+    max_gen = report.total_generations
+    generation_summaries = report.generation_summaries
     # Validate commit→snapshot invariant (warn by default, raise in debug mode).
     validate_commit_snapshot_invariant(report, debug=_debug)
     if on_progress:
@@ -950,3 +875,203 @@ def serialize_history_report_to_contract(report: HistoryReport) -> dict:
         })(),
     }
 
+
+
+def load_history_report_from_db(repo_path: str, db_path: str | None = None):
+    """Load architecture history report from SQLite for arch-history CLI.
+
+    This is the DB-first replacement for build_history_report() in the Option A
+    design. It uses architecture_runs, architecture_boundaries, architecture_snapshots,
+    and architecture_commits as the primary source of truth.
+
+    For now, it returns a simple dict; later it can be upgraded to structured
+    dataclasses used by the renderer.
+    """
+    import sqlite3
+    from backend.services.architecture.arch_storage import repo_id_from_path
+
+    repo_label = repo_id_from_path(repo_path)
+    if db_path is None:
+        db = Path("data") / repo_label / "commit_matrix.db"
+    else:
+        db = Path(db_path)
+
+    if not db.exists():
+        raise RuntimeError(f"No commit_matrix.db found for repo_label={repo_label} at {db}")
+
+    with sqlite3.connect(str(db)) as conn:
+        conn.row_factory = sqlite3.Row
+
+        run_row = conn.execute(
+            "SELECT run_id, repo_label, repo_display, generated_at, total_commits, total_blueprints, total_generations "
+            "FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1",
+            (repo_label,),
+        ).fetchone()
+
+        if not run_row:
+            raise RuntimeError(f"No architecture_runs row found for repo_label={repo_label}")
+        run_row_dict = dict(run_row)
+
+        run_id = run_row["run_id"]
+
+        boundaries = conn.execute(
+            "SELECT boundary_commit_topo_id, boundary_commit_sig, cause_tag, magnitude, "
+            "       snapshot_count, structural_count, incremental_count, distinct_commit_count, "
+            "       dominant_snapshot_sig "
+            "FROM architecture_boundaries "
+            "WHERE run_id = ? "
+            "ORDER BY boundary_commit_topo_id",
+            (run_id,),
+        ).fetchall()
+
+        snapshots = conn.execute(
+            "SELECT snapshot_sig, boundary_commit_sig, shape, shape_label, "
+            "       is_current, is_dominant, lifespan_class, "
+            "       total_commits, run_count, first_seen_topo_id, last_seen_topo_id, "
+            "       first_seen_date, last_seen_date, longest_streak, "
+            "       successive_commit_count, reappeared_commit_count, "
+            "       operational_commit_count, development_commit_count, "
+            "       effective_commits, share_of_generation "
+            "FROM architecture_snapshots "
+            "WHERE run_id = ?",
+            (run_id,),
+        ).fetchall()
+
+        commits = conn.execute(
+            "SELECT snapshot_sig, topo_id, commit_sig, date, subject, role "
+            "FROM architecture_commits "
+            "WHERE run_id = ? "
+            "ORDER BY topo_id",
+            (run_id,),
+        ).fetchall()
+
+    snapshot_metas = {}
+    for row in snapshots:
+        sig = row["snapshot_sig"]
+        snapshot_metas[sig] = {
+            "shape": row["shape"],
+            "shape_label": row["shape_label"],
+            "is_current": bool(row["is_current"]),
+            "generated_at": run_row_dict.get("generated_at", ""),
+            "mode": "arch",
+            "generator_version": "",
+            "size_bytes": 0,
+            "selected_files": row["run_count"] if "run_count" in row.keys() else 0,
+            "total_files": row["total_commits"] if "total_commits" in row.keys() else 0,
+        }
+
+    commit_rows_by_snapshot = {}
+    
+    for row in commits:
+        sig = row["snapshot_sig"]
+        role = row["role"] or "unmapped"
+        run_idx = row["run_index"] if "run_index" in row.keys() else None
+
+        normalized = {
+            "sha": row["commit_sig"] or "",
+            "subject": row["subject"] or "",
+            "topo_id": row["topo_id"],
+            "date": row["date"],
+            "role": role,
+            "run_index": run_idx
+        }
+        commit_rows_by_snapshot.setdefault(sig, []).append(normalized)
+
+    from backend.cli.arch_history.models import CurrentBlueprint
+    
+    current_meta = None
+    for row in snapshots:
+        if row["is_current"]:
+            current_meta = row
+            break
+    if current_meta is None and snapshots:
+        current_meta = snapshots[-1]
+
+    if current_meta is not None:
+        current_meta_dict = dict(current_meta)
+        current = CurrentBlueprint(
+            snapshot_sig=current_meta_dict["snapshot_sig"],
+            generated_at=run_row_dict.get("generated_at", ""),
+            generator_version="",
+            mode="arch",
+            shape=current_meta_dict["shape"],
+            total_files=int(current_meta_dict.get("total_commits") or 0),
+            selected_files=int(current_meta_dict.get("run_count") or 0),
+        )
+    else:
+        current = CurrentBlueprint(
+            snapshot_sig="",
+            generated_at=str(run_row_dict.get("generated_at") or ""),
+            generator_version="",
+            mode="arch",
+            shape="unknown",
+            total_files=0,
+            selected_files=0,
+        )
+
+    report = assemble_history_report(
+        repo_label=run_row_dict["repo_label"],
+        repo_display=run_row_dict["repo_display"],
+        current=current,
+        snapshot_metas=snapshot_metas,
+        commit_rows_by_snapshot=commit_rows_by_snapshot,
+        runs_by_sig={},  # DB rows natively have run_index, so grouping is implicit
+        real_commit_count=run_row_dict["total_commits"],
+    )
+
+    return report
+
+
+def assemble_history_report(
+    repo_label: str,
+    repo_display: str,
+    current: "CurrentBlueprint",
+    snapshot_metas: dict[str, dict],
+    commit_rows_by_snapshot: dict[str, list["NormalizedCommitRow"]],
+    runs_by_sig: dict[str, list[list["NormalizedCommitRow"]]],
+    real_commit_count: int,
+) -> "HistoryReport":
+    from backend.cli.arch_history.models import HistoryReport
+    from backend.cli.arch_history.data.normalize import assemble_snapshot_entries
+    from backend.cli.arch_history.data.metrics import (
+        _compute_snapshot_lifespan_metrics,
+        _compute_snapshot_composition_metrics,
+        _compute_snapshot_dominance_metrics,
+        _assign_dominant_flags,
+        _compute_generation_summaries,
+    )
+
+    entries_out = assemble_snapshot_entries(snapshot_metas, commit_rows_by_snapshot, runs_by_sig)
+    entries_out = _reanchor_reuse_by_signature(entries_out)
+    entries_out = _reassign_generations(entries_out)
+
+    max_gen = entries_out[-1].generation if entries_out else 0
+
+    for entry in entries_out:
+        entry.lifespan = _compute_snapshot_lifespan_metrics(entry)
+        entry.composition = _compute_snapshot_composition_metrics(entry)
+
+    generation_effective_totals = {}
+    for entry in entries_out:
+        effective = max(0, entry.lifespan.total_commits - entry.composition.operational_commit_count)
+        generation_effective_totals[entry.generation] = generation_effective_totals.get(entry.generation, 0) + effective
+
+    for entry in entries_out:
+        entry.dominance = _compute_snapshot_dominance_metrics(
+            entry, generation_effective_total=generation_effective_totals.get(entry.generation, 0)
+        )
+
+    _assign_dominant_flags(entries_out)
+    entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
+    generation_summaries = _compute_generation_summaries(entries_out)
+
+    return HistoryReport(
+        repo_label=repo_label,
+        repo_display=repo_display,
+        total_commits=real_commit_count,
+        total_blueprints=len(entries_out),
+        total_generations=max_gen,
+        current=current,
+        entries=entries_out,
+        generation_summaries=generation_summaries,
+    )
