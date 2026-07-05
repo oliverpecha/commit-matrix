@@ -18,3 +18,7 @@ class CommitWorkItem:
     arch_gen: int | None
     arch_meta: dict[str, Any] | None = None
     arch_change_shape: str | None = None
+    # Snapshot relationship fields — populated by pipeline, consumed by flush loop
+    _snap_sig: str | None = None
+    _snap_gen: int | None = None
+    _snap_reappeared: bool = False

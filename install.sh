@@ -10,7 +10,8 @@ docker compose build --quiet && docker compose up -d
 # --- 1. ENGINE COMMAND ---
 cat << 'WRAPPER' > /tmp/commit-matrix
 #!/bin/bash
-TARGET_REPO="${1:-$(pwd)}"
+set -o pipefail
+TARGET_REPO=$(cd "${1:-.}" && pwd)
 
 if [[ "$1" == "--help" || "$1" == "-h" ]]; then
     # Pointing to the newly consolidated folder
@@ -80,14 +81,15 @@ echo "==========================================================================
 echo " 🧬 MATRIX ENGINE: Analyzing [$HOST_REPO_NAME]"
 echo "==========================================================================="
 
+mkdir -p "/root/commit-matrix/data/$HOST_REPO_NAME/pipeline_runs"
 docker run --rm \
-  -v "$TARGET_REPO:/target_repo" \
+  -v "$TARGET_REPO:/$HOST_REPO_NAME" \
   -v "/root/commit-matrix/data:/app/data" \
   -v "/root/commit-matrix/rubrics:/app/rubrics" \
   --env-file "/root/commit-matrix/.env" \
   -e HOST_REPO_NAME="$HOST_REPO_NAME" \
   commit-matrix-core:latest \
-  python -u /app/backend/parser.py --repo /target_repo
+  python -u -m backend.commit_pipeline --repo "/$HOST_REPO_NAME" 2>&1 | tee "/root/commit-matrix/data/$HOST_REPO_NAME/pipeline_runs/run_$(date -u +\%Y%m%d_\%H%M%S)_UTC.log" 
 
 if [ $? -eq 0 ]; then
     SERVER_IP=$(hostname -I | awk '{print $1}')
