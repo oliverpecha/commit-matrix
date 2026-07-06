@@ -169,11 +169,40 @@ def main(
                     )
                     return
                 raise
+
+        # Hydrate identity and summary totals for DB-first history.
+        # This keeps legacy behavior when the DB loader omits aggregates.
+        def _hydrate_identity(report_obj, repo_label_obj: str | None):
+            if repo_label_obj and not getattr(report_obj, "repo_label", None):
+                report_obj.repo_label = repo_label_obj
+            if not getattr(report_obj, "repo_display", None):
+                # Fallback: use repo_label as display if nothing richer is set.
+                report_obj.repo_display = getattr(report_obj, "repo_label", None) or repo_label_obj
+
+        def _hydrate_totals(report_obj):
+            entries = getattr(report_obj, "entries", []) or []
+            # Commits: derive from topo_id range if not already set.
+            if not getattr(report_obj, "total_commits", None):
+                topoids = [
+                    e.trigger.topo_id
+                    for e in entries
+                    if getattr(e, "trigger", None) and e.trigger.topo_id is not None
+                ]
+                if topoids:
+                    report_obj.total_commits = max(topoids) - min(topoids) + 1
+                else:
+                    report_obj.total_commits = 0
+            # Snapshots and boundaries from entries.
+            report_obj.total_blueprints = len(entries)
+            report_obj.total_generations = len({getattr(e, "generation", None) for e in entries})
+
         report = filter_history_report(
             report, since=since, until=until, generation=generation,
             snapshot_prefix=snapshot_prefix, commit_target=commit_target,
             smart_target=smart_target, only_reappeared=only_reappeared,
         )
+        _hydrate_identity(report, repo_label)
+        _hydrate_totals(report)
         # --back N: limit results to N most recent items from HEAD
         if back is not None:
             if back.startswith("snapshot:"):

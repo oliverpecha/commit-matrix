@@ -298,6 +298,17 @@ def main():
             file=_sys.stderr,
         )
 
+    # Finalize the scan range in the database before generating the summary
+    try:
+        if commits_with_ids:
+            head_topo = commits_with_ids[0][0]
+            tail_topo = commits_with_ids[-1][0]
+            from backend.services.db.writer import update_scan_range
+            update_scan_range(repo_label, head_topo, tail_topo)
+    except Exception as e:
+        import sys
+        print(f"[Database Sync Warning] Failed to finalize scan range: {e}", file=sys.stderr)
+
     error_count = flush_state["error_count"]
     success_count = flush_state["success_count"]
 
