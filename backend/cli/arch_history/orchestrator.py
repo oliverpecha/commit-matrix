@@ -67,7 +67,7 @@ def history_report_to_dict(report: HistoryReport) -> dict:
     guarantees.  Scheduled for removal once all consumers migrate to C1.
     """
     import warnings
-    # Suppress if Phase 2A has written full commit coverage (unmapped count will be 0)
+    # Suppress if [arch-graph] has written full commit coverage (unmapped count will be 0)
     warnings.warn(
         "history_report_to_dict() is deprecated; "
         "use serialize_history_report_to_contract()",
@@ -85,7 +85,8 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
             print("[arch:dbg]", *args, flush=True)
 
     repo_label = repo_label or HOST_REPO_NAME
-    repo_path = Path(".").resolve()
+    import os
+    repo_path = Path(os.environ.get("HOST_REPO_MOUNT_PATH", "/" + repo_label))
     repo_display = derive_repo_display(repo_path, repo_label)
 
     data_dir = Path("data") / repo_label
@@ -151,7 +152,7 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
             entries=[],
         )
 
-    raw_snapshots = [p for p in versions_dir.glob("arch-*.md") if p.is_file()]
+    raw_snapshots = [p for p in versions_dir.glob("arch_snapshot-*.md") if p.is_file()]
     snapshots = sorted(
         raw_snapshots,
         key=lambda p: _topo_key_for_snapshot(p, _load_snapshot_meta(p), topo_by_commit_sig),
@@ -278,7 +279,7 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     try:
         import subprocess
         # Native, non-hack query to fetch every commit node across all graph branches combined
-        proc = subprocess.run(["git", "rev-list", "--all", "--count"], capture_output=True, text=True, check=True)
+        proc = subprocess.run(["git", "-C", str(repo_path), "rev-list", "--all", "--count"], capture_output=True, text=True, check=True)
         real_commit_count = int(proc.stdout.strip())
     except Exception as e:
         print(f"[arch-history debug] git total graph count failed: {e}")
@@ -709,7 +710,8 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
             "       first_seen_date, last_seen_date, longest_streak, "
             "       successive_commit_count, reappeared_commit_count, "
             "       operational_commit_count, development_commit_count, "
-            "       effective_commits, share_of_generation "
+            "       effective_commits, share_of_generation, "
+            "       selected_files, total_files, generator_version, generator_mode, size_bytes "
             "FROM architecture_snapshots "
             "WHERE run_id = ?",
             (run_id,),
@@ -726,16 +728,36 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
     snapshot_metas = {}
     for row in snapshots:
         sig = row["snapshot_sig"]
+        # Prefer explicit file-count columns if present; fall back to lifespans when missing.
+        selected_files = row["selected_files"] if "selected_files" in row.keys() else row.get("run_count", 0)
+        total_files = row["total_files"] if "total_files" in row.keys() else row.get("total_commits", 0)
+
+        # Dynamically calculate sizes for zero-state or cached lookups
+        _size = row["size_bytes"] if ("size_bytes" in row.keys() and row["size_bytes"]) else 0
+        if _size == 0 and sig:
+            try:
+                import glob
+                import pathlib as _pl
+                _matches = glob.glob(f"data/*/blueprints/*{sig[:7]}*.json")
+                if _matches:
+                    _size = _pl.Path(_matches[0]).stat().st_size
+            except Exception:
+                pass
+
+        _mode_val = row["generator_mode"] if "generator_mode" in row.keys() else "programmatic"
+        if not _mode_val and "blueprint_grade" in row.keys():
+            _mode_val = row["blueprint_grade"]
+
         snapshot_metas[sig] = {
             "shape": row["shape"],
             "shape_label": row["shape_label"],
             "is_current": bool(row["is_current"]),
             "generated_at": run_row_dict.get("generated_at", ""),
-            "mode": "arch",
-            "generator_version": "",
-            "size_bytes": 0,
-            "selected_files": row["run_count"] if "run_count" in row.keys() else 0,
-            "total_files": row["total_commits"] if "total_commits" in row.keys() else 0,
+            "mode": _mode_val or "programmatic",
+            "generator_version": row["generator_version"] if "generator_version" in row.keys() else "archgen-v1",
+            "size_bytes": int(_size or 0),
+            "selected_files": int(selected_files or 0),
+            "total_files": int(total_files or 0),
         }
 
     commit_rows_by_snapshot = {}
@@ -767,14 +789,23 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
 
     if current_meta is not None:
         current_meta_dict = dict(current_meta)
+
+        selected_files = current_meta_dict.get("selected_files")
+        if selected_files is None:
+            selected_files = current_meta_dict.get("run_count")
+
+        total_files = current_meta_dict.get("total_files")
+        if total_files is None:
+            total_files = current_meta_dict.get("total_commits")
+
         current = CurrentBlueprint(
             snapshot_sig=current_meta_dict["snapshot_sig"],
             generated_at=run_row_dict.get("generated_at", ""),
             generator_version="",
             mode="arch",
             shape=current_meta_dict["shape"],
-            total_files=int(current_meta_dict.get("total_commits") or 0),
-            selected_files=int(current_meta_dict.get("run_count") or 0),
+            total_files=int(total_files or 0),
+            selected_files=int(selected_files or 0),
         )
     else:
         current = CurrentBlueprint(
@@ -840,7 +871,7 @@ def assemble_history_report(
         )
 
     _assign_dominant_flags(entries_out)
-    entries_out = [e for e in entries_out if e.lifespan and e.lifespan.total_commits > 0]
+    entries_out = [e for e in entries_out if e.lifespan]
     generation_summaries = _compute_generation_summaries(entries_out)
 
     return HistoryReport(

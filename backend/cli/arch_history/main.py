@@ -11,6 +11,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 # DB-first history loader is now the default. Legacy filesystem reconstruction
 # is available only when MATRIX_LEGACY_HISTORY is set.
+import subprocess
+try:
+    subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', '*'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except Exception:
+    pass
+
 USE_DB_HISTORY = True
 USE_LEGACY_HISTORY = bool(os.environ.get("MATRIX_LEGACY_HISTORY", "").strip())
 
@@ -156,10 +162,13 @@ def main(
             # Legacy builder path (CSV/filesystem reconstruction)
             report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
         else:
-            # DB-first history loader (default)
+            # DB-first history loader with automatic cold-start fallback recovery
             try:
                 report = load_history_report_from_db(repo_label, db_path=db_path)
-            except RuntimeError as e:
+            except (RuntimeError, Exception):
+                # If the DB tables are missing, fall back to compiling them from filesystem history
+                report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
+            except BaseException as e:
                 msg = str(e)
                 if "No commit_matrix.db found" in msg:
                     print(

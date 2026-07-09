@@ -165,7 +165,8 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
             flush=True,
         )
     else:
-        print("[arch-db] payload entries=0", file=sys.stderr, flush=True)
+        if str(__import__("os").environ.get("MATRIX_DEBUG", "")).lower() in ("1", "true", "yes", "on"):
+            print("[arch-db] payload entries=0", file=sys.stderr, flush=True)
 
     for entry in entries:
         flags = entry.get("flags", {})
@@ -396,7 +397,7 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
         )
 
     # Also insert the trigger commit if we have commit_sha
-    # Note: Phase 2A (write_commit_relationships) will write this row during pipeline teardown.
+    # Note: [arch-graph] (write_commit_relationships) will write this row during pipeline teardown.
     # This fallback only fires when called outside a full pipeline run (e.g. arch_builder standalone).
     commit_sha = meta.get("commit_sha", "")
     topo_id = meta.get("topo_id")
@@ -406,11 +407,14 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
             (run_id, commit_sha[:7], snapshot_sig),
         ).fetchone()
         if not commit_exists:
+            # Minimal fallback row: commit_sig + topo_id with no date/subject.
+            # Primary [arch-graph] writer (write_commit_relationships) will overwrite
+            # this row with full date/subject/role information during teardown.
             conn.execute(
                 """INSERT INTO architecture_commits
-                (run_id, snapshot_sig, topo_id, commit_sig, role)
-                VALUES (?, ?, ?, ?, 'trigger')""",
-                (run_id, snapshot_sig, topo_id, commit_sha[:7]),
+                (run_id, snapshot_sig, topo_id, commit_sig, date, subject, role)
+                VALUES (?, ?, ?, ?, ?, ?, 'trigger')""",
+                (run_id, snapshot_sig, topo_id, commit_sha[:7], None, None),
             )
 
     conn.commit()
@@ -428,7 +432,7 @@ def write_commit_relationships(db_path, run_id, snapshot_commits):
     written = 0
     with sqlite3.connect(db_path) as conn:
         conn.execute('PRAGMA journal_mode=WAL')
-        # Phase 2A owns the full commit graph — wipe all prior rows for this run
+        # [arch-graph] owns the full commit graph — wipe all prior rows for this run
         # (write_snapshot_meta may have inserted partial trigger rows during scan)
         conn.execute(
             "DELETE FROM architecture_commits WHERE run_id=?",
@@ -459,6 +463,11 @@ def write_commit_relationships(db_path, run_id, snapshot_commits):
                     role = 'successive'
                 _role_counts[role] += 1
 
+                # Optional metadata: commit_date / commit_subject may be provided
+                # by the pipeline; fall back to NULLs when absent.
+                commit_date = entry.get('date')
+                commit_subject = entry.get('subject')
+
                 existing = conn.execute(
                     'SELECT id FROM architecture_commits '
                     'WHERE run_id=? AND commit_sig=? AND snapshot_sig=?',
@@ -466,19 +475,21 @@ def write_commit_relationships(db_path, run_id, snapshot_commits):
                 ).fetchone()
                 if existing:
                     conn.execute(
-                        'UPDATE architecture_commits SET role=?, topo_id=? WHERE id=?',
-                        (role, topo_id, existing[0]),
+                        'UPDATE architecture_commits '
+                        'SET role=?, topo_id=?, date=?, subject=? WHERE id=?',
+                        (role, topo_id, commit_date, commit_subject, existing[0]),
                     )
                 else:
                     conn.execute(
                         'INSERT INTO architecture_commits '
-                        '(run_id, snapshot_sig, topo_id, commit_sig, role) '
-                        'VALUES (?,?,?,?,?)',
-                        (run_id, snapshot_sig, topo_id, commit_sig, role),
+                        '(run_id, snapshot_sig, topo_id, commit_sig, date, subject, role) '
+                        'VALUES (?,?,?,?,?,?,?)',
+                        (run_id, snapshot_sig, topo_id, commit_sig, commit_date, commit_subject, role),
                     )
                 written += 1
         conn.commit()
-        print(f"[arch-db] relationship role counts: {_role_counts}", file=_sys.stderr)
+        if str(__import__("os").environ.get("MATRIX_DEBUG", "")).lower() in ("1", "true", "yes", "on"):
+            print(f"[arch-db] relationship role counts: {_role_counts}", file=_sys.stderr)
     return written
 
 
