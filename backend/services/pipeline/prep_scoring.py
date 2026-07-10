@@ -1,6 +1,17 @@
 from __future__ import annotations
 import sqlite3
 import sys
+
+def _sqlite_is_macro(tag):
+    if not tag: return 0
+    t = str(tag).lower()
+    if t in ('leaf-only', 'leaf_only', 'major:head', 'head'): return 0
+    try:
+        from backend.cli.arch_history.taxonomy import normalize_cause_tag, get_boundary_magnitude
+        return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
+    except:
+        return 0
+
 from pathlib import Path
 from typing import Tuple, Optional
 from backend.services.pipeline.work_item import CommitWorkItem
@@ -43,9 +54,12 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
         for topo_id, commit_parts in commits_with_ids:
             commit_hash = str(commit_parts[0]).strip()
             date_str = str(commit_parts[1]) if len(commit_parts) > 1 else ""
-            subject = str(commit_parts[2]) if len(commit_parts) > 2 else ""
+            subject = str(commit_parts[3]) if len(commit_parts) > 3 else ""
 
-            state, meta = tracker.resolve_for_commit(commit_hash, topo_id=topo_id)
+            # NATIVE HEAD-TO-1 SSOT: Absolute head is explicitly the first entry in the bootstrapped array
+            absolute_head_topo = commits_with_ids[0][0] if commits_with_ids else topo_id
+            is_head_fallback = (topo_id == absolute_head_topo)
+            state, meta = tracker.resolve_for_commit(commit_hash, topo_id=topo_id, is_head_fallback=is_head_fallback)
             if not state or not getattr(state, "signature", None):
                 continue
 
@@ -58,9 +72,10 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
 
                 role = "trigger" if (getattr(state, "advanced", False) or getattr(state, "change_shape", "") == "major:head") else "successive"
                 conn.execute(
-                    "INSERT INTO architecture_commits (run_id, snapshot_sig, topo_id, commit_sig, date, subject, role) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (run_id, state.signature, topo_id, commit_hash[:7], date_str, subject, role)
+                    """UPDATE architecture_commits 
+                       SET date = ?, subject = ?, role = ?
+                       WHERE run_id = ? AND topo_id = ?""",
+                    (date_str, subject, role, run_id, topo_id)
                 )
 
                 if getattr(state, "advanced", False) or getattr(state, "change_shape", "") == "major:head":
@@ -77,6 +92,7 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
                 conn.commit()
 
         with sqlite3.connect(db_path) as conn:
+            conn.create_function("IS_MACRO", 1, _sqlite_is_macro)
             snap_count = conn.execute("SELECT COUNT(*) FROM architecture_snapshots").fetchone()[0]
             bound_count = conn.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0]
             commit_count = conn.execute("SELECT COUNT(*) FROM architecture_commits").fetchone()[0]
@@ -101,6 +117,7 @@ def _resolve_db_arch_context(
     """Resolve architecture context for scoring by reading the flat commit mapping directly."""
     conn = sqlite3.connect(db_path)
     try:
+        conn.create_function('IS_MACRO', 1, _sqlite_is_macro)
         cur = conn.cursor()
 
         # Direct lookups from the flat architecture tracking tables
@@ -131,7 +148,9 @@ def _resolve_db_arch_context(
             """
             SELECT COUNT(DISTINCT boundary_commit_topo_id)
             FROM architecture_boundaries
-            WHERE boundary_commit_topo_id <= ? AND run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1) AND run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1)
+            WHERE boundary_commit_topo_id <= ? 
+              AND IS_MACRO(cause_tag) = 1
+              AND run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1)
             """,
             (topo_id,),
         )
@@ -183,15 +202,49 @@ def prepare_commit_work_item(
     repo_label: str,
     db_path: str,
 ) -> Tuple[CommitWorkItem, dict]:
-    """Scoring-only prep function using range reads."""
+    """Scoring prep function upgraded to run structural scope heuristics on the main thread."""
     commit_sha = extract_commit_sha(commit_parts)
+    subject = str(commit_parts[3]) if len(commit_parts) > 3 else ""
+    diff = str(commit_parts[4]) if len(commit_parts) > 4 else ""
 
+    # 1. Deterministic Scope Type Extraction
+    commit_type = "commit"
+    commit_scope = ""
+    if subject.startswith("feat"):
+        commit_type = "feat"
+        commit_scope = subject.split("(")[1].split(")")[0] if "(" in subject else "core"
+    elif subject.startswith("fix"):
+        commit_type = "fix"
+        commit_scope = subject.split("(")[1].split(")")[0] if "(" in subject else "core"
+    elif subject.startswith("chore"):
+        commit_type = "chore"
+        commit_scope = subject.split("(")[1].split(")")[0] if "(" in subject else ""
+
+    # 2. Additions and Deletions Counting
+    additions = diff.count("\n+") - diff.count("\n+++")
+    deletions = diff.count("\n-") - diff.count("\n---")
+
+    # 3. Deterministic Scope Tags
+    diff_lower = diff.lower()
+    scope_tags = []
+    if any(x in diff_lower for x in ("backend/parser.py", "backend/main.py", "dockerfile")):
+        scope_tags.append("scripts")
+    if ".json" in diff_lower or "config" in diff_lower:
+        scope_tags.append("config")
+    if "dashboard" in diff_lower or "index.html" in diff_lower:
+        scope_tags.append("dashboard")
+    if "readme" in diff_lower or ".md" in diff_lower:
+        scope_tags.append("docs")
+    if "metrics" in diff_lower:
+        scope_tags.append("metrics")
+    
     arch_context, cause_tag, generation, snapshot_sig = _resolve_db_arch_context(
         db_path=db_path,
         repo_label=repo_label,
         topo_id=topo_id,
     )
 
+    # 4. Pack pre-calculated heuristics into metadata for the presentation layer
     arch_meta = {
         "cause_tag": cause_tag,
         "generation": generation,
@@ -199,6 +252,13 @@ def prepare_commit_work_item(
         "commit_sha": commit_sha,
         "topo_id": topo_id,
         "snapshot_sig": snapshot_sig,
+        "heuristics": {
+            "type": commit_type,
+            "scope": commit_scope,
+            "tags": ", ".join(scope_tags) if scope_tags else "None",
+            "additions": f"+{additions}",
+            "deletions": f"-{deletions}"
+        }
     }
 
     work_item = CommitWorkItem(

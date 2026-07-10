@@ -8,8 +8,26 @@ import sqlite3
 from pathlib import Path
 
 
-def _default_db_path(repo_label: str) -> str:
-    return str(Path("data") / repo_label / "commit_matrix.db")
+import os
+import glob
+
+def resolve_db_path(repo_label: str | None = None) -> str:
+    """Robust dynamic path resolution supporting environment targets and overrides."""
+    target_repo = os.environ.get("TARGET_REPO")
+    if target_repo:
+        possible_path = os.path.join(target_repo, "data/commit_matrix.db")
+        if os.path.exists(possible_path):
+            return possible_path
+
+    db_paths = glob.glob('data/*/commit_matrix.db')
+    if db_paths:
+        return db_paths[0]
+        
+    fallback_label = repo_label or os.environ.get('HOST_REPO_NAME', 'commit-matrix')
+    return str(Path("data") / fallback_label / "commit_matrix.db")
+
+# Retain alias mapping to prevent downstream breaking imports
+_default_db_path = resolve_db_path
 
 
 def load_all_snapshot_meta(repo_label: str, db_path: str | None = None) -> dict[str, dict]:
@@ -161,3 +179,36 @@ def read_vacuums(repo_label: str, db_path: str | None = None) -> list[dict]:
 
     return [dict(row) for row in rows]
 
+
+
+def get_structural_boundaries_for_stream(repo_label: str, db_path: str | None = None) -> dict[int, dict]:
+    """Fetch preflight structural boundaries, filtered by finalized snapshot taxonomy."""
+    from backend.cli.arch_history.taxonomy import get_shape_metadata
+    import sqlite3
+    db = Path("data") / repo_label / "commit_matrix.db" if db_path is None else Path(db_path)
+    if not db.exists(): return {}
+
+    with sqlite3.connect(str(db)) as conn:
+        conn.row_factory = sqlite3.Row
+        run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+        if not run_row: return {}
+        
+        rows = conn.execute("""
+            SELECT boundary_commit_topo_id, boundary_commit_sig, boundary_commit_subject, cause_tag, magnitude
+            FROM architecture_boundaries
+            WHERE run_id = ?
+        """, (run_row["run_id"],)).fetchall()
+
+        valid = [r for r in rows if r["magnitude"] == "structural" or str(r["cause_tag"]).lower() in ("major:head", "head", "current architecture head")]
+        sorted_rows = sorted(valid, key=lambda r: r["boundary_commit_topo_id"] or 0)
+        
+        boundaries = {}
+        for idx, row in enumerate(sorted_rows):
+            boundaries[row["boundary_commit_topo_id"]] = {
+                "gen_id": len(sorted_rows) - idx,
+                "cause_tag": row["cause_tag"],
+                "magnitude": row["magnitude"],
+                "commit_sig": row["boundary_commit_sig"],
+                "subject": row["boundary_commit_subject"],
+            }
+        return boundaries

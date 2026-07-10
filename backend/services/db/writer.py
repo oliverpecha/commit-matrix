@@ -369,10 +369,11 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
     ).fetchone()
 
     if exists:
-        # Update shape if it was classified
+        from backend.cli.arch_history.data.loader import human_shape_label
+        # Update shape and shape_label together to prevent UI desynchronization
         conn.execute(
-            "UPDATE architecture_snapshots SET shape = ?, generator_mode = ? WHERE id = ?",
-            (shape, mode, exists[0]),
+            "UPDATE architecture_snapshots SET shape = ?, shape_label = ?, generator_mode = ? WHERE id = ?",
+            (shape, human_shape_label(shape), mode, exists[0]),
         )
     else:
         from backend.cli.arch_history.data.loader import human_shape_label
@@ -444,8 +445,9 @@ def write_commit_relationships(db_path, run_id, snapshot_commits):
                 commits,
                 key=lambda x: (
                     x.get('topo_id') is None,
-                    x.get('topo_id') if x.get('topo_id') is not None else 10**9,
+                    x.get('topo_id') if x.get('topo_id') is not None else -1,
                 ),
+                reverse=True,
             )
             print(
                 f"[arch-db] relationship bucket sig={snapshot_sig[:12]} gen={gen} size={len(ordered)}",
