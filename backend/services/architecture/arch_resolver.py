@@ -27,12 +27,12 @@ class ArchitectureResolver:
         self.prev_gen = 0
         self.seen_signatures: set[str] = set()
 
-    def resolve_for_commit(self, commit_sha: str, topo_id: int | None = None) -> tuple[ArchitectureState, dict[str, Any]]:
+    def resolve_for_commit(self, commit_sha: str, topo_id: int | None = None, is_head_fallback: bool = False) -> tuple[ArchitectureState, dict[str, Any]]:
         result = None
 
         for _ in range(self.max_retries):
             try:
-                result = ensure_fresh_architecture_context(self.repo_path, commit_sha=commit_sha, topo_id=topo_id)
+                result = ensure_fresh_architecture_context(self.repo_path, commit_sha=commit_sha, topo_id=topo_id, is_head_fallback=is_head_fallback)
                 if result and getattr(result, "status", None) and getattr(result.status, "name", "") != "FAILED":
                     break
             except Exception:
