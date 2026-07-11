@@ -218,7 +218,7 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
         trigger_row = None
         if cleaned_rows:
             rows_with_topo = [r for r in cleaned_rows if isinstance(r.get("topo_id"), int)]
-            trigger_row = min(rows_with_topo, key=lambda r: r["topo_id"]) if rows_with_topo else cleaned_rows[0]
+            trigger_row = max(rows_with_topo, key=lambda r: r["topo_id"]) if rows_with_topo else cleaned_rows[0]
 
         trigger_sha = (trigger_row.get("sha") or "").strip() if trigger_row else None
         runs = runs_by_sig.get(sig, [])
@@ -514,13 +514,13 @@ def _compute_generation_boundaries(
 
         gen_entries = by_gen[gen_id]
 
-        # Boundary commit: trigger of the first entry in this generation
-        boundary_commit = gen_entries[0].trigger if gen_entries else None
+        # Boundary commit: trigger of the structural anchor (newest) in this generation
+        boundary_commit = gen_entries[-1].trigger if gen_entries else None
 
-        # Scope: from the first entry's meta sidecar
+        # Scope: from the structural anchor's meta sidecar
         scope = None
         if gen_entries:
-            sidecar = _load_snapshot_sidecar(gen_entries[0].snapshot_sig)
+            sidecar = _load_snapshot_sidecar(gen_entries[-1].snapshot_sig)
             if sidecar:
                 scope = BoundaryScope(
                     top_level_dirs=sidecar.get("top_level_dirs", []),
@@ -748,9 +748,10 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
         if not _mode_val and "blueprint_grade" in row.keys():
             _mode_val = row["blueprint_grade"]
 
+        from backend.cli.arch_history.data.loader import human_shape_label
         snapshot_metas[sig] = {
             "shape": row["shape"],
-            "shape_label": row["shape_label"],
+            "shape_label": human_shape_label(row["shape"]),
             "is_current": bool(row["is_current"]),
             "generated_at": run_row_dict.get("generated_at", ""),
             "mode": _mode_val or "programmatic",
@@ -776,6 +777,18 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
             "run_index": run_idx
         }
         commit_rows_by_snapshot.setdefault(sig, []).append(normalized)
+
+    # Runtime repair for stale DB trigger assignments (Forward-Time bias)
+    for _sig, rows in commit_rows_by_snapshot.items():
+        main_run = [r for r in rows if r["role"] in ("trigger", "successive")]
+        if main_run:
+            highest_topo = max((r["topo_id"] for r in main_run if r["topo_id"] is not None), default=None)
+            if highest_topo is not None:
+                for r in main_run:
+                    if r["topo_id"] == highest_topo:
+                        r["role"] = "trigger"
+                    elif r["role"] == "trigger":
+                        r["role"] = "successive"
 
     from backend.cli.arch_history.models import CurrentBlueprint
     

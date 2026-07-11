@@ -12,6 +12,7 @@ SHAPE_ALIAS_MAP = {
     "multi-dirdefault": "fallback-shift",
     "leaf-only": "leaf-only",
     "major:head": "head",
+    "major:detached-root": "detached-root",
 }
 
 CANONICAL_TAXONOMY = {
@@ -54,6 +55,11 @@ CANONICAL_TAXONOMY = {
         "family": "temporal",
         "label": "Current Architecture Head",
         "icon": "📍"
+    },
+    "detached-root": {
+        "family": "genesis",
+        "label": "Detached Root Branch Initialized",
+        "icon": "🌱"
     }
 }
 
@@ -163,6 +169,7 @@ MAGNITUDE_BY_NORMALIZED_TAG: dict[str, str] = {
     "major_file_count":     "moderate",
     "leaf_only":            "minor",
     "head":                 "major",
+    "detached_root":         "major",
 }
 
 
