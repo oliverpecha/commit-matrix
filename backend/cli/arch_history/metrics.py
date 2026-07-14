@@ -1,44 +1,57 @@
+from __future__ import annotations
+from backend.services.architecture.models import GenerationSummaryMetrics
 from backend.services.architecture.taxonomy import get_shape_metadata
-from types import SimpleNamespace
 
-class SafeNamespace(SimpleNamespace):
-    def __getattr__(self, item):
-        return ""
-
-def compute_generation_summaries(entries: list, b_topo_map: dict, b_gen_map: dict) -> dict:
-    generation_summaries = {}
-    grouped_entries = {}
+def compute_generation_summaries(entries: list, db_boundaries: list[dict] = None) -> dict[int, GenerationSummaryMetrics]:
+    """
+    Computes precise generation summaries by pairing localized snapshot entries
+    with authoritative era spans provided straight by the SQLite database layer.
+    """
+    from collections import defaultdict
+    summaries: dict[int, GenerationSummaryMetrics] = {}
+    
+    # 1. Group our processed snapshots by their absolute generation era ID
+    grouped_entries = defaultdict(list)
     for e in entries:
-        grouped_entries.setdefault(e.generation, []).append(e)
+        if e.generation is not None:
+            grouped_entries[e.generation].append(e)
 
-    for gen_id, gen_entries in grouped_entries.items():
-        matching_topo = next((t for t, b in b_topo_map.items() if b_gen_map.get(t) == gen_id), None)
-        b_row = b_topo_map.get(matching_topo, {}) if matching_topo else {}
+    # 2. Map metrics using the authoritative database boundary array ordering
+    if db_boundaries:
+        sorted_bounds = sorted(db_boundaries, key=lambda b: b.get("boundary_commit_topo_id") or 0)
         
-        raw_tag = str(b_row.get("cause_tag") or "default").strip()
-        meta = get_shape_metadata(raw_tag)
-        
-        distinct_commits = sum(e.lifespan.total_commits for e in gen_entries)
-        snap_count = len(gen_entries)
-        struct_count = sum(1 for e in gen_entries if e.is_boundary or str(e.shape).startswith("major:") or str(e.shape).startswith("multi-dir:"))
-        incr_count = snap_count - struct_count
-        
-        dominant_entry = max(gen_entries, key=lambda x: x.lifespan.total_commits) if gen_entries else None
-        dom_eff = dominant_entry.lifespan.total_commits if dominant_entry else 1
-        dom_sig = dominant_entry.snapshot_sig if dominant_entry else ""
-        dom_share = (dom_eff / distinct_commits) if distinct_commits > 0 else 1.0
-
-        generation_summaries[gen_id] = SafeNamespace(
-            cause_tag=raw_tag,
-            cause_label=meta.get("label", "Unknown Shift"),
-            dominant_share_of_generation=dom_share,
-            dominant_snapshot_sig=dom_sig,
-            dominant_effective_commits=dom_eff,
-            generation_distinct_commit_count=distinct_commits,
-            snapshot_count=snap_count,
-            repeated_treesig_count=int(b_row.get("repeated_treesig_count") or 0),
-            incremental_count=incr_count,
-            structural_count=struct_count,
-        )
-
-    return generation_summaries
+        for idx, bound in enumerate(sorted_bounds, start=1):
+            gen_entries = grouped_entries[idx]
+            if not gen_entries:
+                continue
+                
+            # Trust the DB explicitly for the unique era commit count span
+            true_era_span = bound.get("distinct_commit_count") or 0
+            
+            # Find the dominant snapshot entry inside this generation group
+            dominant_entry = max(gen_entries, key=lambda x: x.lifespan.total_commits if x.lifespan else 0, default=gen_entries[0])
+            dom_sig = dominant_entry.snapshot_sig
+            dom_lifespan = dominant_entry.lifespan.total_commits if dominant_entry and dominant_entry.lifespan else 0
+            
+            # Absolute share: Dominant Snapshot Lifespan / Authoritative Database Era Span
+            dom_share = (dom_lifespan / true_era_span) if true_era_span > 0 else 1.0
+            
+            struct_count = sum(1 for e in gen_entries if str(e.shape).startswith(("major:", "multi-dir:")))
+            snap_count = len(gen_entries)
+            
+            tag = bound.get("cause_tag", "unknown")
+            
+            summaries[idx] = GenerationSummaryMetrics(
+                generation=idx,
+                cause_tag=tag,
+                cause_label=get_shape_metadata(tag).get("label", "Implementation Refinement"),
+                generation_distinct_commit_count=true_era_span,
+                snapshot_count=snap_count,
+                structural_count=struct_count,
+                incremental_count=snap_count - struct_count,
+                dominant_snapshot_sig=dom_sig,
+                dominant_effective_commits=dom_lifespan,
+                dominant_share_of_generation=dom_share,
+                repeated_treesig_count=sum(1 for e in gen_entries if e.lifespan and e.lifespan.run_count > 1)
+            )
+    return summaries

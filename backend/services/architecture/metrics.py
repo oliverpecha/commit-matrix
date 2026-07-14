@@ -8,8 +8,17 @@ from backend.services.architecture.models import (
     SnapshotEntry,
     SnapshotLifespanMetrics,
 )
-from backend.cli.arch_history.data.loader import _is_operational, human_shape_label
-from backend.cli.arch_history.taxonomy import get_shape_metadata
+def _is_operational(tag: str) -> bool:
+    if not tag: return False
+    t = str(tag).lower()
+    # True only for standard operational git prefixes
+    return any(t.startswith(x) for x in ("chore", "docs", "test", "ci", "build", "style", "merge"))
+
+def human_shape_label(tag: str) -> str:
+    from backend.services.architecture.taxonomy import get_shape_metadata
+    meta = get_shape_metadata(tag)
+    return meta.get("label", tag or "Implementation Refinement")
+from backend.services.architecture.taxonomy import get_shape_metadata
 
 def _compute_snapshot_lifespan_metrics(entry: "SnapshotEntry") -> SnapshotLifespanMetrics:
     runs: list[list[CommitRef]] = []
@@ -153,10 +162,10 @@ def _compute_generation_summaries(entries: list[SnapshotEntry]) -> dict[int, Gen
             ),
         )
         dominant = ranked[0] if ranked else None
-        if dominant and dominant.dominance:
+        if dominant and dominant.lifespan:
             dominant_sig = dominant.snapshot_sig
-            dominant_eff = dominant.dominance.effective_commits
-            dominant_share = dominant.dominance.share_of_generation
+            dominant_eff = dominant.lifespan.total_commits
+            dominant_share = (dominant_eff / generation_distinct_commit_count) if generation_distinct_commit_count > 0 else 1.0
         else:
             dominant_sig = ""
             dominant_eff = 0

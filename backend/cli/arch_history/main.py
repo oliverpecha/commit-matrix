@@ -21,7 +21,7 @@ USE_DB_HISTORY = True
 USE_LEGACY_HISTORY = bool(os.environ.get("MATRIX_LEGACY_HISTORY", "").strip())
 
 from backend.cli.arch_history.orchestrator import (
-    build_history_report,
+    load_history_report_from_db,
     filter_history_report,
     serialize_history_report_to_contract,
     load_history_report_from_db,
@@ -160,14 +160,14 @@ def main(
             _progress_cb = None
         if USE_LEGACY_HISTORY:
             # Legacy builder path (CSV/filesystem reconstruction)
-            report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
+            raise  # Reraise original DB loading exception
         else:
             # DB-first history loader with automatic cold-start fallback recovery
             try:
                 report = load_history_report_from_db(repo_label, db_path=db_path)
             except (RuntimeError, Exception):
                 # If the DB tables are missing, fall back to compiling them from filesystem history
-                report = build_history_report(repo_label, debug=debug, on_progress=_progress_cb)
+                raise  # Reraise original DB loading exception
             except BaseException as e:
                 msg = str(e)
                 if "No commit_matrix.db found" in msg:
@@ -238,7 +238,7 @@ def main(
                 if gens:
                     report.entries = [e for e in report.entries if e.generation in set(gens)]
             # Recompute summaries after filtering
-            from backend.cli.arch_history.data.metrics import _compute_generation_summaries
+            from backend.services.architecture.metrics import _compute_generation_summaries
             report.generation_summaries = _compute_generation_summaries(report.entries) if report.entries else {}
             report.total_blueprints = len(report.entries)
             report.total_generations = len({e.generation for e in report.entries})
