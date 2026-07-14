@@ -1,5 +1,5 @@
 import re
-from backend.cli.arch_history.taxonomy import get_shape_metadata
+from backend.services.architecture.taxonomy import get_shape_metadata
 
 SUBJECT_LIMIT = len("sync live stream sorting contract between backend timestamps and frontend UI mode")
 COMPACT_SUBJECT_LIMIT = SUBJECT_LIMIT

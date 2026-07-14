@@ -80,7 +80,7 @@ def resolve_sig_category(selector: Selector, history: "HistoryReport") -> Select
         return selector
 
     # Lazy import to avoid circular dependency at module import time.
-    from backend.cli.arch_history.models import SnapshotEntry, CommitRef  # type: ignore
+    from backend.services.architecture.models import SnapshotEntry, CommitRef  # type: ignore
 
     # Collect snapshot signatures.
     snapshot_sigs: set[str] = set()

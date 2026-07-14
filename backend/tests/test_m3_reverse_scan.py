@@ -14,7 +14,7 @@ from backend.services.db.writer import (
 from backend.services.db.reader import read_scan_range, read_vacuums
 from backend.services.db.taxonomy_sync import sync_taxonomy
 from backend.cli.arch_history.orchestrator import serialize_history_report_to_contract
-from backend.cli.arch_history.taxonomy import (
+from backend.services.architecture.taxonomy import (
     normalize_cause_tag,
     get_boundary_magnitude,
     get_shape_metadata,

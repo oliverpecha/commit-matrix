@@ -116,7 +116,7 @@ class TestHeadShapeIntegration:
 
     def test_head_shape_concept(self):
         """The taxonomy recognizes major:head."""
-        from backend.cli.arch_history.taxonomy import get_shape_metadata
+        from backend.services.architecture.taxonomy import get_shape_metadata
         meta = get_shape_metadata("major:head")
         assert meta["family"] == "temporal"
         assert meta["icon"] == "📍"

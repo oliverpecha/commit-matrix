@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from typing import List
 
-from backend.cli.arch_history.models import HistoryReport, SnapshotEntry
+from backend.services.architecture.models import HistoryReport, SnapshotEntry
 from backend.cli.arch_history.arch_selectors import Selector, SelectorCategory, parse_selector, resolve_sig_category
-from backend.cli.arch_history.data.metrics import _compute_generation_summaries
+from backend.services.architecture.metrics import _compute_generation_summaries
 
 
 def _find_entry_by_commit_sig_prefix(entries: List[SnapshotEntry], prefix: str) -> SnapshotEntry | None:

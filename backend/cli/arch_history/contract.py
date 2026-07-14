@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from backend.cli.arch_history.models import (
+from backend.services.architecture.models import (
     BoundaryInfo,
     BoundaryScope,
     CurrentBlueprint,
@@ -12,13 +12,14 @@ from backend.cli.arch_history.models import (
     CommitRef,
     DisplacedSnapshot,
 )
-from backend.cli.arch_history.taxonomy import (
+from backend.services.architecture.taxonomy import (
     normalize_cause_tag,
     get_boundary_cause_label,
     get_boundary_magnitude,
 )
-from backend.cli.arch_history.data.metrics import _compute_generation_summaries
-from backend.cli.arch_history.data.loader import _load_snapshot_meta
+from backend.services.architecture.metrics import _compute_generation_summaries
+# Legacy import removed
+
 
 
 CONTRACT_VERSION = "1.0"

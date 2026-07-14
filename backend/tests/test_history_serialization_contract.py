@@ -26,7 +26,7 @@ from backend.cli.arch_history.models import (
     SnapshotCompositionMetrics,
     SnapshotDominanceMetrics,
 )
-from backend.cli.arch_history.taxonomy import (
+from backend.services.architecture.taxonomy import (
     normalize_cause_tag,
     get_boundary_cause_label,
     BOUNDARY_CAUSE_TAG_MAP,
@@ -349,7 +349,7 @@ class TestFieldsFiltering:
 
 # ── Boundary rationale tests ─────────────────────────────────────────────────
 
-from backend.cli.arch_history.taxonomy import get_boundary_magnitude
+from backend.services.architecture.taxonomy import get_boundary_magnitude
 
 
 class TestBoundaryMagnitude:
