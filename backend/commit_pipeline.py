@@ -32,7 +32,7 @@ from backend.utils.csv_writer import ensure_csv_exists, load_existing_hashes
 from backend.services.pipeline.pipeline_config import (
     MODEL_NAME, TARGET_RPM, MAX_WORKERS, CSV_PATH, RUBRIC_PATH
 )
-from backend.cli.arch_history.data.metrics import compute_generation_summaries
+from backend.services.architecture.metrics import compute_generation_summaries
 from backend.services.pipeline.prep_scoring import extract_commit_sha
 
 def _sqlite_is_macro(tag):
@@ -40,7 +40,7 @@ def _sqlite_is_macro(tag):
     t = str(tag).lower()
     if t in ('leaf-only', 'leaf_only', 'major:head', 'head'): return 0
     try:
-        from backend.cli.arch_history.taxonomy import normalize_cause_tag, get_boundary_magnitude
+        from backend.services.architecture.taxonomy import normalize_cause_tag, get_boundary_magnitude
         return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
     except:
         return 0
@@ -54,7 +54,7 @@ def print_architecture_event(state, repo_label=None, db_path=None):
     if not (getattr(state, 'established', False) or getattr(state, 'advanced', False)):
         return
 
-    from backend.cli.arch_history.taxonomy import get_shape_metadata
+    from backend.services.architecture.taxonomy import get_shape_metadata
     raw_shape = getattr(state, 'change_shape', '')
     meta = get_shape_metadata(raw_shape)
     cause = meta.get('label', raw_shape or 'unknown')
@@ -86,8 +86,9 @@ def main():
 
     db_path = f"data/{repo_label}/commit_matrix.db"
 
-    from backend.services.pipeline.prep_scoring import ensure_architecture_oracle
+    from backend.services.pipeline.prep_scoring import ensure_architecture_oracle, wait_for_oracle_sync, wait_for_oracle_sync
     ensure_architecture_oracle(repo_path, db_path)
+    wait_for_oracle_sync(120.0)
 
     from backend.services.pipeline.pipeline_presentation import print_debug_boundary_table
     print_debug_boundary_table(repo_label, db_path)
@@ -184,6 +185,7 @@ def main():
                 
                 if isinstance(result, dict) and result.get("success"):
                     wi = work_item_map.get(topo_id)
+
                     pct = int((processed_count / total_unscanned) * 100) if total_unscanned else 100
                     filled = int((processed_count / total_unscanned) * 16) if total_unscanned else 16
                     p_data = {"pct": pct, "filled": filled, "remaining": max(0, total_unscanned - processed_count)}
@@ -215,14 +217,16 @@ def main():
                         _conn = _sq.connect(db_path)
                         _cursor = _conn.cursor()
 
-                        # 1. SENSOR Hook: Broadcast physical tree mutations across ALL 49 snapshots
+                        # 1. SENSOR Hook: Broadcast physical mutations when an actual signature delta occurs in the stream
                         _cursor.execute("SELECT snapshot_sig, commit_sig FROM architecture_commits WHERE topo_id = ?", (res_topo,))
                         _curr = _cursor.fetchone()
                         if _curr and _curr[0]:
                             curr_sig, curr_commit = _curr
-                            _cursor.execute("SELECT snapshot_sig FROM architecture_commits WHERE topo_id < ? AND snapshot_sig IS NOT NULL ORDER BY topo_id DESC LIMIT 1", (res_topo,))
-                            _prev = _cursor.fetchone()
-                            prev_sig = _prev[0] if _prev else curr_sig
+                            
+                            # Fetch the signature of the item rendered immediately above it on screen (topo_id > res_topo)
+                            _cursor.execute("SELECT snapshot_sig FROM architecture_commits WHERE topo_id > ? AND snapshot_sig IS NOT NULL ORDER BY topo_id ASC LIMIT 1", (res_topo,))
+                            _prev_row = _cursor.fetchone()
+                            prev_sig = _prev_row[0] if _prev_row else curr_sig
                             
                             if curr_sig != prev_sig:
                                 _cursor.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (curr_sig,))
@@ -230,7 +234,10 @@ def main():
                                 raw_shape = _shape_row[0] if _shape_row else "leaf-only"
                                 
                                 from backend.services.pipeline.pipeline_presentation import report_sensor_mutation
-                                report_sensor_mutation(curr_commit, prev_sig, curr_sig, raw_shape)
+                                # Express mutation moving from the exiting signature (prev_sig) into the entering signature (curr_sig)
+                                is_era_trigger = (res_topo in boundary_schedule)
+                                from backend.services.pipeline.pipeline_presentation import report_sensor_mutation
+                                report_sensor_mutation(curr_commit, prev_sig, curr_sig, raw_shape, is_era_trigger)
 
                         # 2. ERA Normalization Check: Print banner BEFORE hydrated card using SSOT Schedule
                         if res_topo in boundary_schedule:

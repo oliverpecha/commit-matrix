@@ -23,7 +23,7 @@ def repo_id_from_path(repo_path: str) -> str:
 def architecture_paths(repo_path: str) -> tuple[Path, Path]:
     repo_id = repo_id_from_path(repo_path)
     data_dir = Path("data") / repo_id
-    data_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.absolute().mkdir(parents=True, exist_ok=True)
     md_path = data_dir / f"{repo_id}_current_arch_blueprint.md"
     meta_path = data_dir / f"{repo_id}_current_arch_blueprint.meta.json"
     return md_path, meta_path

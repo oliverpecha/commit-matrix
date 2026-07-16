@@ -5,25 +5,24 @@ Called on every DB write to keep vocabulary current.
 
 
 def sync_taxonomy(conn) -> None:
-    """INSERT OR REPLACE all known taxonomy entries from taxonomy.py."""
-    from backend.cli.arch_history.taxonomy import (
-        BOUNDARY_CAUSE_TAG_MAP,
-        BOUNDARY_CAUSE_LABEL_MAP,
-        MAGNITUDE_BY_NORMALIZED_TAG,
-        CANONICAL_TAXONOMY,
-    )
-
-    all_tags = set(BOUNDARY_CAUSE_TAG_MAP.values())
-    for tag in all_tags:
-        label = BOUNDARY_CAUSE_LABEL_MAP.get(tag, tag.replace("_", " ").title())
-        magnitude = MAGNITUDE_BY_NORMALIZED_TAG.get(tag, "moderate")
-        family = None
-        for canon_key, meta in CANONICAL_TAXONOMY.items():
-            if canon_key == tag:
-                family = meta.get("family")
-                break
-        conn.execute(
-            "INSERT OR REPLACE INTO taxonomy (tag, label, magnitude, family) "
-            "VALUES (?, ?, ?, ?)",
-            (tag, label, magnitude, family),
-        )
+    """INSERT OR REPLACE all known taxonomy entries from the TAXONOMY_DEF SSOT."""
+    import sys
+    import traceback
+    try:
+        from backend.services.architecture.taxonomy import TAXONOMY_DEF
+        
+        for canon_key, meta in TAXONOMY_DEF.items():
+            label = meta.get("label", canon_key.replace("-", " ").title())
+            magnitude = meta.get("magnitude", "moderate")
+            family = meta.get("family", "incremental")
+            
+            conn.execute(
+                "INSERT OR REPLACE INTO taxonomy (tag, label, magnitude, family) "
+                "VALUES (?, ?, ?, ?)",
+                (canon_key, label, magnitude, family),
+            )
+    except Exception as e:
+        # Force a loud exit on stderr since background futures swallow exceptions natively
+        print(f"\n[arch-oracle] ❌ FATAL ERROR in sync_taxonomy: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        raise

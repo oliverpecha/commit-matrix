@@ -1,13 +1,16 @@
 from __future__ import annotations
 import sqlite3
 import sys
+import threading
+
+_ORACLE_READY_EVENT = threading.Event()
 
 def _sqlite_is_macro(tag):
     if not tag: return 0
     t = str(tag).lower()
     if t in ('leaf-only', 'leaf_only', 'major:head', 'head'): return 0
     try:
-        from backend.cli.arch_history.taxonomy import normalize_cause_tag, get_boundary_magnitude
+        from backend.services.architecture.taxonomy import normalize_cause_tag, get_boundary_magnitude
         return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
     except:
         return 0
@@ -16,7 +19,53 @@ from pathlib import Path
 from typing import Tuple, Optional
 from backend.services.pipeline.work_item import CommitWorkItem
 
+def _build_oracle_sync(repo_path: str, db_path: str) -> None:
+    # This runs in the background thread
+    import os
+    db_file = Path(db_path)
+    if db_file.exists():
+        try:
+            conn = sqlite3.connect(db_path)
+            count = conn.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0]
+            conn.close()
+            if count > 0:
+                return
+        except sqlite3.OperationalError:
+            pass
+
 def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
+    """
+    Non-blocking Oracle Boot: Dispatches the heavy architecture resolving to a background thread
+    so the container can start streaming immediately.
+    """
+    import os
+    from pathlib import Path
+    
+    db = Path(db_path)
+    # If DB already exists and has boundaries, skip thread creation entirely
+    if db.exists() and db.stat().st_size > 8192: 
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(db))
+            count = conn.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0]
+            conn.close()
+            if count > 0:
+                _ORACLE_READY_EVENT.set()
+                return
+        except Exception:
+            pass
+            
+    _ORACLE_READY_EVENT.clear()
+            
+    print(f"⚡ [arch-boot] Dispatching Oracle backfill to background thread...", flush=True)
+    backfill_thread = threading.Thread(
+        target=_build_oracle_sync, 
+        args=(repo_path, db_path),
+        daemon=True
+    )
+    backfill_thread.start()
+
+def _build_oracle_sync(repo_path: str, db_path: str) -> None:
     db_file = Path(db_path)
     if db_file.exists():
         try:
@@ -50,45 +99,83 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
             _conn.executescript(SCHEMA_SQL)
 
         tracker = ArchitectureResolver(repo_path=repo_path)
+        from backend.services.architecture.taxonomy import get_boundary_magnitude
 
+        # Pass 1: Resolve architecture states in the required Head -> 1 direction
+        resolved_states = []
         for topo_id, commit_parts in commits_with_ids:
             commit_hash = str(commit_parts[0]).strip()
             date_str = str(commit_parts[1]) if len(commit_parts) > 1 else ""
             subject = str(commit_parts[3]) if len(commit_parts) > 3 else ""
 
-            # NATIVE HEAD-TO-1 SSOT: Absolute head is explicitly the first entry in the bootstrapped array
             absolute_head_topo = commits_with_ids[0][0] if commits_with_ids else topo_id
             is_head_fallback = (topo_id == absolute_head_topo)
             state, meta = tracker.resolve_for_commit(commit_hash, topo_id=topo_id, is_head_fallback=is_head_fallback)
-            if not state or not getattr(state, "signature", None):
-                continue
+            
+            if state and getattr(state, "signature", None):
+                resolved_states.append({
+                    "topo_id": topo_id, "commit_hash": commit_hash, "date_str": date_str, 
+                    "subject": subject, "is_head_fallback": is_head_fallback, 
+                    "current_sig": getattr(state, "signature"), "shape": getattr(state, "change_shape", "")
+                })
 
+        # Pass 2: Evaluate boundaries and write to DB Reverse-Chronologically (Head -> 1)
+        # Leading-edge tracking captures the exact moment a baseline opens an era.
+        last_sig = None
+        for item in resolved_states:
+            current_sig = item["current_sig"]
+            is_new_sig = (current_sig != last_sig)
+            last_sig = current_sig
+            
             with sqlite3.connect(db_path) as conn:
                 conn.execute("PRAGMA journal_mode=WAL")
                 run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
-                if not run_row:
-                    continue
+                if not run_row: continue
                 run_id = run_row[0]
 
-                role = "trigger" if (getattr(state, "advanced", False) or getattr(state, "change_shape", "") == "major:head") else "successive"
+                                # Prune branch merge commits (>1 parent) to prevent structural delta track-jumping hallucinations
+                is_merge = False
+                try:
+                    import subprocess
+                    parents_out = subprocess.check_output(
+                        ["git", "-C", repo_path, "log", "-1", "--pretty=%P", item["commit_hash"]],
+                        text=True
+                    ).strip()
+                    if len(parents_out.split()) > 1:
+                        is_merge = True
+                except Exception:
+                    pass
+
+                is_trigger = is_new_sig and (not is_merge or item["is_head_fallback"])
+                role = "trigger" if is_trigger else "successive"
+                
                 conn.execute(
                     """UPDATE architecture_commits 
                        SET date = ?, subject = ?, role = ?
                        WHERE run_id = ? AND topo_id = ?""",
-                    (date_str, subject, role, run_id, topo_id)
+                    (item["date_str"], item["subject"], role, run_id, item["topo_id"])
                 )
 
-                if getattr(state, "advanced", False) or getattr(state, "change_shape", "") == "major:head":
-                    exists = conn.execute(
-                        "SELECT id FROM architecture_boundaries WHERE run_id = ? AND boundary_commit_topo_id = ?",
-                        (run_id, topo_id)
-                    ).fetchone()
-                    if not exists:
-                        conn.execute(
-                            "INSERT INTO architecture_boundaries (run_id, boundary_commit_sig, boundary_commit_topo_id, boundary_commit_date, boundary_commit_subject, cause_tag, magnitude) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (run_id, commit_hash[:7], topo_id, date_str, subject, state.change_shape, "structural")
-                        )
+                if is_trigger:
+                    # SSOT Sync: Fetch authoritative shape from architecture_snapshots to ensure 1:1 mapping with the stream sensor
+                    snap_row = conn.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (current_sig,)).fetchone()
+                    official_shape = snap_row[0] if snap_row else item.get("shape", "leaf-only")
+                    
+                    shape_str = str(official_shape).lower()
+                    is_macro = ("major:" in shape_str or "multi-dir:" in shape_str or "isolated" in shape_str or "genesis" in shape_str or "critical" in shape_str)
+                    
+                    if is_macro or item["is_head_fallback"]:
+                        exists = conn.execute(
+                            "SELECT id FROM architecture_boundaries WHERE run_id = ? AND boundary_commit_topo_id = ?",
+                            (run_id, item["topo_id"])
+                        ).fetchone()
+                        if not exists:
+                            from backend.services.architecture.taxonomy import normalize_cause_tag
+                            conn.execute(
+                                "INSERT INTO architecture_boundaries (run_id, boundary_commit_sig, boundary_commit_topo_id, boundary_commit_date, boundary_commit_subject, cause_tag, magnitude) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (run_id, item["commit_hash"][:7], item["topo_id"], item["date_str"], item["subject"], normalize_cause_tag(official_shape), "structural")
+                            )
                 conn.commit()
 
         with sqlite3.connect(db_path) as conn:
@@ -103,8 +190,11 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
         print(f"    Boundaries Mapped   │ {bound_count}", flush=True)
         print(f"    Commits Linked      │ {commit_count}", flush=True)
         print("─" * 71 + "\n", flush=True)
+        
+        _ORACLE_READY_EVENT.set()
 
     except Exception as e:
+        _ORACLE_READY_EVENT.set() # Ensure we don't permanently lock on failure
         print(f"❌ FATAL [prep-scoring]: Oracle bootstrap failed: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -113,7 +203,7 @@ def _resolve_db_arch_context(
     db_path: str,
     repo_label: str,
     topo_id: int,
-) -> Tuple[Optional[str], Optional[str], Optional[int], Optional[str]]:
+) -> Tuple[Optional[str], Optional[str], Optional[int], Optional[str], Optional[str]]:
     """Resolve architecture context for scoring by reading the flat commit mapping directly."""
     conn = sqlite3.connect(db_path)
     try:
@@ -123,7 +213,7 @@ def _resolve_db_arch_context(
         # Direct lookups from the flat architecture tracking tables
         cur.execute(
             """
-            SELECT ac.snapshot_sig, ab.cause_tag, ab.magnitude, ac.run_id
+            SELECT ac.snapshot_sig, ab.cause_tag, ab.magnitude, ac.run_id, ac.role
             FROM architecture_commits ac
             LEFT JOIN architecture_boundaries ab ON ab.boundary_commit_topo_id = ac.topo_id AND ab.run_id = ac.run_id
             WHERE ac.topo_id = ?
@@ -134,12 +224,12 @@ def _resolve_db_arch_context(
         row = cur.fetchone()
         if not row or not row[0]:
             # Fallback to the latest available snapshot if a flat commit record isn't committed yet
-            cur.execute("SELECT snapshot_sig, 'Stable Implementation Refinement', 'incremental', run_id FROM architecture_commits WHERE run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1) AND snapshot_sig IS NOT NULL ORDER BY topo_id ASC LIMIT 1")
+            cur.execute("SELECT snapshot_sig, 'Stable Implementation Refinement', 'incremental', run_id, 'successive' FROM architecture_commits WHERE run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1) AND snapshot_sig IS NOT NULL ORDER BY topo_id ASC LIMIT 1")
             row = cur.fetchone()
             if not row:
-                return None, None, None, None
+                return None, None, None, None, None
 
-        dominant_snapshot_sig, cause_tag, magnitude, run_id = row
+        dominant_snapshot_sig, cause_tag, magnitude, run_id, role = row
         if not cause_tag:
             cause_tag = "Stable Implementation Refinement"
 
@@ -148,8 +238,12 @@ def _resolve_db_arch_context(
             """
             SELECT COUNT(DISTINCT boundary_commit_topo_id)
             FROM architecture_boundaries
-            WHERE boundary_commit_topo_id <= ? 
-              AND IS_MACRO(cause_tag) = 1
+            WHERE boundary_commit_topo_id <= (
+                SELECT MIN(boundary_commit_topo_id)
+                FROM architecture_boundaries
+                WHERE boundary_commit_topo_id >= ?
+                  AND run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1)
+            )
               AND run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1)
             """,
             (topo_id,),
@@ -186,7 +280,7 @@ def _resolve_db_arch_context(
             if candidate.exists():
                 arch_context = candidate.read_text(encoding="utf-8")
 
-        return arch_context, cause_tag, generation, dominant_snapshot_sig
+        return arch_context, cause_tag, generation, dominant_snapshot_sig, role
     finally:
         conn.close()
 
@@ -238,7 +332,10 @@ def prepare_commit_work_item(
     if "metrics" in diff_lower:
         scope_tags.append("metrics")
     
-    arch_context, cause_tag, generation, snapshot_sig = _resolve_db_arch_context(
+    # Wait for the background thread to finish populating the Oracle
+    _ORACLE_READY_EVENT.wait(timeout=60.0)
+
+    arch_context, cause_tag, generation, snapshot_sig, role = _resolve_db_arch_context(
         db_path=db_path,
         repo_label=repo_label,
         topo_id=topo_id,
@@ -252,6 +349,7 @@ def prepare_commit_work_item(
         "commit_sha": commit_sha,
         "topo_id": topo_id,
         "snapshot_sig": snapshot_sig,
+        "role": role,
         "heuristics": {
             "type": commit_type,
             "scope": commit_scope,
@@ -280,3 +378,8 @@ def prepare_commit_work_item(
 
 def extract_commit_sha(commit_parts: tuple) -> str:
     return str(commit_parts[0]).strip()
+
+
+def wait_for_oracle_sync(timeout: float = 120.0) -> bool:
+    """Blocks until the background Oracle thread completes phase 2 initialization."""
+    return _ORACLE_READY_EVENT.wait(timeout)

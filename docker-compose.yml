@@ -12,6 +12,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+      - ./.git:/app/.git:ro
       - ./rubrics:/app/rubrics
       - ./backend:/app/backend
       - ./templates:/app/templates

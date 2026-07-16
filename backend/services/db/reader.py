@@ -181,34 +181,43 @@ def read_vacuums(repo_label: str, db_path: str | None = None) -> list[dict]:
 
 
 
-def get_structural_boundaries_for_stream(repo_label: str, db_path: str | None = None) -> dict[int, dict]:
-    """Fetch preflight structural boundaries, filtered by finalized snapshot taxonomy."""
-    from backend.cli.arch_history.taxonomy import get_shape_metadata
+def get_structural_boundaries_for_stream(repo_label: str, db_path: str = None) -> dict:
     import sqlite3
-    db = Path("data") / repo_label / "commit_matrix.db" if db_path is None else Path(db_path)
-    if not db.exists(): return {}
-
-    with sqlite3.connect(str(db)) as conn:
-        conn.row_factory = sqlite3.Row
-        run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
-        if not run_row: return {}
+    from pathlib import Path
+    
+    if not db_path:
+        db_path = str(Path("data") / repo_label / "commit_matrix.db")
         
-        rows = conn.execute("""
-            SELECT boundary_commit_topo_id, boundary_commit_sig, boundary_commit_subject, cause_tag, magnitude
-            FROM architecture_boundaries
-            WHERE run_id = ?
-        """, (run_row["run_id"],)).fetchall()
+    schedule = {}
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+            if not run_row: return schedule
+            
+            rows = conn.execute("""
+                SELECT boundary_commit_topo_id, cause_tag, magnitude, boundary_commit_sig, boundary_commit_date, boundary_commit_subject
+                FROM architecture_boundaries
+                WHERE run_id = ?
+                ORDER BY boundary_commit_topo_id DESC
+            """, (run_row["run_id"],)).fetchall()
+            
+            # Pure 1:1 physical mapping. No era collapsing. Every structural mutation gets its own generation banner.
+            gen_id = 1
+            for r in rows:
+                topo_id = r["boundary_commit_topo_id"]
+                schedule[topo_id] = {
+                    "cause_tag": r["cause_tag"],
+                    "magnitude": r["magnitude"],
+                    "commit_sig": r["boundary_commit_sig"],
+                    "subject": r["boundary_commit_subject"] or "",
+                    "gen_id": gen_id
+                }
+                gen_id += 1
+    except Exception as e:
+        import os
+        if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
+            print(f"[arch-boundaries] ⚠️ Error reading raw schedule: {e}")
+            
+    return schedule
 
-        valid = [r for r in rows if r["magnitude"] == "structural" or str(r["cause_tag"]).lower() in ("major:head", "head", "current architecture head")]
-        sorted_rows = sorted(valid, key=lambda r: r["boundary_commit_topo_id"] or 0)
-        
-        boundaries = {}
-        for idx, row in enumerate(sorted_rows):
-            boundaries[row["boundary_commit_topo_id"]] = {
-                "gen_id": len(sorted_rows) - idx,
-                "cause_tag": row["cause_tag"],
-                "magnitude": row["magnitude"],
-                "commit_sig": row["boundary_commit_sig"],
-                "subject": row["boundary_commit_subject"],
-            }
-        return boundaries

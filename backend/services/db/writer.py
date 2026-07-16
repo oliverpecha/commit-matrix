@@ -220,41 +220,44 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
             if row[2] is not None:
                 all_inserted_topos.add(row[2])
 
-    # Insert boundaries
-    for gen_key, summary in payload.get("generation_summaries", {}).items():
-        boundary = summary.get("boundary") or {}
-        commit = boundary.get("commit") or {}
-        scope = boundary.get("scope") or {}
-        displaced = boundary.get("displaced") or {}
+    # 🌟 NATIVE BOUNDARY GENERATION: Bypassing CLI payload completely 🌟
+    from backend.services.architecture.taxonomy import get_boundary_magnitude
+    
+    # Fetch all commits for this run ordered reverse-chronologically to isolate the true structural triggers
+    all_commits = conn.execute("""
+        SELECT c.topo_id, c.commit_sig, c.date, c.subject, s.shape, s.total_files, c.snapshot_sig
+        FROM architecture_commits c
+        JOIN architecture_snapshots s ON c.snapshot_sig = s.snapshot_sig AND c.run_id = s.run_id
+        WHERE c.run_id = ? AND c.topo_id IS NOT NULL
+        ORDER BY c.topo_id DESC
+    """, (run_id,)).fetchall()
 
-        conn.execute(
-            """INSERT INTO architecture_boundaries
-            (run_id, boundary_commit_sig, boundary_commit_topo_id,
-             boundary_commit_date, boundary_commit_subject,
-             cause_tag, magnitude, scope_dirs, scope_file_count,
-             snapshot_count, structural_count, incremental_count,
-             dominant_snapshot_sig, dominant_effective_commits, dominant_share,
-             repeated_treesig_count, distinct_commit_count,
-             displaced_snapshot_sig, displaced_lifespan_class, displaced_was_dominant)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                run_id,
-                commit.get("commit_sig"), commit.get("topo_id"),
-                commit.get("date"), commit.get("subject"),
-                summary.get("cause_tag"), boundary.get("magnitude"),
-                ",".join(scope.get("top_level_dirs", [])),
-                scope.get("file_count"),
-                summary.get("snapshot_count"), summary.get("structural_count"),
-                summary.get("incremental_count"),
-                summary.get("dominant_snapshot_sig"),
-                summary.get("dominant_effective_commits"),
-                summary.get("dominant_share_of_generation"),
-                summary.get("repeated_treesig_count"),
-                summary.get("generation_distinct_commit_count"),
-                displaced.get("snapshot_sig"), displaced.get("lifespan_class"),
-                displaced.get("was_dominant"),
-            ),
-        )
+    if all_commits:
+        head_topo = all_commits[0][0]
+        
+        last_sig = None
+        for r in all_commits:
+            topo, sig, date, subj, shape, file_count, snapshot_sig = r
+            
+            is_new_sig = (snapshot_sig != last_sig)
+            if is_new_sig:
+                shape_str = str(shape).lower()
+                is_macro = ("major:" in shape_str or "multi-dir:" in shape_str or "isolated" in shape_str or "genesis" in shape_str or "critical" in shape_str)
+                if is_macro or topo == head_topo or topo == 1:
+                    conn.execute(
+                        """INSERT INTO architecture_boundaries
+                        (run_id, boundary_commit_sig, boundary_commit_topo_id,
+                         boundary_commit_date, boundary_commit_subject,
+                         cause_tag, magnitude, scope_file_count, snapshot_count, structural_count, incremental_count, distinct_commit_count, dominant_effective_commits, dominant_share)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (
+                            run_id, sig, topo, date, subj,
+                            shape if topo != head_topo else "head", 
+                            "structural", file_count,
+                            1, 1, 0, 1, 1, 1.0
+                        ),
+                    )
+            last_sig = snapshot_sig
 
     # Unmapped commits from ledger
     ledger_path = Path("data") / repo_label / f"{repo_label}_ledger_cirsd.csv"
@@ -369,14 +372,14 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
     ).fetchone()
 
     if exists:
-        from backend.cli.arch_history.data.loader import human_shape_label
+        from backend.services.architecture.taxonomy import get_boundary_cause_label, normalize_cause_tag
         # Update shape and shape_label together to prevent UI desynchronization
         conn.execute(
             "UPDATE architecture_snapshots SET shape = ?, shape_label = ?, generator_mode = ? WHERE id = ?",
-            (shape, human_shape_label(shape), mode, exists[0]),
+            (shape, get_boundary_cause_label(normalize_cause_tag(shape)), mode, exists[0]),
         )
     else:
-        from backend.cli.arch_history.data.loader import human_shape_label
+        from backend.services.architecture.taxonomy import get_boundary_cause_label, normalize_cause_tag
         conn.execute(
             """INSERT INTO architecture_snapshots
             (run_id, snapshot_sig, snapshot_path, shape, shape_label,
@@ -387,7 +390,7 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
             (
                 run_id, snapshot_sig,
                 f"arch_snapshot-{prefix}.md",
-                shape, human_shape_label(shape),
+                shape, get_boundary_cause_label(normalize_cause_tag(shape)),
                 meta.get("generator_version", "unknown"),
                 mode, "programmatic",
                 _blueprint_hash(snapshot_sig, repo_label),
@@ -440,15 +443,55 @@ def write_commit_relationships(db_path, run_id, snapshot_commits):
             (run_id,),
         )
         _role_counts = {"trigger": 0, "successive": 0, "reappeared": 0}
+        # Flatten and sort all commits from all buckets reverse-chronologically to safely mark triggers
+        all_flat_commits = []
         for (snapshot_sig, gen), commits in snapshot_commits.items():
-            ordered = sorted(
-                commits,
-                key=lambda x: (
-                    x.get('topo_id') is None,
-                    x.get('topo_id') if x.get('topo_id') is not None else -1,
-                ),
-                reverse=True,
-            )
+            for c in commits:
+                c['_snapshot_sig'] = snapshot_sig
+                all_flat_commits.append(c)
+                
+        all_flat_commits.sort(key=lambda x: x.get('topo_id') or -1, reverse=False)
+        
+        last_seen_sig = None
+        for entry in all_flat_commits:
+            snapshot_sig = entry['_snapshot_sig']
+            topo_id = entry.get('topo_id')
+            commit_sig = (entry.get('commit_hash') or '')[:7]
+            is_reappeared = bool(entry.get('reappeared', False))
+            
+            if snapshot_sig != last_seen_sig:
+                role = 'trigger'
+                last_seen_sig = snapshot_sig
+            elif is_reappeared:
+                role = 'reappeared'
+            else:
+                role = 'successive'
+                
+            _role_counts[role] += 1
+            commit_date = entry.get('date')
+            commit_subject = entry.get('subject')
+
+            existing = conn.execute(
+                'SELECT id FROM architecture_commits '
+                'WHERE run_id=? AND commit_sig=? AND snapshot_sig=?',
+                (run_id, commit_sig, snapshot_sig),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    'UPDATE architecture_commits '
+                    'SET role=?, topo_id=?, date=?, subject=? WHERE id=?',
+                    (role, topo_id, commit_date, commit_subject, existing[0]),
+                )
+            else:
+                conn.execute(
+                    'INSERT INTO architecture_commits '
+                    '(run_id, snapshot_sig, topo_id, commit_sig, date, subject, role) '
+                    'VALUES (?,?,?,?,?,?,?)',
+                    (run_id, snapshot_sig, topo_id, commit_sig, commit_date, commit_subject, role),
+                )
+            written += 1
+        conn.commit()
+        if False:  # Skip old inner loop block
             print(
                 f"[arch-db] relationship bucket sig={snapshot_sig[:12]} gen={gen} size={len(ordered)}",
                 file=_sys.stderr,

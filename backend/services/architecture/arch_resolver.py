@@ -35,7 +35,9 @@ class ArchitectureResolver:
                 result = ensure_fresh_architecture_context(self.repo_path, commit_sha=commit_sha, topo_id=topo_id, is_head_fallback=is_head_fallback)
                 if result and getattr(result, "status", None) and getattr(result.status, "name", "") != "FAILED":
                     break
-            except Exception:
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
                 result = None
 
         if not result or getattr(result, "status", None) is None or getattr(result.status, "name", "") == "FAILED":
