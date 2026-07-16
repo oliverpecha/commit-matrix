@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from backend.cli.arch_history.models import (
+from backend.services.architecture.models import (
     HistoryReport, SnapshotEntry, GenerationSummaryMetrics
 )
 from backend.cli.arch_history.ui.format import (
@@ -159,7 +159,7 @@ def _render_era_panel(report: HistoryReport, generation: int, compact: bool = Fa
 
 
 def _render_lifespan_and_badges(entry: SnapshotEntry, branch: str, trunk: str, markers: TimelineMarkers) -> None:
-    from backend.cli.arch_history.taxonomy import get_shape_metadata
+    from backend.services.architecture.taxonomy import get_shape_metadata
     
     raw_shape = entry.shape or ""
     meta = get_shape_metadata(raw_shape)
@@ -240,22 +240,44 @@ def _render_also_used(entry: SnapshotEntry, trunk: str, show_operational: bool =
         _render_commit_block(run, trunk, show_operational, compact, markers)
 
 def _era_clip_counts(report: HistoryReport, entries: list[SnapshotEntry], generation: int) -> tuple[list[SnapshotEntry], list[SnapshotEntry]]:
-    all_gen = [e for e in report.entries if e.generation == generation]
+    # Sort purely by generation index to guarantee chronological sequence
+    all_gen = sorted([e for e in report.entries if e.generation == generation], key=lambda x: x.generation_index)
     v = sorted([e for e in entries if e.generation == generation], key=lambda x: x.generation_index)
-    return (all_gen[:v[0].generation_index] if v else [], all_gen[v[-1].generation_index + 1:] if v else [])
+    
+    if not v or not all_gen: 
+        return [], []
+        
+    # Match the exact absolute array indices to prevent off-by-one errors
+    first_idx = next((i for i, e in enumerate(all_gen) if e.snapshot_sig == v[0].snapshot_sig), 0)
+    last_idx = next((i for i, e in enumerate(all_gen) if e.snapshot_sig == v[-1].snapshot_sig), len(all_gen) - 1)
+    
+    return all_gen[:first_idx], all_gen[last_idx + 1:]
 
-def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | None, open_g: int | None, compact: bool = False, show_op: bool = True, filtered_g: bool = False, show_sum: bool = True, early_omit: int = 0, reverse: bool = False, early_m: str = "", markers: TimelineMarkers = None) -> int:
-    b, t = ("└" if next_gen != entry.generation else "├"), (" " if next_gen != entry.generation else "│")
+def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | None, open_g: int | None, compact: bool, show_op: bool, filtered_g: bool, top_omission: list, bottom_omission: list, reverse: bool, markers: TimelineMarkers) -> int:
+    is_last_in_era = (next_gen != entry.generation)
+    
+    # If we have hidden snapshots trailing below, hold the tree trunk open!
+    if compact and bottom_omission:
+        is_last_in_era = False
+
+    b = "└" if is_last_in_era else "├"
+    t = " " if is_last_in_era else "│"
+
     if open_g != entry.generation:
         if open_g is not None: print()
-        if show_sum: _render_era_panel(report, entry.generation, compact, filtered_g)
-        else:
-            _render_era_panel(report, entry.generation, compact, filtered_g)
-        if early_omit > 0: print(f" │  … {early_omit} {'later' if reverse else 'earlier'} snapshots compacted{early_m}")
+        _render_era_panel(report, entry.generation, compact, filtered_g)
         open_g = entry.generation
+
+    # Print top omission (chronologically later snapshots hidden above)
+    if compact and top_omission:
+        suffix = "s" if len(top_omission) != 1 else ""
+        label = "later" if reverse else "earlier"
+        print(f" │   … {len(top_omission)} {label} snapshot{suffix} compacted")
+
     _render_lifespan_and_badges(entry, b, t, markers)
     _render_trigger(entry, t, markers)
     _render_also_used(entry, t, show_op, compact, reverse, markers)
+
     import os
     is_debug = str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes", "on")
     if compact:
@@ -266,12 +288,18 @@ def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | No
             val_mode = f' · validation={entry.mode.split("-")[-1]}' if '-' in entry.mode else ''
             print(f' {t}   └- Debug: generated {entry.generated_at}{val_mode} · {entry.size_bytes}B')
         else:
-            # Cap the branch visually if Debug is suppressed
             print(f" {t}   └ Details: {entry.generator_version} · {entry.mode} · sampled {entry.selected_files} of {entry.total_files} files")
+
+    # Print bottom omission (chronologically earlier snapshots hidden below)
+    if compact and bottom_omission:
+        suffix = "s" if len(bottom_omission) != 1 else ""
+        label = "earlier" if reverse else "later"
+        cap = "└" if (next_gen != entry.generation) else "├"
+        print(f" {cap}   … {len(bottom_omission)} {label} snapshot{suffix} compacted")
+
     return open_g
 
 def render_history_report(report: HistoryReport, reverse: bool = False, compact: bool = False, show_operational: bool = True, since: str | None = None, until: str | None = None, generation: str | None = None, snapshot_prefix: str | None = None, commit_target: str | None = None, smart_target: str | None = None, only_reappeared: bool = False) -> None:
-    # Safeguard totals for DB-first reports; treat None as 0 for summary purposes.
     total_blueprints = report.total_blueprints or 0
     total_commits = report.total_commits or 0
     if total_blueprints == 0 and total_commits == 0:
@@ -282,38 +310,27 @@ def render_history_report(report: HistoryReport, reverse: bool = False, compact:
     if not entries:
         print("\n  (no snapshots matched the current filters)\n")
         return
-    if not (len(report.entries) != report.total_blueprints or len({e.generation for e in report.entries}) != report.total_generations):
+        
+    filtered_g = (len(report.entries) != report.total_blueprints or len({e.generation for e in report.entries}) != report.total_generations) or generation is not None
+    if not filtered_g:
         render_summary(report)
     else:
         _render_filtered_header(report, entries, reverse, since, until, generation, snapshot_prefix, commit_target, only_reappeared, compact, markers)
-    def get_hidden_m(s_list):
-        if not compact or not s_list: return ""
-        t = set()
-        for x in s_list:
-            if x.trigger: t.add(x.trigger.topo_id)
-            for c in (x.successive_used_by or []): t.add(c.topo_id)
-            for run in (x.reappeared_runs or []):
-                for c in run: t.add(c.topo_id)
-        hs, he = (markers.start and markers.start['topo'] in t), (markers.end and markers.end['topo'] in t)
-        if hs and he: return f"          <- [{'Target' if markers.is_single else 'Range Start & End'} hidden by --compact]"
-        if hs: return f"          <- [{'Target' if markers.is_single else 'Range Start'} hidden by --compact]"
-        if he: return "          <- [Range End hidden by --compact]"
-        return ""
+
     open_g = None
     for idx, entry in enumerate(entries):
         es, ls = _era_clip_counts(report, entries, entry.generation)
-        se_s, sl_s = (ls if reverse else es), (es if reverse else ls)
+        
+        # When printing Head->Tail, "later" commits occurred after the dominant one, so they print above it
+        top_omission = ls if reverse else es
+        bottom_omission = es if reverse else ls
+        
         next_g = entries[idx + 1].generation if idx + 1 < len(entries) else None
-        open_g = render_entry(report, entry, next_g, open_g, compact, show_operational, len(entries) < len(report.entries), not (len(report.entries) != report.total_blueprints or len({e.generation for e in report.entries}) != report.total_generations) or generation is not None, len(se_s), reverse, get_hidden_m(se_s), markers)
-        if next_g != entry.generation and sl_s:
-            trail_trunk = "│" if next_g is not None else " "
-            print(f" {trail_trunk}  … {len(sl_s)} {'earlier' if reverse else 'later'} snapshots compacted{get_hidden_m(sl_s)}")
+        
+        open_g = render_entry(report, entry, next_g, open_g, compact, show_operational, filtered_g, top_omission, bottom_omission, reverse, markers)
+
     if compact: print()
-    else:
-        pass
 
-
-    # Vacuum warning at the bottom
     try:
         from backend.services.db.reader import read_vacuums
         _bottom_vacs = read_vacuums(report.repo_label)
@@ -324,17 +341,15 @@ def render_history_report(report: HistoryReport, reverse: bool = False, compact:
                 s = v.get("vacuum_end_topo", "?")
                 e = v.get("vacuum_start_topo", "?")
                 _bv_parts.append(f"#{s} to #{e}")
-            print(f"\n \u26a0\ufe0f  Vacuum: {_bv_total} unscanned commits ({', '.join(_bv_parts)})")
+            print(f"\n ⚠️  Vacuum: {_bv_total} unscanned commits ({', '.join(_bv_parts)})")
     except Exception as _ve:
-        import sys as _s
-        print(f"[vacuum-warn] {_ve}", file=_s.stderr)
+        pass
 
-    # Also check if tail doesn't reach commit 1
     _p_topos2 = [e2.trigger.topo_id for e2 in report.entries if e2.trigger and e2.trigger.topo_id is not None]
     if _p_topos2:
         _min_topo = min(_p_topos2)
         if _min_topo > 1:
             _unscanned = _min_topo - 1
-            print(f"\n \u26a0\ufe0f  Vacuum: {_unscanned} unscanned commits (#{_min_topo - 1} to #1)")
+            print(f"\n ⚠️  Vacuum: {_unscanned} unscanned commits (#{_min_topo - 1} to #1)")
 
     print()

@@ -1,4 +1,4 @@
-from backend.cli.arch_history.models import HistoryReport
+from backend.services.architecture.models import HistoryReport
 
 class TimelineMarkers:
     def __init__(self, report: HistoryReport, **kwargs):

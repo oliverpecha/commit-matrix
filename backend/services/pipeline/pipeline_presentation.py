@@ -1,8 +1,25 @@
 from __future__ import annotations
+
+def _get_shape_emoji(sig):
+    import sqlite3, glob
+    try:
+        from backend.services.architecture.taxonomy import get_shape_metadata
+        db_paths = glob.glob("data/*/commit_matrix.db")
+        if db_paths:
+            with sqlite3.connect(db_paths[0]) as conn:
+                res = conn.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig LIKE ? ORDER BY run_id DESC LIMIT 1", (str(sig)[:12] + "%",)).fetchone()
+                if res:
+                    s = res[0]
+                    if str(s).lower() in ("head", "major:head", "current architecture head"):
+                        return "📍"
+                    meta = get_shape_metadata(s)
+                    return meta.get("icon", "🍃")
+    except: pass
+    return "🍃"
 import os
 import sqlite3
 from pathlib import Path
-from backend.cli.arch_history.taxonomy import get_shape_metadata, normalize_cause_tag, get_boundary_magnitude
+from backend.services.architecture.taxonomy import get_shape_metadata, normalize_cause_tag, get_boundary_magnitude
 
 def _axis_bar(value: int, max_val: int = 3, width: int = 5) -> str:
     value = max(0, int(value or 0))
@@ -14,7 +31,7 @@ def render_boundary_banner(boundary_data: dict, snapshot_sig: str) -> str:
     Renders an architecture boundary banner using DB schedule data without re-evaluating taxonomy.
     """
     cause_tag = boundary_data.get("cause_tag", "")
-    meta = get_shape_metadata(cause_tag)
+    meta = get_shape_metadata(normalize_cause_tag(cause_tag))
     icon = meta.get("icon", "•")
     label = meta.get("label", cause_tag or "Architecture Shift")
     
@@ -45,22 +62,42 @@ def render_boundary_banner(boundary_data: dict, snapshot_sig: str) -> str:
     )
 
 
-def report_sensor_mutation(commit_sha: str, old_sig: str, new_sig: str, raw_shape: str) -> None:
+def report_sensor_mutation(commit_sha: str, from_sig: str, to_sig: str, raw_shape: str, is_era_trigger: bool = False) -> None:
     """Triggered on physical mutations of the repository tree configuration."""
-    if str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on"):
-        print(f"[arch-tree] Signature Mutation {old_sig[:12]} ➔ {new_sig[:12]}", flush=True)
+    import os
+    # Only report if the underlying snapshot signature actually changed (Mutation)
+    if from_sig != to_sig and str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on"):
+        from_emoji = _get_shape_emoji(from_sig)
+        
+        # Enforce SSOT dynamic taxonomy lookups, bypassing fuzzy DB hash queries for the current target
+        from backend.services.architecture.taxonomy import get_shape_metadata
+        meta_to = get_shape_metadata(raw_shape)
+        to_emoji = meta_to.get("icon", "🍃") if meta_to else "🍃"
+        
+        print(f"\n[arch-tree] Signature Mutation {from_emoji} {str(from_sig)[:12]} ➔ {to_emoji} {str(to_sig)[:12]}", flush=True)
+        
+        # Warning: ONLY print the warning if the database schedule confirms a structural era banner is following
+        from backend.services.architecture.taxonomy import get_boundary_magnitude
+        if is_era_trigger and get_boundary_magnitude(raw_shape) == "structural":
+            print(f"\n[arch-tree] ⚠️ Warning ⚠️: Significant Boundary Shift to {to_emoji} detected. A corresponding era banner must follow.", flush=True)
         print("", flush=True)
         print("", flush=True)
 
 def render_commit_score_card(work_item: any, scores: dict, progress_data: dict) -> str:
-    """Assembles a unified presentation layout card out of precalculated properties and scores."""
+    """Assembles a unified presentation layout card enforcing the Trigger Isolation Rule."""
     h = work_item.arch_meta.get("heuristics", {})
     c, i, r, s, d = scores.get('C', 1), scores.get('I', 1), scores.get('R', 1), scores.get('S', 1), scores.get('D', 1)
     total_score = sum([c, i, r, s, d])
     
     bar = "█" * progress_data['filled'] + "░" * (16 - progress_data['filled'])
     
-    meta = get_shape_metadata(work_item.arch_meta.get("cause_tag", ""))
+    role = work_item.arch_meta.get("role", "successive")
+    cause_tag = work_item.arch_meta.get("cause_tag", "")
+    
+    # Trigger Isolation Rule: Force successive commits to leaf-only
+    effective_tag = cause_tag if role == "trigger" else "leaf-only"
+    
+    meta = get_shape_metadata(effective_tag)
     shape_display = f"{meta.get('icon', '•')} {meta.get('label')}" if meta else "unknown"
 
     ui_block = (
@@ -82,7 +119,7 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
     """Prints a tabular summary of architectural boundaries for debugging."""
     import os
     import sqlite3
-    from backend.cli.arch_history.taxonomy import get_shape_metadata
+    from backend.services.architecture.taxonomy import get_shape_metadata
     
     if str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() not in ("1", "true", "yes", "on"):
         return
@@ -113,7 +150,7 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
             
             valid_boundaries = []
             for r in rows:
-                meta = get_shape_metadata(r["cause_tag"])
+                meta = get_shape_metadata(normalize_cause_tag(r["cause_tag"]))
                 if r["magnitude"] == "structural" or str(r["cause_tag"]).lower() in ("major:head", "head", "current architecture head"):
                     valid_boundaries.append((r, meta))
 
