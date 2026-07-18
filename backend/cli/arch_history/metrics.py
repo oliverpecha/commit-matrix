@@ -25,18 +25,19 @@ def compute_generation_summaries(entries: list, db_boundaries: list[dict] = None
             if not gen_entries:
                 continue
                 
-            # Trust the DB explicitly for the unique era commit count span
-            true_era_span = bound.get("distinct_commit_count") or 0
+            # Dynamically accumulate the true commit span across the structural boundary era
+            true_era_span = sum((e.lifespan.total_commits if e.lifespan else 0) for e in gen_entries)
             
             # Find the dominant snapshot entry inside this generation group
             dominant_entry = max(gen_entries, key=lambda x: x.lifespan.total_commits if x.lifespan else 0, default=gen_entries[0])
             dom_sig = dominant_entry.snapshot_sig
             dom_lifespan = dominant_entry.lifespan.total_commits if dominant_entry and dominant_entry.lifespan else 0
             
-            # Absolute share: Dominant Snapshot Lifespan / Authoritative Database Era Span
+            # Absolute share: Dominant Snapshot Lifespan / Dynamically Computed Era Span
             dom_share = (dom_lifespan / true_era_span) if true_era_span > 0 else 1.0
             
-            struct_count = sum(1 for e in gen_entries if str(e.shape).startswith(("major:", "multi-dir:")))
+            from backend.services.architecture.taxonomy import get_boundary_magnitude
+            struct_count = sum(1 for e in gen_entries if get_boundary_magnitude(e.shape) == "structural" or str(e.shape).lower() in ("head", "major:head"))
             snap_count = len(gen_entries)
             
             tag = bound.get("cause_tag", "unknown")

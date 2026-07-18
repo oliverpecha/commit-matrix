@@ -600,10 +600,11 @@ def assemble_history_report(
         sorted_bounds = sorted(db_boundaries, key=lambda b: b.get("boundary_commit_topo_id") or 0)
         for entry in entries_out:
             topo = entry.trigger.topo_id if entry.trigger and entry.trigger.topo_id is not None else 0
-            assigned_gen = 1
+            assigned_gen = len(sorted_bounds)
             for idx, bound in enumerate(sorted_bounds, start=1):
-                if topo >= (bound.get("boundary_commit_topo_id") or 0):
+                if (bound.get("boundary_commit_topo_id") or 0) >= topo:
                     assigned_gen = idx
+                    break
             entry.generation = assigned_gen
 
         # 2. Assign relative intra-era generation_index to prevent UI compaction hallucinations

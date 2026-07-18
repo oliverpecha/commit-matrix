@@ -237,9 +237,7 @@ def main(
                 gens = sorted({e.generation for e in report.entries}, reverse=True)[:n]
                 if gens:
                     report.entries = [e for e in report.entries if e.generation in set(gens)]
-            # Recompute summaries after filtering
-            from backend.services.architecture.metrics import _compute_generation_summaries
-            report.generation_summaries = _compute_generation_summaries(report.entries) if report.entries else {}
+            # Summaries are authoritative from the DB schedule; do not naively recompute them on subsets
             report.total_blueprints = len(report.entries)
             report.total_generations = len({e.generation for e in report.entries})
         if _progress_cb and any([since, until, generation, snapshot_prefix, commit_target]):
