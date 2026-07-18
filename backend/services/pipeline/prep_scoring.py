@@ -8,7 +8,8 @@ _ORACLE_READY_EVENT = threading.Event()
 def _sqlite_is_macro(tag):
     if not tag: return 0
     t = str(tag).lower()
-    if t in ('leaf-only', 'leaf_only', 'major:head', 'head'): return 0
+    if t in ('leaf-only', 'leaf_only'): return 0
+    if t in ('major:head', 'head'): return 1
     try:
         from backend.services.architecture.taxonomy import normalize_cause_tag, get_boundary_magnitude
         return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
@@ -108,8 +109,8 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
             date_str = str(commit_parts[1]) if len(commit_parts) > 1 else ""
             subject = str(commit_parts[3]) if len(commit_parts) > 3 else ""
 
-            absolute_head_topo = commits_with_ids[0][0] if commits_with_ids else topo_id
-            is_head_fallback = (topo_id == absolute_head_topo)
+            absolute_head_topo = max([int(t) for t, _ in commits_with_ids]) if commits_with_ids else int(topo_id)
+            is_head_fallback = (int(topo_id) == absolute_head_topo)
             state, meta = tracker.resolve_for_commit(commit_hash, topo_id=topo_id, is_head_fallback=is_head_fallback)
             
             if state and getattr(state, "signature", None):
@@ -146,7 +147,7 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                 except Exception:
                     pass
 
-                is_trigger = is_new_sig and (not is_merge or item["is_head_fallback"])
+                is_trigger = (is_new_sig and not is_merge) or item["is_head_fallback"]
                 role = "trigger" if is_trigger else "successive"
                 
                 conn.execute(
@@ -157,12 +158,16 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                 )
 
                 if is_trigger:
-                    # SSOT Sync: Fetch authoritative shape from architecture_snapshots to ensure 1:1 mapping with the stream sensor
-                    snap_row = conn.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (current_sig,)).fetchone()
-                    official_shape = snap_row[0] if snap_row else item.get("shape", "leaf-only")
+                    if item["is_head_fallback"]:
+                        official_shape = "head"
+                        conn.execute("UPDATE architecture_snapshots SET shape = 'head', shape_label = 'Current Architecture Head' WHERE snapshot_sig = ?", (current_sig,))
+                    else:
+                        # SSOT Sync: Fetch authoritative shape from architecture_snapshots to ensure 1:1 mapping with the stream sensor
+                        snap_row = conn.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (current_sig,)).fetchone()
+                        official_shape = snap_row[0] if snap_row else item.get("shape", "leaf-only")
                     
                     shape_str = str(official_shape).lower()
-                    is_macro = ("major:" in shape_str or "multi-dir:" in shape_str or "isolated" in shape_str or "genesis" in shape_str or "critical" in shape_str)
+                    is_macro = ("major:" in shape_str or "multi-dir:" in shape_str or "isolated" in shape_str or "genesis" in shape_str or "critical" in shape_str or shape_str == "head")
                     
                     if is_macro or item["is_head_fallback"]:
                         exists = conn.execute(

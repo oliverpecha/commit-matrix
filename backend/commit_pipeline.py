@@ -231,7 +231,7 @@ def main():
                             if curr_sig != prev_sig:
                                 _cursor.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (curr_sig,))
                                 _shape_row = _cursor.fetchone()
-                                raw_shape = _shape_row[0] if _shape_row else "leaf-only"
+                                raw_shape = "head" if res_topo in boundary_schedule and boundary_schedule[res_topo].get("cause_tag") in ("head", "major:head") else (_shape_row[0] if _shape_row else "leaf-only")
                                 
                                 from backend.services.pipeline.pipeline_presentation import report_sensor_mutation
                                 # Express mutation moving from the exiting signature (prev_sig) into the entering signature (curr_sig)

@@ -59,12 +59,12 @@ class ArchitectureResolver:
         change_shape = cs.get("change_shape") or "leaf-only"
         mode = meta.get("mode") or cs.get("mode") or "unknown"
 
-        if self.prev_signature is None:
+        if self.prev_signature is None or is_head_fallback:
             gen = 1
             established = True
             advanced = False
             reappeared = False
-            change_shape = "major:head"
+            change_shape = "head"
             summary = "Architecture Head established for this scan."
         elif sig == self.prev_signature:
             gen = self.prev_gen
