@@ -85,13 +85,31 @@ def main():
         repo_label = "commit-matrix"
 
     db_path = f"data/{repo_label}/commit_matrix.db"
+    
+    # Capture database footprint before oracle initializes to determine if this is a genuine cold boot
+    import pathlib as _p_init
+    _initial_db = _p_init.Path(db_path)
+    is_genuine_warm_start = _initial_db.exists() and _initial_db.stat().st_size > 8192
 
-    from backend.services.pipeline.prep_scoring import ensure_architecture_oracle, wait_for_oracle_sync, wait_for_oracle_sync
+    from backend.services.pipeline.prep_scoring import ensure_architecture_oracle, wait_for_oracle_sync
     ensure_architecture_oracle(repo_path, db_path)
     wait_for_oracle_sync(120.0)
 
+    # Safe warm start boot status print hook
+    import sqlite3 as _boot_sq
+    if is_genuine_warm_start:
+        try:
+            with _boot_sq.connect(db_path) as _b_conn:
+                _t_exists = _b_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
+                if _t_exists:
+                    _b_count = _b_conn.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0]
+                    if _b_count > 0:
+                        print("\n[arch-oracle] ♨️  Warm start detected. Linking to existing ledger...", flush=True)
+        except Exception:
+            pass
+
     from backend.services.pipeline.pipeline_presentation import print_debug_boundary_table
-    print_debug_boundary_table(repo_label, db_path)
+    print_debug_boundary_table(repo_label, db_path)  # Displaying baseline topology map
 
     existing_hashes = load_existing_hashes(CSV_PATH)
     bootstrap_res = build_commit_queue(repo_path, existing_hashes)
@@ -118,7 +136,8 @@ def main():
     import sqlite3 as _summary_sq
     try:
         with _summary_sq.connect(db_path) as _conn_b:
-            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots").fetchone()[0]
+            _table_exists = _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone()
+            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots").fetchone()[0] if _table_exists else 0
         print('\n' + '─' * 71, flush=True)
         print('🏗️  Architecture Summary', flush=True)
         print(f"    Snapshots     │ {_s_count} unique architecture states", flush=True)
