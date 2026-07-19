@@ -74,9 +74,8 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
         if commits_with_ids:
             with sqlite3.connect(db_path) as _conn:
                 _conn.execute("PRAGMA journal_mode=WAL")
-                _conn.execute("UPDATE architecture_boundaries SET cause_tag = 'Stable Implementation Refinement' WHERE cause_tag IN ('head', 'major:head', 'current architecture head')")
                 _conn.execute("UPDATE architecture_snapshots SET shape = 'leaf-only', shape_label = 'Stable Implementation Refinement' WHERE shape = 'head'")
-                _conn.execute("DELETE FROM architecture_boundaries WHERE boundary_commit_topo_id = ?", (max_db_topo,))
+                _conn.execute("DELETE FROM architecture_boundaries WHERE cause_tag IN ('head', 'major:head', 'current architecture head', 'Stable Implementation Refinement', 'leaf-only') OR boundary_commit_topo_id = ?", (max_db_topo,))
                 _conn.execute("UPDATE architecture_commits SET role = 'successive' WHERE topo_id = ?", (max_db_topo,))
                 _conn.commit()
 

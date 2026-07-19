@@ -807,7 +807,7 @@ def incremental_sync_commit_states(repo_label: str, db_path: str, resolved_state
                 if not exists:
                     from backend.services.architecture.taxonomy import normalize_cause_tag
                     if item["is_head_fallback"]:
-                        conn.execute("UPDATE architecture_boundaries SET cause_tag = 'Stable Implementation Refinement' WHERE run_id = ? AND cause_tag IN ('head', 'major:head', 'current architecture head')", (run_id,))
+                        conn.execute("DELETE FROM architecture_boundaries WHERE run_id = ? AND cause_tag IN ('head', 'major:head', 'current architecture head', 'Stable Implementation Refinement', 'leaf-only')", (run_id,))
                     conn.execute(
                         "INSERT INTO architecture_boundaries (run_id, boundary_commit_sig, boundary_commit_topo_id, boundary_commit_date, boundary_commit_subject, cause_tag, magnitude) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (run_id, item["commit_hash"][:7], item["topo_id"], item["date_str"], item["subject"], normalize_cause_tag(official_shape), "structural")
