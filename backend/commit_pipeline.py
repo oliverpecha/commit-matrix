@@ -296,8 +296,16 @@ def main():
         vacuums = read_vacuums(repo_label)
 
         print('─' * 71, flush=True)
-        if scan:
-            print(f"    Commits       │ processed (#{scan['scan_head_topo']} to #{scan['scan_tail_topo']})", flush=True)
+        run_head = commits_with_ids[0][0] if commits_with_ids else 0
+        run_tail = commits_with_ids[-1][0] if commits_with_ids else 0
+        
+        import sqlite3
+        with sqlite3.connect(db_path) as _c:
+            _t_exists = _c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
+            b_count = _c.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0] if _t_exists else 0
+            
+        print(f"    Commits       │ processed (#{run_head} to #{run_tail})", flush=True)
+        print(f"    Boundaries    │ {b_count} structural era triggers", flush=True)
         if vacuums:
             total_vac = sum(v.get("commit_count", 0) for v in vacuums)
             print(f"    Vacuums       │ {total_vac} unscanned", flush=True)
@@ -305,6 +313,9 @@ def main():
     except Exception as e:
         if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
             print(f"\n❌ FATAL BOUNDARY ERROR: {e}\n", flush=True)
+
+    from backend.services.pipeline.pipeline_presentation import print_final_pipeline_summary_report
+    print_final_pipeline_summary_report(repo_label, db_path)
 
     if error_count > 0:
         print(f"⚠️ PROCESS_COMPLETE_WITH_ERRORS: {error_count} failed, {success_count} succeeded.\n", flush=True)
