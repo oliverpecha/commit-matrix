@@ -236,29 +236,29 @@ def main():
                         _conn = _sq.connect(db_path)
                         _cursor = _conn.cursor()
 
-                        # 1. SENSOR Hook: Broadcast physical mutations when an actual signature delta occurs in the stream
                         _cursor.execute("SELECT snapshot_sig, commit_sig FROM architecture_commits WHERE topo_id = ?", (res_topo,))
                         _curr = _cursor.fetchone()
                         if _curr and _curr[0]:
                             curr_sig, curr_commit = _curr
                             
-                            # Fetch the signature of the item rendered immediately above it on screen (topo_id > res_topo)
-                            _cursor.execute("SELECT snapshot_sig FROM architecture_commits WHERE topo_id > ? AND snapshot_sig IS NOT NULL ORDER BY topo_id ASC LIMIT 1", (res_topo,))
+                            _cursor.execute("SELECT snapshot_sig FROM architecture_commits WHERE topo_id < ? AND snapshot_sig IS NOT NULL ORDER BY topo_id DESC LIMIT 1", (res_topo,))
                             _prev_row = _cursor.fetchone()
                             prev_sig = _prev_row[0] if _prev_row else curr_sig
                             
-                            if curr_sig != prev_sig:
+                            is_era_trigger = (res_topo in boundary_schedule)
+                            if curr_sig != prev_sig or is_era_trigger:
                                 _cursor.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (curr_sig,))
                                 _shape_row = _cursor.fetchone()
-                                raw_shape = "head" if res_topo in boundary_schedule and boundary_schedule[res_topo].get("cause_tag") in ("head", "major:head") else (_shape_row[0] if _shape_row else "leaf-only")
+                                
+                                is_head_root = is_era_trigger and boundary_schedule[res_topo].get("cause_tag") in ("head", "major:head", "current architecture head")
+                                raw_shape = "head" if is_head_root else (_shape_row[0] if _shape_row else "leaf-only")
+                                
+                                # Protect the active branch tip from generating a shift warning
+                                effective_era_trigger = is_era_trigger if not is_head_root else False
                                 
                                 from backend.services.pipeline.pipeline_presentation import report_sensor_mutation
-                                # Express mutation moving from the exiting signature (prev_sig) into the entering signature (curr_sig)
-                                is_era_trigger = (res_topo in boundary_schedule)
-                                from backend.services.pipeline.pipeline_presentation import report_sensor_mutation
-                                report_sensor_mutation(curr_commit, prev_sig, curr_sig, raw_shape, is_era_trigger)
+                                report_sensor_mutation(curr_commit, prev_sig, curr_sig, raw_shape, effective_era_trigger)
 
-                        # 2. ERA Normalization Check: Print banner BEFORE hydrated card using SSOT Schedule
                         if res_topo in boundary_schedule:
                             try:
                                 from backend.services.pipeline.pipeline_presentation import render_boundary_banner
@@ -274,7 +274,6 @@ def main():
                         if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
                             print(f"\n[arch-boundaries] ⚠️ Stream iteration error: {e}", flush=True)
                 
-                # 3. Print the Hydrated Commit Card AFTER any active banners
                 clean_output = re.sub(r" __TOPO:\d+__", "", output)
                 print(clean_output, flush=True)
 
