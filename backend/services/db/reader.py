@@ -221,3 +221,55 @@ def get_structural_boundaries_for_stream(repo_label: str, db_path: str = None) -
             
     return schedule
 
+
+
+def _sqlite_is_macro(tag):
+    if not tag: return 0
+    t = str(tag).lower()
+    if t in ('leaf-only', 'leaf_only'): return 0
+    if t in ('major:head', 'head'): return 1
+    try:
+        from backend.services.architecture.taxonomy import normalize_cause_tag, get_boundary_magnitude
+        return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
+    except:
+        return 0
+
+def get_commit_arch_context(repo_label: str, topo_id: int, db_path: str = None):
+    from typing import Tuple, Optional
+    db = db_path or resolve_db_path(repo_label)
+    if not Path(db).exists():
+        return None, None, None, None, None
+        
+    conn = sqlite3.connect(db)
+    try:
+        conn.create_function('IS_MACRO', 1, _sqlite_is_macro)
+        cur = conn.cursor()
+        cur.execute("SELECT ac.snapshot_sig, ab.cause_tag, ab.magnitude, ac.run_id, ac.role FROM architecture_commits ac LEFT JOIN architecture_boundaries ab ON ab.boundary_commit_topo_id = ac.topo_id AND ab.run_id = ac.run_id WHERE ac.topo_id = ? ORDER BY ac.run_id DESC LIMIT 1", (topo_id,))
+        row = cur.fetchone()
+        if not row or not row[0]:
+            cur.execute("SELECT snapshot_sig, 'Stable Implementation Refinement', 'incremental', run_id, 'successive' FROM architecture_commits WHERE snapshot_sig IS NOT NULL ORDER BY topo_id DESC LIMIT 1")
+            row = cur.fetchone()
+            if not row: return None, None, None, None, None
+
+        dominant_snapshot_sig, cause_tag, magnitude, run_id, role = row
+        if not cause_tag: cause_tag = "Stable Implementation Refinement"
+
+        cur.execute("SELECT COUNT(DISTINCT boundary_commit_topo_id) FROM architecture_boundaries WHERE boundary_commit_topo_id <= (SELECT MIN(boundary_commit_topo_id) FROM architecture_boundaries WHERE boundary_commit_topo_id >= ?) AND run_id = (SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1)", (topo_id,))
+        gen_row = cur.fetchone()
+        generation = gen_row[0] if gen_row and gen_row[0] is not None else None
+        
+        snapshot_path = None
+        if dominant_snapshot_sig:
+            cur.execute("SELECT snapshot_path FROM architecture_snapshots WHERE snapshot_sig = ? LIMIT 1", (dominant_snapshot_sig,))
+            sp_row = cur.fetchone()
+            if sp_row: snapshot_path = sp_row[0]
+
+        arch_context = None
+        if snapshot_path:
+            md_path = Path(snapshot_path)
+            candidate = md_path if md_path.is_absolute() or md_path.exists() else Path("data") / repo_label / "past_blueprints" / md_path.name
+            if candidate.exists(): arch_context = candidate.read_text(encoding="utf-8")
+
+        return arch_context, cause_tag, generation, dominant_snapshot_sig, role
+    finally: 
+        conn.close()

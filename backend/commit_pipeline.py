@@ -91,7 +91,7 @@ def main():
     _initial_db = _p_init.Path(db_path)
     is_genuine_warm_start = _initial_db.exists() and _initial_db.stat().st_size > 8192
 
-    from backend.services.pipeline.prep_scoring import ensure_architecture_oracle, wait_for_oracle_sync
+    from backend.services.architecture.arch_sync import ensure_architecture_oracle, wait_for_oracle_sync
     ensure_architecture_oracle(repo_path, db_path)
     wait_for_oracle_sync(120.0)
 

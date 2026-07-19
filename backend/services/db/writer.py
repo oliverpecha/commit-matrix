@@ -762,3 +762,55 @@ def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int) -
     conn.commit()
     conn.close()
 
+
+
+def incremental_sync_commit_states(repo_label: str, db_path: str, resolved_states: list) -> None:
+    db = Path(db_path)
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    
+    run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+    if not run_row: 
+        conn.close()
+        return
+    run_id = run_row[0]
+    
+    last_sig = None
+    for item in resolved_states:
+        current_sig = item["current_sig"]
+        is_new_sig = (current_sig != last_sig)
+        last_sig = current_sig
+        
+        is_trigger = (is_new_sig and not item.get("is_merge", False)) or item["is_head_fallback"]
+        role = "trigger" if is_trigger else "successive"
+        
+        conn.execute(
+            "UPDATE architecture_commits SET date = ?, subject = ?, role = ? WHERE run_id = ? AND topo_id = ?",
+            (item["date_str"], item["subject"], role, run_id, item["topo_id"])
+        )
+
+        if is_trigger:
+            if item["is_head_fallback"]:
+                official_shape = "head"
+                conn.execute("UPDATE architecture_snapshots SET shape = 'head', shape_label = 'Current Architecture Head' WHERE snapshot_sig = ?", (current_sig,))
+            else:
+                snap_row = conn.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig = ?", (current_sig,)).fetchone()
+                official_shape = snap_row[0] if snap_row else item.get("shape", "leaf-only")
+                if official_shape == "head":
+                    official_shape = "leaf-only"
+            
+            shape_str = str(official_shape).lower()
+            is_macro = ("major:" in shape_str or "multi-dir:" in shape_str or "isolated" in shape_str or "genesis" in shape_str or "critical" in shape_str)
+            
+            if is_macro or item["is_head_fallback"]:
+                exists = conn.execute("SELECT id FROM architecture_boundaries WHERE run_id = ? AND boundary_commit_topo_id = ?", (run_id, item["topo_id"])).fetchone()
+                if not exists:
+                    from backend.services.architecture.taxonomy import normalize_cause_tag
+                    if item["is_head_fallback"]:
+                        conn.execute("UPDATE architecture_boundaries SET cause_tag = 'Stable Implementation Refinement' WHERE run_id = ? AND cause_tag IN ('head', 'major:head', 'current architecture head')", (run_id,))
+                    conn.execute(
+                        "INSERT INTO architecture_boundaries (run_id, boundary_commit_sig, boundary_commit_topo_id, boundary_commit_date, boundary_commit_subject, cause_tag, magnitude) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (run_id, item["commit_hash"][:7], item["topo_id"], item["date_str"], item["subject"], normalize_cause_tag(official_shape), "structural")
+                    )
+    conn.commit()
+    conn.close()
