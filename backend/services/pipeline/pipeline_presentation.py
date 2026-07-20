@@ -215,3 +215,43 @@ def print_final_pipeline_summary_report(repo_label: str, db_path: str) -> None:
                         print(f"\n[arch-tree] ❌ Validation failure: {_ACTUAL_WARNINGS} printed warnings != {expected} expected shifts!\n", flush=True)
     except Exception:
         pass
+
+
+def render_bootstrap_banner(repo_path, repo_label, log_path=None):
+    import os
+    import sys
+    
+    # Read contextual triggers
+    trigger_source = os.environ.get("MATRIX_TRIGGER_SOURCE", "").lower()
+    is_browser = "browser" in trigger_source or "frontend" in trigger_source or "web" in trigger_source
+    context_str = "🌐 BROWSER / FRONTEND" if is_browser else "🐚 NATIVE TERMINAL"
+    
+    # 1. Resolve True Execution Mode Options
+    is_random = str(os.environ.get("RANDOM_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    mode_str = "🎲 RANDOM SCORING ENABLED" if is_random else "🤖 LLM SCORING MODE"
+    
+    # 2. Extract and match runtime keys cleanly
+    # Check both potential environment keys used across local layouts
+    model_name = os.environ.get("MATRIX_MODEL", os.environ.get("MATRIX_MODEL_NAME", "gemini/gemini-2.5-flash-lite"))
+    
+    is_debug = str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on")
+    debug_status = "🐞 ACTIVE (VERBOSE)" if is_debug else "⚪ DISABLED"
+    
+    stress_status = "🔴 ACTIVE" if str(os.environ.get("MATRIX_STRESS_TEST", "0")) in ("1", "true", "yes", "on") else "⚪ INACTIVE"
+    workers = os.environ.get("MATRIX_MAX_WORKERS", "32")
+
+    banner = [
+        "═" * 71,
+        "🚀 COMMIT-MATRIX PIPELINE ENGINE INITIALIZED",
+        f"   Target Repository │ {repo_label}",
+        f"   Trigger Context   │ {context_str}",
+        f"   Execution Mode    │ {mode_str}",
+        f"   Primary Model     │ {model_name}",
+        f"   Debug Telemetry   │ {debug_status}",
+        f"   Stress Test Mode  │ {stress_status}",
+        f"   Max Worker Units  │ {workers}"
+    ]
+    if log_path:
+        banner.append(f"   Persistent Log    │ {log_path}")
+    banner.append("═" * 71 + chr(10))
+    return chr(10).join(banner)

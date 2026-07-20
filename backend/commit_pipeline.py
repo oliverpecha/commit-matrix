@@ -34,6 +34,9 @@ from backend.services.pipeline.pipeline_config import (
 )
 from backend.services.architecture.metrics import compute_generation_summaries
 from backend.services.pipeline.prep_scoring import extract_commit_sha
+from backend.utils.logger import DualLogger
+from backend.services.pipeline.pipeline_presentation import render_bootstrap_banner
+
 
 def _sqlite_is_macro(tag):
     if not tag: return 0
@@ -83,6 +86,33 @@ def main():
 
     if repo_label in (".", "target_repo", "", "app", None):
         repo_label = "commit-matrix"
+
+    # Bind file logging directly inside the mounted host/container space
+    timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    log_dir = f"/app/data/{repo_label}/pipeline_runs" if os.path.exists("/app") else f"data/{repo_label}/pipeline_runs"
+    log_filename = f"run_{timestamp}_UTC.log"
+    full_log_path = os.path.join(log_dir, log_filename)
+
+    try:
+        logger_instance = DualLogger(sys.stdout, full_log_path)
+        sys.stdout = logger_instance
+        sys.stderr = logger_instance
+        
+        def handle_termination(signum, frame):
+            print(f"\n🛑 Pipeline interrupted by signal ({signum}). Flushing buffers and closing logs.", flush=True)
+            logger_instance.close()
+            sys.exit(128 + signum)
+            
+        import signal
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
+    except Exception as e:
+        logger_instance = None
+        print(f"⚠️ Logger initialization failed: {e}. Defaulting to standard stdout.", flush=True)
+
+    # Contextual Telemetry Bootstrap Banner via Presentation Layer
+    
+    print(render_bootstrap_banner(repo_path, repo_label, full_log_path if logger_instance else None), flush=True)
 
     db_path = f"data/{repo_label}/db/commit_matrix.db"
     try:
