@@ -197,19 +197,16 @@ def _serialize_snapshot_entry(entry: SnapshotEntry) -> dict:
 
 
 def _load_snapshot_sidecar(snapshot_sig: str) -> dict:
-    """Load the .meta.json sidecar for a snapshot, if it exists."""
+    """Load snapshot metadata from the SQLite database (legacy sidecar replacement)."""
     from backend.services.pipeline.pipeline_config import HOST_REPO_NAME
-    repo_label = HOST_REPO_NAME
-    versions_dir = Path("data") / repo_label / "past_blueprints"
-    prefix = snapshot_sig[:16]
-    sidecar = versions_dir / f"arch-{prefix}.meta.json"
-    if sidecar.exists():
-        try:
-            import json as _json
-            return _json.loads(sidecar.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
+    from backend.services.db.reader import load_all_snapshot_meta
+    
+    try:
+        all_meta = load_all_snapshot_meta(HOST_REPO_NAME)
+        prefix = snapshot_sig[:16]
+        return all_meta.get(prefix, {})
+    except Exception:
+        return {}
 
 
 def _compute_generation_boundaries(
@@ -410,7 +407,11 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
 
     repo_label = repo_id_from_path(repo_path)
     if db_path is None:
-        db = Path("data") / repo_label / "commit_matrix.db"
+        db = Path("data") / repo_label / "db" / "commit_matrix.db"
+        try:
+            db.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
     else:
         db = Path(db_path)
 
