@@ -80,12 +80,14 @@ def save_blueprint_and_meta(
     try:
         sig_prefix = tree_signature[:16]
         if sig_prefix and not tree_signature.startswith("git-error"):
-            versions_dir = meta_path.parent / "past_blueprints"
-            versions_dir.mkdir(exist_ok=True)
+            versions_dir = md_path.parent / "past_blueprints"
+            versions_dir.mkdir(parents=True, exist_ok=True)
             snapshot_path = versions_dir / f"arch_snapshot-{sig_prefix}.md"
             if not snapshot_path.exists():
                 snapshot_path.write_text(content, encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        import os
+        if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
+            print(f"[arch_storage] ⚠️ Failed saving past blueprint: {e}")
 
     return md_path, meta
