@@ -32,8 +32,11 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name=CONTAINER_NAME)
     max_commits = os.environ.get("MATRIX_MAX_COMMITS", "0")
     rpm_limit = os.environ.get("MATRIX_RPM_LIMIT", "15")
     model_name = os.environ.get("MATRIX_MODEL", "gemini/gemini-2.5-flash-lite")
-    stress_test = os.environ.get("MATRIX_STRESS_TEST", "0")
+    trigger_source = os.environ.get("MATRIX_TRIGGER_SOURCE", "browser")
+    stress_test = os.environ.get("MATRIX_STRESS_TEST", "false")
     crash_rate = os.environ.get("MATRIX_CRASH_RATE", "0.4")
+    random_score = os.environ.get("RANDOM_SCORE", "false")
+    matrix_debug = os.environ.get("MATRIX_DEBUG", "false")
 
     target_volume = f"/root/commit-matrix" if repo == "commit-matrix" else f"/root/commit-matrix/data/{repo}/src"
     data_volume = "/root/commit-matrix/data"
@@ -50,8 +53,11 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name=CONTAINER_NAME)
         "-e", f"MATRIX_MAX_COMMITS={max_commits}",
         "-e", f"MATRIX_RPM_LIMIT={rpm_limit}",
         "-e", f"MATRIX_MODEL={model_name}",
+        "-e", f"MATRIX_TRIGGER_SOURCE={trigger_source}",
         "-e", f"MATRIX_STRESS_TEST={stress_test}",
         "-e", f"MATRIX_CRASH_RATE={crash_rate}",
+        "-e", f"RANDOM_SCORE={random_score}",
+        "-e", f"MATRIX_DEBUG={matrix_debug}",
         "-e", "PYTHONPATH=/app",
         "-e", "LITELLM_LOG=ERROR",
         "-e", "SUPPRESS_LITELLM_LOGS=True",
