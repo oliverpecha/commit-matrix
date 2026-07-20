@@ -49,17 +49,18 @@ window.triggerSilentRefresh = async function() {
         if (window.CM_CLOSE_IN_PROGRESS) return;
 
         if (JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
-            const hadNoLedger = !Array.isArray(window.MATRIX_PAYLOAD) || window.MATRIX_PAYLOAD.length === 0;
-            const hasLedgerNow = Array.isArray(newData) && newData.length > 0;
-
             window.MATRIX_PAYLOAD = newData;
 
             const zs = document.getElementById('cm-zero-state');
             if (zs) zs.remove();
 
             document.querySelectorAll('.cm-row, .cm-kpi-row, #cm-ledger-card').forEach(el => {
-                if (el.style.display === 'none') el.style.display = '';
+                el.style.display = '';
             });
+
+            if (window.hub) {
+                window.hub.emit("DATA:LEDGER_UPDATED"); 
+            }
 
             if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
         }

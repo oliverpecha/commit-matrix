@@ -12,8 +12,7 @@ RUN apt-get update && apt-get install -y git docker.io && rm -rf /var/lib/apt/li
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
-COPY templates/ ./templates/
-COPY static/ ./static/
+COPY frontend/ ./frontend/
 
 COPY backend/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
