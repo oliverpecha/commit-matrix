@@ -63,7 +63,7 @@ if [[ "$1" == "--help" || "$1" == "-h" ]]; then
     echo "  Available Profiles:"
     printf "%b" "$AVAILABLE_RUBRICS"
     echo "OUTPUT:"
-    echo "  - Generates a compiled ledger in ~/commit-matrix/data/<repo_name>/"
+    echo "  - Generates SQLite database and ledgers in ~/commit-matrix/data/<repo_name>/db/"
     echo "  - Hosts a live dashboard. To view it, open this URL in your browser:"
     echo "    http://localhost:8000/?repo=<REPOSITORY_NAME>&token=$MATRIX_TOKEN"
     echo "==============================================================================="
@@ -128,6 +128,13 @@ cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matri
 PYTHONPATH=. python3 backend/cli/arch_history/main.py "$@"
 ARCH_WRAPPER
 
+
+# --- 4. HEALTH CHECK COMMAND ---
+cat << 'HEALTH_WRAPPER' > /tmp/matrix-health
+#!/bin/bash
+cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matrix"; exit 1; }
+PYTHONPATH=. python3 backend/cli/health_check.py "$@"
+HEALTH_WRAPPER
 sed -i "s/\$MATRIX_TOKEN/$MATRIX_TOKEN/g" /tmp/commit-matrix
 sed -i "s/\$APP_VERSION/$APP_VERSION/g" /tmp/commit-matrix
 
@@ -138,6 +145,8 @@ sudo mv /tmp/calibrate-matrix /usr/local/bin/calibrate-matrix
 sudo chmod +x /usr/local/bin/calibrate-matrix
 
 sudo mv /tmp/arch-history /usr/local/bin/arch-history
+sudo mv /tmp/matrix-health /usr/local/bin/matrix-health
+sudo chmod +x /usr/local/bin/matrix-health
 sudo chmod +x /usr/local/bin/arch-history
 
 echo "✅ Installation Complete! v$APP_VERSION is now active."
