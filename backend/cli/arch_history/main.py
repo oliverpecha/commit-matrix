@@ -52,7 +52,7 @@ Options:
   --fields <list>           Comma-separated entry fields to include (json mode only).
                             e.g. --fields flags,badges,lifespan_metrics
                             Always includes: generation, snapshot_sig.
-  --db-path <path>          SQLite database path (default: data/{repo}/commit_matrix.db).
+  --db-path <path>          SQLite database path (default: data/{repo}/db/commit_matrix.db).
   --llm-summarize           Reserved later-phase flag; not implemented yet.
   --help                    Show this help text.
 """

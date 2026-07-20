@@ -9,7 +9,7 @@ from backend.services.architecture.taxonomy import get_shape_metadata, normalize
 
 def _get_shape_emoji(sig):
     try:
-        db_paths = glob.glob("data/*/commit_matrix.db")
+        db_paths = glob.glob("data/*/db/commit_matrix.db")
         if db_paths:
             with sqlite3.connect(db_paths[0]) as conn:
                 res = conn.execute("SELECT shape FROM architecture_snapshots WHERE snapshot_sig LIKE ? ORDER BY run_id DESC LIMIT 1", (str(sig)[:12] + "%",)).fetchone()
@@ -81,7 +81,7 @@ def report_sensor_mutation(commit_sha: str, from_sig: str, to_sig: str, raw_shap
     if is_era_trigger and get_boundary_magnitude(raw_shape) == "structural":
         current_count = 1
         try:
-            db_paths = glob.glob("data/*/commit_matrix.db")
+            db_paths = glob.glob("data/*/db/commit_matrix.db")
             if db_paths:
                 with sqlite3.connect(db_paths[0]) as conn:
                     run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
@@ -127,7 +127,11 @@ def render_commit_score_card(work_item: any, scores: dict, progress_data: dict) 
     )
 
 def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
-    db = Path(db_path) if db_path else Path("data") / repo_label / "commit_matrix.db"
+    db = Path(db_path) if db_path else Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     if not db.exists(): return
     try:
         import sqlite3
@@ -185,7 +189,11 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
 def print_final_pipeline_summary_report(repo_label: str, db_path: str) -> None:
     global _ACTUAL_WARNINGS
     import sqlite3
-    db = Path(db_path) if db_path else Path("data") / repo_label / "commit_matrix.db"
+    db = Path(db_path) if db_path else Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     if not db.exists(): return
 
     try:

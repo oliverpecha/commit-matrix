@@ -84,7 +84,11 @@ def main():
     if repo_label in (".", "target_repo", "", "app", None):
         repo_label = "commit-matrix"
 
-    db_path = f"data/{repo_label}/commit_matrix.db"
+    db_path = f"data/{repo_label}/db/commit_matrix.db"
+    try:
+        __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
+    except Exception:
+        pass
     
     # Capture database footprint before oracle initializes to determine if this is a genuine cold boot
     import pathlib as _p_init

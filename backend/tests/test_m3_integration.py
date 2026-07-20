@@ -79,7 +79,7 @@ def _run_arch_history(repo_dir, extra_args=None):
 
 
 def _get_db_path(repo_label):
-    return COMMIT_MATRIX_ROOT / "data" / repo_label / "commit_matrix.db"
+    return COMMIT_MATRIX_ROOT / "data" / repo_label / "db" / "commit_matrix.db"
 
 
 class TestSyntheticRepo:

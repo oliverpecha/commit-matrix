@@ -15,16 +15,16 @@ def resolve_db_path(repo_label: str | None = None) -> str:
     """Robust dynamic path resolution supporting environment targets and overrides."""
     target_repo = os.environ.get("TARGET_REPO")
     if target_repo:
-        possible_path = os.path.join(target_repo, "data/commit_matrix.db")
+        possible_path = os.path.join(target_repo, "data/db/commit_matrix.db")
         if os.path.exists(possible_path):
             return possible_path
 
-    db_paths = glob.glob('data/*/commit_matrix.db')
+    db_paths = glob.glob('data/*/db/commit_matrix.db')
     if db_paths:
         return db_paths[0]
         
     fallback_label = repo_label or os.environ.get('HOST_REPO_NAME', 'commit-matrix')
-    return str(Path("data") / fallback_label / "commit_matrix.db")
+    return str(Path("data") / fallback_label / "db" / "commit_matrix.db")
 
 # Retain alias mapping to prevent downstream breaking imports
 _default_db_path = resolve_db_path
@@ -186,7 +186,11 @@ def get_structural_boundaries_for_stream(repo_label: str, db_path: str = None) -
     from pathlib import Path
     
     if not db_path:
-        db_path = str(Path("data") / repo_label / "commit_matrix.db")
+        db_path = str(Path("data") / repo_label / "db" / "commit_matrix.db")
+        try:
+            __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
+        except Exception:
+            pass
         
     schedule = {}
     try:

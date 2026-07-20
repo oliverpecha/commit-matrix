@@ -15,7 +15,11 @@ from backend.services.db.reader import read_scan_range, read_vacuums
 
 def run_health_check(repo_label: str) -> int:
     # Derive db_path consistent with commit_pipeline / arch-history
-    db_path = f"data/{repo_label}/commit_matrix.db"
+    db_path = f"data/{repo_label}/db/commit_matrix.db"
+    try:
+        __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
+    except Exception:
+        pass
 
     # Read current scan range from DB if present
     scan = read_scan_range(repo_label)

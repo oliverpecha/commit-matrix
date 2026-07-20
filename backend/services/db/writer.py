@@ -260,7 +260,7 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
             last_sig = snapshot_sig
 
     # Unmapped commits from ledger
-    ledger_path = Path("data") / repo_label / f"{repo_label}_ledger_cirsd.csv"
+    ledger_path = Path("data") / repo_label / "db" / f"{repo_label}_ledger_cirsd.csv"
     unmapped_count = 0
     if ledger_path.exists():
         print(
@@ -327,7 +327,11 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
     """
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     db.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(db))
@@ -599,7 +603,11 @@ def write_state_pointer(repo_path: str, meta: dict) -> None:
     import json as _json
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     db.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(db))
@@ -623,7 +631,11 @@ def read_state_pointer(repo_path: str) -> dict | None:
     import json as _json
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
     if not db.exists():
         return None
@@ -641,7 +653,11 @@ def read_state_pointer(repo_path: str) -> dict | None:
 
 def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
     """Update scan head/tail and track previous head for reclassification."""
-    db = Path("data") / repo_label / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     if not db.exists():
         return
 
@@ -673,7 +689,11 @@ def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
 
 def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int) -> None:
     """Detect gaps in commit coverage and record as vacuums."""
-    db = Path("data") / repo_label / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    try:
+        db.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     if not db.exists():
         return
 
