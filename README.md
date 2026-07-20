@@ -3,12 +3,18 @@
 **Architectural telemetry and multi-level visibility layer for AI-accelerated development.**
 
 <p align="center">
-  <img src="./docs/commitmatrix-comic.jpg" alt="CommitMatrix comic strip" width="780">
+  <img src="docs/assets/commitmatrix-comic.png" alt="CommitMatrix comic strip" width="546">
 </p>
 
 GenAI has made it trivial to generate huge volumes of code. Velocity is up, but visibility is down. We have more commits, more diffs, and less intuition about what that code is doing to our systems.
 
 CommitMatrix turns raw Git history into an interactive risk console so you can ship faster without quietly scaling technical debt.
+
+<p align="center">
+  <img src="docs/assets/dashboard_20260521.png" alt="CommitMatrix Dashboard Screenshot" width="585">
+</p>
+
+By automatically chunking your repository's timeline into chronological **Eras** separated by structural **Boundaries**, it allows you to instantly distinguish stable implementation phases from volatile architectural shifts.
 
 - **For developers:** regain codebase intimacy with a commit-level blast-radius check before review.
 - **For teams:** measure value, not volume, by seeing whether delivery is clean or quietly increasing fragility.
@@ -29,8 +35,12 @@ At its core, CommitMatrix is a three-layer telemetry pipeline over your Git hist
 - **LLM‑powered evaluation**  
   A Python backend (`backend/main.py`, `backend/parser.py`) sends diffs through an LLM via LiteLLM, constraining the model to output deterministic JSON scored against ready-made rubrics.[page:0]
 
+- **Canonical Taxonomy & Metric Engine**  
+  Raw LLM evaluations are normalized into a strict architectural taxonomy. The engine calculates the true **Cause** (e.g., *Deep Local Directory Refactor*), **Magnitude**, and **Dominance** of every stru>
+
 - **Interactive console**  
   A vanilla ES6/HTML frontend (`templates/matrix.html`, `static/js/*`) reads the ledgers in `/data` and renders heatmaps, charts, and tables that adapt dynamically to whatever rubric you use.[page:0]
+
 
 Scoring and visualization are driven by specialized rubrics that measure what is most critical across different project types and engineering concerns.
 
@@ -49,9 +59,15 @@ CommitMatrix is built for AI-accelerated software delivery: more generated code,
 - **During stabilization**  
   See where fragility is clustering and whether risk is actually flattening over time.
 
+- **Understand architectural eras**  
+  Stop looking at flat commit logs. See exactly when structural boundaries occurred (e.g., deep directory refactors, genesis events) and evaluate the stability of the eras between them.
+
 - **Across multiple repos**  
   Monitor where architectural complexity and systemic risk are accumulating so you can intervene early.
 [page:0]
+
+- **Track snapshot dominance and lifespan**  
+  Not all code survives. The engine isolates operational noise (chores, formatting) from true feature work and calculates the exact *dominance*, *composition*, and *lifespan* of each architectural blueprint.
 
 > “The diff looks fine, but the CommitMatrix shows a blast-radius spike. Let’s split this change before it lands.”
 

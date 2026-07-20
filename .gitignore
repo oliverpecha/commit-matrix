@@ -1,7 +1,6 @@
 .env
 calibration/reports/
 backend/__pycache__/
-backend/__pycache__/
 
 # Ignore generated telemetry and dynamic architecture context
 data/
@@ -13,3 +12,8 @@ __pycache__/
 # Local patch backups
 *.bak.*
 patch_backups/
+
+# SQLite temporary files and WAL logs
+*.db
+*.db-wal
+*.db-shm
