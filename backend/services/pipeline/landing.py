@@ -18,6 +18,16 @@ def stash_result(flush_state, result_id, result):
 def flush_ready_results(flush_state, csv_path, file_exists, existing_hashes):
     outputs = []
 
+    import os
+    if (
+        str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on")
+        and flush_state["write_index"] < len(flush_state["expected_write_order"])
+    ):
+        expected = flush_state["expected_write_order"][flush_state["write_index"]]
+        print(
+            flush=True,
+        )
+
     while (
         flush_state["write_index"] < len(flush_state["expected_write_order"])
         and flush_state["expected_write_order"][flush_state["write_index"]] in flush_state["pending_results"]

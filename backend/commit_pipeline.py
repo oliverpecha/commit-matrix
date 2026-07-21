@@ -35,8 +35,7 @@ from backend.services.pipeline.pipeline_config import (
 from backend.services.architecture.metrics import compute_generation_summaries
 from backend.services.pipeline.prep_scoring import extract_commit_sha
 from backend.utils.logger import DualLogger
-from backend.services.pipeline.pipeline_presentation import render_bootstrap_banner
-
+from backend.services.pipeline.pipeline_presentation import render_bootstrap_banner, print_debug_boundary_table
 
 def _sqlite_is_macro(tag):
     if not tag: return 0
@@ -45,7 +44,7 @@ def _sqlite_is_macro(tag):
     try:
         from backend.services.architecture.taxonomy import normalize_cause_tag, get_boundary_magnitude
         return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
-    except:
+    except Exception:
         return 0
 
 def print_architecture_event(state, repo_label=None, db_path=None):
@@ -81,13 +80,12 @@ def main():
     if not repo_label:
         try:
             repo_label = os.path.basename(repo_path.rstrip("/"))
-        except NameError:
+        except Exception:
             repo_label = "commit-matrix"
 
     if repo_label in (".", "target_repo", "", "app", None):
         repo_label = "commit-matrix"
 
-    # Bind file logging directly inside the mounted host/container space
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     log_dir = f"/app/data/{repo_label}/pipeline_runs" if os.path.exists("/app") else f"data/{repo_label}/pipeline_runs"
     log_filename = f"run_{timestamp}_UTC.log"
@@ -110,26 +108,21 @@ def main():
         logger_instance = None
         print(f"⚠️ Logger initialization failed: {e}. Defaulting to standard stdout.", flush=True)
 
-    # Contextual Telemetry Bootstrap Banner via Presentation Layer
-    
     print(render_bootstrap_banner(repo_path, repo_label, full_log_path if logger_instance else None), flush=True)
 
     db_path = f"data/{repo_label}/db/commit_matrix.db"
     try:
-        __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
     except Exception:
         pass
     
-    # Capture database footprint before oracle initializes to determine if this is a genuine cold boot
-    import pathlib as _p_init
-    _initial_db = _p_init.Path(db_path)
+    _initial_db = Path(db_path)
     is_genuine_warm_start = _initial_db.exists() and _initial_db.stat().st_size > 8192
 
     from backend.services.architecture.arch_sync import ensure_architecture_oracle, wait_for_oracle_sync
     ensure_architecture_oracle(repo_path, db_path)
-    wait_for_oracle_sync(120.0)
+    wait_for_oracle_sync(repo_path=repo_path, db_path=db_path, timeout=120.0)
 
-    # Safe warm start boot status print hook
     import sqlite3 as _boot_sq
     if is_genuine_warm_start:
         try:
@@ -142,8 +135,29 @@ def main():
         except Exception:
             pass
 
-    from backend.services.pipeline.pipeline_presentation import print_debug_boundary_table
-    print_debug_boundary_table(repo_label, db_path)  # Displaying baseline topology map
+    # Un-gated: Display Architecture Boundary Map during standard execution
+    import sqlite3 as _summary_sq
+    try:
+        with _summary_sq.connect(db_path) as _conn_b:
+            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots").fetchone()[0] if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone() else 0
+            _b_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0] if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone() else 0
+            _c_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_commits").fetchone()[0] if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_commits'").fetchone() else 0
+
+        boot_type = "Ledger Linked (Warm Boot)" if is_genuine_warm_start else "Cold Boot"
+
+        print('\n' + '─' * 71, flush=True)
+        print('🏛️  Architecture Oracle Initialized', flush=True)
+        print(f'    Boot Mode     │ {boot_type}', flush=True)
+        print(f'    Snapshots     │ {_s_count}', flush=True)
+        print(f'    Eras          │ {_b_count} Structural Eras', flush=True)
+        print(f'    Commits       │ {_c_count}', flush=True)
+        print(f'    Ledger Sync   │ SQLite WAL active ({db_path})', flush=True)
+        print('─' * 71 + '\n', flush=True)
+    except Exception:
+        pass
+
+    print(flush=True)
+    print_debug_boundary_table(repo_label, db_path)
 
     existing_hashes = load_existing_hashes(CSV_PATH)
     bootstrap_res = build_commit_queue(repo_path, existing_hashes)
@@ -155,7 +169,7 @@ def main():
     file_exists = ensure_csv_exists(CSV_PATH)
 
     display_commits = [
-        (ordinal_in_window, topo_id, commit_parts)
+        (ordinal_in_window, int(topo_id), commit_parts)
         for ordinal_in_window, (topo_id, commit_parts) in enumerate(commits_with_ids, start=1)
     ]
     
@@ -166,20 +180,6 @@ def main():
         for _, topo_id, commit_parts in display_commits
     ])
     processed_count = 0
-
-    import sqlite3 as _summary_sq
-    try:
-        with _summary_sq.connect(db_path) as _conn_b:
-            _table_exists = _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone()
-            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots").fetchone()[0] if _table_exists else 0
-        print('\n' + '─' * 71, flush=True)
-        print('🏗️  Architecture Summary', flush=True)
-        print(f"    Snapshots     │ {_s_count} unique architecture states", flush=True)
-        print("    Eras          │ (Run `arch-history` to view normalized boundaries)", flush=True)
-        print('─' * 71 + '\n', flush=True)
-    except Exception as e:
-        if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
-            print(f"\n❌ FATAL BOUNDARY ERROR: {e}\n", flush=True)
 
     boundary_registry = {}
     from collections import defaultdict
@@ -225,29 +225,36 @@ def main():
         try:
             from backend.services.db.reader import get_structural_boundaries_for_stream
             boundary_schedule = get_structural_boundaries_for_stream(repo_label, db_path)
-        except Exception as e:
-            if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
-                print(f"\n❌ FATAL BOUNDARY ERROR: {e}\n", flush=True)
+        except Exception:
             boundary_schedule = {}
 
         while active_futures:
             done, _ = wait(active_futures, return_when=FIRST_COMPLETED)
             for future in done:
                 topo_id = active_futures.pop(future, "?")
-                result_i, result, log_msg = resolve_future_result(future, topo_id, timeout=120)
+                resolved = resolve_future_result(future, topo_id, timeout=120)
+                result_i, result, log_msg = resolved
                 
-                if isinstance(result, dict) and result.get("success"):
+                if isinstance(result, tuple) and len(result) == 4:
+                    headers, row, hash_short, ui_block = result
+                    ui_str = str(ui_block)
+                    if '__TOPO:' not in ui_str:
+                        ui_str = ui_str.replace(f'🧬 Matrix #{topo_id}', f'🧬 Commit #{topo_id} __TOPO:{topo_id}__', 1)
+                        ui_str = ui_str.replace(f'🧬 Commit #{topo_id}', f'🧬 Commit #{topo_id} __TOPO:{topo_id}__', 1)
+                    result = (headers, row, hash_short, ui_str)
+                elif isinstance(result, dict) and result.get('success'):
                     wi = work_item_map.get(topo_id)
-
                     pct = int((processed_count / total_unscanned) * 100) if total_unscanned else 100
                     filled = int((processed_count / total_unscanned) * 16) if total_unscanned else 16
-                    p_data = {"pct": pct, "filled": filled, "remaining": max(0, total_unscanned - processed_count)}
-                    
+                    p_data = {'pct': pct, 'filled': filled, 'remaining': max(0, total_unscanned - processed_count)}
                     from backend.services.pipeline.pipeline_presentation import render_commit_score_card
                     ui_card = render_commit_score_card(wi, result, p_data)
-                    result = ui_card
-                
-                stash_result(flush_state, result_i, result)
+                    headers = result.get('headers', result.get('csv_headers', []))
+                    row = result.get('row', result.get('csv_row', []))
+                    hash_short = wi.arch_meta.get('commit_sha', 'unknown')[:7] if wi and getattr(wi, 'arch_meta', None) else "unknown"
+                    result = (headers, row, hash_short, ui_card)
+
+                stash_result(flush_state, int(topo_id), result)
                 
                 _sha = topo_to_sha.get(topo_id, "unknown")
                 if log_msg and _sha == "unknown":
@@ -261,7 +268,6 @@ def main():
                 flush_state, CSV_PATH, file_exists, existing_hashes
             )
             for output in ready_outputs:
-                import re
                 m = re.search(r"__TOPO:(\d+)__", output)
                 if "🧬 Commit #" in output and m:
                     try:
@@ -286,8 +292,6 @@ def main():
                                 
                                 is_head_root = is_era_trigger and boundary_schedule[res_topo].get("cause_tag") in ("head", "major:head", "current architecture head")
                                 raw_shape = "head" if is_head_root else (_shape_row[0] if _shape_row else "leaf-only")
-                                
-                                # Protect the active branch tip from generating a shift warning
                                 effective_era_trigger = is_era_trigger if not is_head_root else False
                                 
                                 from backend.services.pipeline.pipeline_presentation import report_sensor_mutation
@@ -299,14 +303,12 @@ def main():
                                 banner = render_boundary_banner(boundary_schedule[res_topo], curr_sig or "pending")
                                 if banner:
                                     print("\n" + banner, end="", flush=True)
-                            except Exception as banner_err:
-                                if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
-                                    print(f"\n[arch-boundaries] ⚠️ Banner rendering error: {banner_err}", flush=True)
+                            except Exception:
+                                pass
 
                         _conn.close()
-                    except Exception as e:
-                        if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
-                            print(f"\n[arch-boundaries] ⚠️ Stream iteration error: {e}", flush=True)
+                    except Exception:
+                        pass
                 
                 clean_output = re.sub(r" __TOPO:\d+__", "", output)
                 print(clean_output, flush=True)
@@ -317,9 +319,8 @@ def main():
             tail_topo = commits_with_ids[-1][0]
             from backend.services.db.writer import update_scan_range
             update_scan_range(repo_label, head_topo, tail_topo)
-    except Exception as e:
-        if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
-            print(f"\n❌ FATAL BOUNDARY ERROR: {e}\n", flush=True)
+    except Exception:
+        pass
 
     error_count = flush_state["error_count"]
     success_count = flush_state["success_count"]
@@ -344,9 +345,8 @@ def main():
             total_vac = sum(v.get("commit_count", 0) for v in vacuums)
             print(f"    Vacuums       │ {total_vac} unscanned", flush=True)
         print('─' * 71 + '\n', flush=True)
-    except Exception as e:
-        if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):
-            print(f"\n❌ FATAL BOUNDARY ERROR: {e}\n", flush=True)
+    except Exception:
+        pass
 
     from backend.services.pipeline.pipeline_presentation import print_final_pipeline_summary_report
     print_final_pipeline_summary_report(repo_label, db_path)

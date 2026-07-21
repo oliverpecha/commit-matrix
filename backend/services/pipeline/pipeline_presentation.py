@@ -151,7 +151,7 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
             
             if not rows: return
 
-            print("\n[arch-boundaries] 🗺️  Architecture Boundary Map")
+            print("\n🗺️  Architecture Boundary Map")
             print(" Era     │ Trigger Snapshot            │ Trigger Commit    │ Beginning")
             print(" ────────┼─────────────────────────────┼───────────────────┼────────────")
             
