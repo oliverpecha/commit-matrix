@@ -5,7 +5,11 @@ from pathlib import Path
 
 _ORACLE_READY_EVENT = threading.Event()
 
-def wait_for_oracle_sync(timeout: float = 120.0) -> bool:
+def wait_for_oracle_sync(*args, **kwargs):
+    timeout = kwargs.get("timeout", 120.0)
+    if not timeout and args:
+        timeout = args[0]
+    return _ORACLE_READY_EVENT.wait(timeout)
     return _ORACLE_READY_EVENT.wait(timeout)
 
 def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
@@ -122,7 +126,7 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                 commit_count = conn.execute("SELECT COUNT(*) FROM architecture_commits").fetchone()[0]
                 
                 print("\n" + "─" * 71, flush=True)
-                print("✅ Oracle Initialization Confirmed (Phase 2 Complete)", flush=True)
+                # Phase 2 silent
                 print(f"    Snapshots Generated │ {snap_count}", flush=True)
                 print(f"    Boundaries Mapped   │ {bound_count}", flush=True)
                 print(f"    Commits Linked      │ {commit_count}", flush=True)
