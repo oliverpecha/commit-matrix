@@ -1,11 +1,13 @@
 #!/bin/bash
+set -e
 if [ ! -f .env ]; then echo "❌ Error: .env file missing."; exit 1; fi
 
 source .env
 APP_VERSION=$(cat /root/commit-matrix/VERSION 2>/dev/null || echo "0.1.0")
 
 echo "🐳 Building Docker environment..."
-docker compose build --quiet && docker compose up -d
+docker compose build --quiet && docker compose down || true
+docker compose up -d
 
 # --- 1. ENGINE COMMAND ---
 cat << 'WRAPPER' > /tmp/commit-matrix
