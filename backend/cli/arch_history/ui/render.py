@@ -210,34 +210,57 @@ def _fmt_date(iso_date: str | None) -> str:
         return iso_date
 
 
-def _render_commit_line(ref, trunk: str, annotate_operational: bool = False, markers: TimelineMarkers = None) -> None:
+def _render_commit_line(ref, trunk: str, annotate_operational: bool = False, markers: TimelineMarkers = None, is_last: bool = False) -> None:
     rid_label = f"ID #{ref.topo_id}" if ref.topo_id is not None else f"commit {ref.commit_sig}"
     kind = _operational_kind(ref.subject) if annotate_operational and _is_operational_ref(ref) else ""
-    print(f" {trunk}   │      {rid_label} · {_fmt_date(ref.date)} · {ref.commit_sig}{f' · [operational: {kind}]' if kind else ''}{markers.get_commit_marker(ref.topo_id) if markers else ''}\n {trunk}   │      {fmt_subject(ref.subject)}")
+    inner = " " if is_last else "│"
+    print(f" {trunk}   {inner}      {rid_label} · {_fmt_date(ref.date)} · {ref.commit_sig}{f' · [operational: {kind}]' if kind else ''}{markers.get_commit_marker(ref.topo_id) if markers else ''}\n {trunk}   {inner}      {fmt_subject(ref.subject)}")
 
-def _render_commit_block(rows: list, trunk: str, show_operational: bool = True, compact: bool = False, markers: TimelineMarkers = None) -> None:
+def _render_commit_block(rows: list, trunk: str, show_operational: bool = True, compact: bool = False, markers: TimelineMarkers = None, is_last: bool = False) -> None:
     vis = [r for r in rows if not _is_operational_ref(r) or show_operational]
     hid = [r for r in rows if _is_operational_ref(r) and not show_operational]
-    for r in vis: _render_commit_line(r, trunk, show_operational, markers)
-    if hid: print(f" {trunk}   │      · {len(hid)} operational omitted ({truncate_subject('/'.join(sorted(set(filter(None, (_operational_kind(x.subject) for x in hid))))), limit=COMPACT_OMISSION_LIMIT)}); use --show-operational")
+    for r in vis: _render_commit_line(r, trunk, show_operational, markers, is_last)
+    if hid: 
+        inner = " " if is_last else "│"
+        print(f" {trunk}   {inner}      · {len(hid)} operational omitted ({truncate_subject('/'.join(sorted(set(filter(None, (_operational_kind(x.subject) for x in hid))))), limit=COMPACT_OMISSION_LIMIT)}); use --show-operational")
 
-def _render_trigger(entry: SnapshotEntry, trunk: str, markers: TimelineMarkers) -> None:
-    print(f" {trunk}   ├- Trigger:")
+def _render_trigger(entry: SnapshotEntry, trunk: str, markers: TimelineMarkers, is_last: bool = False) -> None:
+    cap = "└-" if is_last else "├-"
+    inner = " " if is_last else "│"
+    print(f" {trunk}   {cap} Trigger:")
     if entry.trigger and entry.trigger.commit_sig:
-        print(f" {trunk}   │      {f'ID #{entry.trigger.topo_id}' if entry.trigger.topo_id is not None else 'ID #?'} · {_fmt_date(entry.trigger.date)} · {entry.trigger.commit_sig}{markers.get_commit_marker(entry.trigger.topo_id)}")
-        print(f" {trunk}   │      {fmt_subject(entry.trigger.subject)}")
+        print(f" {trunk}   {inner}      {f'ID #{entry.trigger.topo_id}' if entry.trigger.topo_id is not None else 'ID #?'} · {_fmt_date(entry.trigger.date)} · {entry.trigger.commit_sig}{markers.get_commit_marker(entry.trigger.topo_id)}")
+        print(f" {trunk}   {inner}      {fmt_subject(entry.trigger.subject)}")
     else:
-        print(f" {trunk}   │      unscored workspace state (run scoring pipeline to link)")
+        print(f" {trunk}   {inner}      unscored workspace state (run scoring pipeline to link)")
 
 def _render_also_used(entry: SnapshotEntry, trunk: str, show_operational: bool = True, compact: bool = False, reverse: bool = False, markers: TimelineMarkers = None) -> None:
     s = list(reversed(entry.successive_used_by)) if reverse and entry.successive_used_by else list(entry.successive_used_by or [])
     r = [list(reversed(x)) for x in reversed(entry.reappeared_runs or [])] if reverse else list(entry.reappeared_runs or [])
+    
+    total_blocks = (1 if s else 0) + len(r)
+    current_block = 0
+    
     if s:
-        print(f" {trunk}   ├- Also used by {len(s)} other successive {'commit' if len(s) == 1 else 'commits'}:")
-        _render_commit_block(s, trunk, show_operational, compact, markers)
+        current_block += 1
+        is_last = (compact and current_block == total_blocks)
+        cap = "└-" if is_last else "├-"
+        if compact and len(s) > 1:
+            print(f" {trunk}   {cap} Also used by {len(s)} other successive commits until:")
+            _render_commit_block([s[-1]], trunk, show_operational, compact, markers, is_last)
+        else:
+            print(f" {trunk}   {cap} Also used by {len(s)} other successive {'commit' if len(s) == 1 else 'commits'}:")
+            _render_commit_block(s, trunk, show_operational, compact, markers, is_last)
     for run in r:
-        print(f" {trunk}   ├- Reappeared in {len(run)} later {'commit' if len(run) == 1 else 'commits'}:")
-        _render_commit_block(run, trunk, show_operational, compact, markers)
+        current_block += 1
+        is_last = (compact and current_block == total_blocks)
+        cap = "└-" if is_last else "├-"
+        if compact and len(run) > 1:
+            print(f" {trunk}   {cap} Reappeared in {len(run)} later commits until:")
+            _render_commit_block([run[-1]], trunk, show_operational, compact, markers, is_last)
+        else:
+            print(f" {trunk}   {cap} Reappeared in {len(run)} later {'commit' if len(run) == 1 else 'commits'}:")
+            _render_commit_block(run, trunk, show_operational, compact, markers, is_last)
 
 def _era_clip_counts(report: HistoryReport, entries: list[SnapshotEntry], generation: int) -> tuple[list[SnapshotEntry], list[SnapshotEntry]]:
     # Sort purely by generation index to guarantee chronological sequence
@@ -275,14 +298,13 @@ def render_entry(report: HistoryReport, entry: SnapshotEntry, next_gen: int | No
         print(f" │   … {len(top_omission)} {label} snapshot{suffix} compacted")
 
     _render_lifespan_and_badges(entry, b, t, markers)
-    _render_trigger(entry, t, markers)
+    has_also_used = bool(entry.successive_used_by or entry.reappeared_runs)
+    _render_trigger(entry, t, markers, is_last=(compact and not has_also_used))
     _render_also_used(entry, t, show_op, compact, reverse, markers)
 
     import os
     is_debug = str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes", "on")
-    if compact:
-        print(f" {t}   └ Details: {entry.generator_version} · {entry.mode} · {entry.selected_files}/{entry.total_files} files · {entry.size_bytes}B")
-    else:
+    if not compact:
         if is_debug:
             print(f" {t}   ├- Details: {entry.generator_version} · {entry.mode} · sampled {entry.selected_files} of {entry.total_files} files")
             val_mode = f' · validation={entry.mode.split("-")[-1]}' if '-' in entry.mode else ''

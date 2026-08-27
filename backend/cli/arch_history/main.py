@@ -123,6 +123,8 @@ def _parse_args(argv: list[str]) -> tuple:
             commit_target = argv[i + 1]; i += 1
         elif arg.startswith("-"):
             raise SystemExit(f"unknown flag: {arg}\n\n" + _usage())
+        elif db_path is None and str(arg).endswith(".db"):
+            db_path = arg
         elif repo_label is None and Path(arg).is_dir():
             repo_label = arg
         elif smart_target is None:

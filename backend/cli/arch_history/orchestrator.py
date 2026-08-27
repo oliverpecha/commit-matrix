@@ -405,31 +405,51 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
     import sqlite3
     from backend.services.architecture.arch_storage import repo_id_from_path
 
-    repo_label = repo_id_from_path(repo_path)
-    if db_path is None:
-        db = Path("data") / repo_label / "db" / "commit_matrix.db"
-        try:
-            db.parent.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-    else:
+    if db_path is not None:
         db = Path(db_path)
+        inferred_label = repo_id_from_path(repo_path) if repo_path else None
+    else:
+        project_root = Path(__file__).resolve().parents[3]
+        # If a wrapper script cd'd into the project root, OLDPWD holds your actual terminal directory
+        import os
+        if Path.cwd() == project_root and "OLDPWD" in os.environ:
+            actual_user_dir = Path(os.environ["OLDPWD"])
+        else:
+            actual_user_dir = Path.cwd()
+            
+        inferred_label = repo_path if repo_path else actual_user_dir.name
+        db = project_root / "data" / inferred_label / "db" / "commit_matrix.db"
+        if not db.exists():
+            fallback = Path("data") / inferred_label / "db" / "commit_matrix.db"
+            if fallback.exists():
+                db = fallback
 
+    import sys
+    print(f"[*] DB context: {db}", file=sys.stderr)
+    
     if not db.exists():
-        raise RuntimeError(f"No commit_matrix.db found for repo_label={repo_label} at {db}")
+        raise RuntimeError(f"No commit_matrix.db found at {db}")
 
     with sqlite3.connect(str(db)) as conn:
         conn.row_factory = sqlite3.Row
 
+        # Blindly fetch the latest run from this DB without enforcing repo_label
         run_row = conn.execute(
             "SELECT run_id, repo_label, repo_display, generated_at, total_commits, total_blueprints, total_generations "
-            "FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1",
-            (repo_label,),
+            "FROM architecture_runs ORDER BY run_id DESC LIMIT 1"
         ).fetchone()
 
         if not run_row:
-            raise RuntimeError(f"No architecture_runs row found for repo_label={repo_label}")
+            raise RuntimeError(f"No architecture_runs row found in DB: {db}")
+        
         run_row_dict = dict(run_row)
+        
+        # Override the label to match the folder name to hide pipeline env-var leaks
+        if not db_path and not repo_path:
+            run_row_dict["repo_label"] = inferred_label
+            run_row_dict["repo_display"] = inferred_label
+            
+        repo_label = run_row_dict["repo_label"]
 
         run_id = run_row["run_id"]
 
