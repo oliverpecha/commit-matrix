@@ -1,5 +1,5 @@
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.5";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRows } from "./tableRender.js?v=0.1.5";
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.6.9";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRows } from "./tableRender.js?v=0.6.9";
 
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");

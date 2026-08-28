@@ -1,19 +1,84 @@
-document.addEventListener("DOMContentLoaded", function() {
+(async function initPageBoot() {
+    console.log("[CommitMatrix] 🚀 pageBoot.js v0.2.2 executing (Pure JS Edition)...");
+
     const payloadScript = document.getElementById("cm-page-payload");
     if (payloadScript) {
         try {
             const payload = JSON.parse(payloadScript.textContent || "{}");
             window.MATRIX_PAYLOAD = payload.commits_data || [];
             window.MATRIX_TIME_AUTOCLOSE = payload.time_autoclose;
+            window.MATRIX_SYSTEM_EMPTY = payload.system_empty || false;
+            window.MATRIX_INVALID_REPO = payload.invalid_repo || false;
         } catch (err) {
-            console.warn("Failed to parse cm-page-payload", err);
-            window.MATRIX_PAYLOAD = window.MATRIX_PAYLOAD || [];
+            window.MATRIX_PAYLOAD = [];
         }
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const repoSpan = document.getElementById("cm-active-repo");
-    if (repoSpan) {
-        repoSpan.textContent = urlParams.get("repo") || "commit-matrix";
+    
+
+    // --- Bulletproof JS Event Delegation ---
+    document.addEventListener("click", function(e) {
+        const rToggle = e.target.closest("#cm-repo-toggle");
+        const uToggle = e.target.closest("#cm-user-toggle");
+        const rMenu = document.getElementById("DISABLE_cm-repo-menu");
+        const uMenu = document.getElementById("DISABLE_cm-user-menu");
+
+        // Toggle Repo Menu
+        if (rToggle && rMenu) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("[CommitMatrix] 🖱️ Repo Toggle activated via closest()");
+            const isOpen = rMenu.style.display === "flex";
+            rMenu.style.display = isOpen ? "none" : "flex";
+            if (uMenu) uMenu.style.display = "none";
+            return;
+        }
+
+        // Toggle User Menu
+        if (uToggle && uMenu) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("[CommitMatrix] 🖱️ User Toggle activated via closest()");
+            const isOpen = uMenu.style.display === "flex";
+            uMenu.style.display = isOpen ? "none" : "flex";
+            if (rMenu) rMenu.style.display = "none";
+            return;
+        }
+
+        // Global Click-away Closer
+        if (rMenu && !rMenu.contains(e.target)) rMenu.style.display = "none";
+        if (uMenu && !uMenu.contains(e.target)) uMenu.style.display = "none";
+    });
+
+    // --- Render Empty/Invalid UI States ---
+    const wrap = document.getElementById("main-dashboard-wrap");
+    if (window.MATRIX_SYSTEM_EMPTY && wrap) {
+        wrap.innerHTML = `<div style="padding:80px 20px; text-align:center; color:#aaa; font-family:Satoshi, sans-serif;">
+            <h2 style="color:#d9d8d5; margin-bottom:12px;">Welcome to CommitMatrix</h2>
+            <p style="margin-bottom:24px;">Your telemetry engine is online, but no repositories were found.</p>
+            <button onclick="window.hub.emit('ACTION:ADD_REPO_REQUESTED')" style="padding:10px 20px; background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); color:#4f98a3; border-radius:6px; cursor:pointer; font-weight:bold;">+ Add First Repository</button>
+        </div>`;
+    } else if (window.MATRIX_INVALID_REPO && wrap) {
+        const titleText = currentRepo ? "Repository Not Found" : "No Repository Selected";
+        const bodyText = currentRepo 
+            ? `The path <code style="color:#e06c75; background:rgba(224,108,117,0.1); padding:2px 6px; border-radius:4px;">${currentRepo}</code> does not exist or lacks a telemetry database.` 
+            : `Please select a repository from the top menu.`;
+        wrap.innerHTML = `<div style="padding:80px 20px; text-align:center; color:#aaa; font-family:Satoshi, sans-serif;">
+            <h2 style="color:#e06c75; margin-bottom:12px;">${titleText}</h2>
+            <p>${bodyText}</p>
+            <p style="margin-top:16px; font-size:13px; opacity:0.7;">Select a valid repository from the top menu or add a new one.</p>
+        </div>`;
     }
-});
+
+    // --- Listen to Context Changes ---
+    try {
+        const { hub } = await import("../core/eventHub.js?v=0.6.9");
+        window.hub = hub; // Ensure inline handlers like (Add Repo) retain access
+        
+        hub.on("CONTEXT_CHANGED", (payload) => {
+        console.log(`[CommitMatrix] 🔄 Context rotated to ${payload.repo}. State sync delegated to app.js...`);
+    });
+    } catch (e) {
+        console.error("[CommitMatrix] Failed to hook Event Hub in pageBoot.js", e);
+    }
+})();

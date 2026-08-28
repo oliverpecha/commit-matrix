@@ -52,7 +52,7 @@ Options:
   --fields <list>           Comma-separated entry fields to include (json mode only).
                             e.g. --fields flags,badges,lifespan_metrics
                             Always includes: generation, snapshot_sig.
-  --db-path <path>          SQLite database path (default: data/{repo}/db/commit_matrix.db).
+  --db-path <path>          SQLite database path (default: data/{repo}/db/{repo_label}.db).
   --llm-summarize           Reserved later-phase flag; not implemented yet.
   --help                    Show this help text.
 """
@@ -172,7 +172,7 @@ def main(
                 raise  # Reraise original DB loading exception
             except BaseException as e:
                 msg = str(e)
-                if "No commit_matrix.db found" in msg:
+                if "No {repo_label}.db found" in msg:
                     print(
                         "\n  No architecture runs are available yet; "
                         "run `commit-matrix .` to populate the database,\n"

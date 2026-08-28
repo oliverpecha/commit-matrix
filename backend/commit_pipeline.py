@@ -110,7 +110,7 @@ def main():
 
     print(render_bootstrap_banner(repo_path, repo_label, full_log_path if logger_instance else None), flush=True)
 
-    db_path = f"data/{repo_label}/db/commit_matrix.db"
+    db_path = f"data/{repo_label}/db/{repo_label}.db"
     try:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
     except Exception:
@@ -124,6 +124,10 @@ def main():
     wait_for_oracle_sync(repo_path=repo_path, db_path=db_path, timeout=120.0)
 
     import sqlite3 as _boot_sq
+    
+    from backend.services.pipeline.repo_bootstrap import bootstrap_repo_metadata
+    bootstrap_repo_metadata(db_path, repo_path)
+
     if is_genuine_warm_start:
         try:
             with _boot_sq.connect(db_path) as _b_conn:

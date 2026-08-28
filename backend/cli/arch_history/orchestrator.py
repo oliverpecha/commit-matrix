@@ -418,9 +418,9 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
             actual_user_dir = Path.cwd()
             
         inferred_label = repo_path if repo_path else actual_user_dir.name
-        db = project_root / "data" / inferred_label / "db" / "commit_matrix.db"
+        db = project_root / "data" / inferred_label / "db" / f"{repo_label}.db"
         if not db.exists():
-            fallback = Path("data") / inferred_label / "db" / "commit_matrix.db"
+            fallback = Path("data") / inferred_label / "db" / f"{repo_label}.db"
             if fallback.exists():
                 db = fallback
 
@@ -428,7 +428,7 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
     print(f"[*] DB context: {db}", file=sys.stderr)
     
     if not db.exists():
-        raise RuntimeError(f"No commit_matrix.db found at {db}")
+        raise RuntimeError(f"No {repo_label}.db found at {db}")
 
     with sqlite3.connect(str(db)) as conn:
         conn.row_factory = sqlite3.Row

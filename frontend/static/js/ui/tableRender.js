@@ -88,7 +88,7 @@ export function sortDisplayData(displayData, currentSort) {
 }
 
 export function renderTableRows(displayData) {
-    const repo = new URLSearchParams(window.location.search).get("repo") || "commit-matrix";
+    const repo = new URLSearchParams(window.location.search).get("repo") || "";
 
     return displayData.map((c) => {
         const tc = getTypeColor(c.p_type);

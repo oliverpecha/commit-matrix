@@ -1,8 +1,8 @@
-import { hub } from "../core/eventHub.js?v=0.1.5";
+import { hub } from "../core/eventHub.js?v=0.6.9";
 
 async function postEngineControl(action) {
     const urlParams = new URLSearchParams(window.location.search);
-    const repo = urlParams.get("repo") || "commit-matrix";
+    const repo = urlParams.get("repo") || "";
     const resp = await fetch(`/api/engine/control?action=${action}&repo=${repo}`, { method: "POST" });
     return resp.json();
 }
@@ -10,7 +10,7 @@ async function postEngineControl(action) {
 function getScanRequestPayload() {
     const urlParams = new URLSearchParams(window.location.search);
     return {
-        repo: urlParams.get("repo") || "commit-matrix",
+        repo: urlParams.get("repo") || "",
         rubric: urlParams.get("rubric") || "",
         token: urlParams.get("token") || "",
     };

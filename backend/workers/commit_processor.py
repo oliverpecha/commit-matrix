@@ -24,15 +24,15 @@ def _resolve_db_path() -> str | None:
     """
     target_repo = os.environ.get("TARGET_REPO")
     if target_repo:
-        possible_path = os.path.join(target_repo, "data/commit_matrix.db")
+        possible_path = os.path.join(target_repo, "data/{HOST_REPO_NAME}.db")
         if os.path.exists(possible_path):
             return possible_path
 
-    db_paths = glob.glob('data/**/commit_matrix.db', recursive=True)
+    db_paths = glob.glob('data/**/{HOST_REPO_NAME}.db', recursive=True)
     if db_paths:
         return db_paths[0]
         
-    fallback = 'data/commit_matrix.db'
+    fallback = 'data/{HOST_REPO_NAME}.db'
     if os.path.exists(fallback):
         return fallback
         

@@ -1,5 +1,5 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.5";
-import { hub } from "../core/eventHub.js?v=0.1.5";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.9";
+import { hub } from "../core/eventHub.js?v=0.6.9";
 
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
@@ -11,7 +11,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
         window.setTableStreamMode(true, { asc: true });
     }
     const urlParams = new URLSearchParams(window.location.search);
-    const repoName = repo || urlParams.get("repo") || "commit-matrix";
+    const repoName = repo || urlParams.get("repo") || "";
     const authToken = token || urlParams.get("token") || "";
 
     window.CM_ENGINE_CONTROLLABLE = false;
@@ -120,7 +120,7 @@ window.cmToggleEngine = async function(action) {
     if (action === 'pause' && !window.CM_ENGINE_CONTROLLABLE) return null;
 
     try {
-        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || 'commit-matrix'}`, { method: 'POST' });
+        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || ''}`, { method: 'POST' });
         const data = await resp.json();
 
         if (action === 'pause' && data.status === 'paused') {

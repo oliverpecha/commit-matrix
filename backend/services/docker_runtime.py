@@ -2,31 +2,37 @@ import asyncio
 import os
 
 
-CONTAINER_NAME = "matrix-analyzer-singleton"
+def get_container_name(repo: str = "commit-matrix") -> str:
+    return f"matrix-analyzer-{repo}"
 
 
-def remove_container(container_name=CONTAINER_NAME):
+def remove_container(repo_or_container: str = "commit-matrix"):
     debug_mode = str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on")
     if debug_mode:
         return
-    os.system(f"docker rm -f {container_name} > /dev/null 2>&1")
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
+    os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
 
 
-def force_remove_container(container_name=CONTAINER_NAME):
-    os.system(f"docker rm -f {container_name} > /dev/null 2>&1")
+def force_remove_container(repo_or_container: str = "commit-matrix"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
+    os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
 
 
-def pause_container(container_name=CONTAINER_NAME):
-    os.system(f"docker pause {container_name} > /dev/null 2>&1")
-    return {"status": "paused", "action": "pause"}
+def pause_container(repo_or_container: str = "commit-matrix"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
+    os.system(f"docker pause {c_name} > /dev/null 2>&1")
+    return {"status": "paused", "action": "pause", "target": c_name}
 
 
-def unpause_container(container_name=CONTAINER_NAME):
-    os.system(f"docker unpause {container_name} > /dev/null 2>&1")
-    return {"status": "running", "action": "play"}
+def unpause_container(repo_or_container: str = "commit-matrix"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
+    os.system(f"docker unpause {c_name} > /dev/null 2>&1")
+    return {"status": "running", "action": "play", "target": c_name}
 
 
-def build_scan_docker_cmd(repo: str, rubric: str, container_name=CONTAINER_NAME):
+def build_scan_docker_cmd(repo: str, rubric: str, container_name: str | None = None):
+    c_name = container_name or get_container_name(repo)
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     max_w = os.environ.get("MATRIX_MAX_WORKERS", "32")
     max_commits = os.environ.get("MATRIX_MAX_COMMITS", "0")
@@ -42,7 +48,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name=CONTAINER_NAME)
     data_volume = "/root/commit-matrix/data"
 
     return [
-        "docker", "run", "-d", "--name", container_name,
+        "docker", "run", "-d", "--name", c_name,
         "-v", "/var/run/docker.sock:/var/run/docker.sock",
         "-v", f"{target_volume}:/target_repo",
         "-v", f"{data_volume}:/app/data",
@@ -78,17 +84,19 @@ async def run_docker_detached(docker_cmd):
     return process.returncode, stdout, stderr
 
 
-async def follow_container_logs(container_name=CONTAINER_NAME):
+async def follow_container_logs(repo_or_container: str = "commit-matrix"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
     return await asyncio.create_subprocess_exec(
-        "docker", "logs", "-f", container_name,
+        "docker", "logs", "-f", c_name,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT
     )
 
 
-async def inspect_container_exit_code(container_name=CONTAINER_NAME):
+async def inspect_container_exit_code(repo_or_container: str = "commit-matrix"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
     inspect = await asyncio.create_subprocess_exec(
-        "docker", "inspect", "-f", "{{.State.ExitCode}}", container_name,
+        "docker", "inspect", "-f", "{{.State.ExitCode}}", c_name,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT
     )

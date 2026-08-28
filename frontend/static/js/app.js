@@ -1,15 +1,15 @@
-import { hub } from "./core/eventHub.js?v=0.1.5";
-import "./core/appStateCtrl.js?v=0.1.5";
-import "./engine/repoManager.js?v=0.1.5";
-import "./engine/telemetryStream.js?v=0.1.5";
-import "./engine/engineControl.js?v=0.1.5";
-import "./ui/terminalView.js?v=0.1.5";
+import { hub } from "./core/eventHub.js?v=0.6.9";
+import "./core/appStateCtrl.js?v=0.6.9";
+import "./engine/repoManager.js?v=0.6.9";
+import "./engine/telemetryStream.js?v=0.6.9";
+import "./engine/engineControl.js?v=0.6.9";
+import "./ui/terminalView.js?v=0.6.9";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.5';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.5';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.5';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.5';
-import { UI_STATE } from './core/state.js?v=0.1.5';
+import { processCommits } from './core/dataEngine.js?v=0.6.9';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.6.9';
+import { renderHeatmap } from './ui/heatmap.js?v=0.6.9';
+import { renderTable } from './ui/tableCtrl.js?v=0.6.9';
+import { UI_STATE } from './core/state.js?v=0.6.9';
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
@@ -40,9 +40,10 @@ window.triggerSilentRefresh = async function() {
     try {
         if (window.CM_CLOSE_IN_PROGRESS) return;
         const urlParams = new URLSearchParams(window.location.search);
-        const repo = urlParams.get('repo') || 'commit-matrix';
+        const repo = urlParams.get('repo') || '';
         const token = urlParams.get('token') || '';
-        const res = await fetch(`/api/data?repo=${repo}&token=${token}`);
+        const rubric = urlParams.get('rubric') || 'cirsd';
+        const res = await fetch(`/api/data?repo=${repo}&rubric=${rubric}&token=${token}`);
         if (!res.ok) return;
 
         const newData = await res.json();
@@ -61,71 +62,38 @@ window.triggerSilentRefresh = async function() {
             if (window.hub) {
                 window.hub.emit("DATA:LEDGER_UPDATED"); 
             }
-
-            if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
         }
     } catch (e) { }
 };
 
-// --- 1. SYSTEM UI ACTIONS DELEGATOR ---
-document.addEventListener("click", (e) => {
-    // Exit Hook (Force reload on close)
-    if (e.target.closest('.modal-close') || e.target.closest('#close-terminal') || e.target.closest('#cm-btn-close') || e.target.closest('#cm-btn-close-cli')) {
-        window.location.reload();
-        return;
+// --- Standardized Soft-Routing Data Pipeline ---
+hub.on("CONTEXT_CHANGED", (payload) => {
+    const wrap = document.getElementById("main-dashboard-wrap");
+    if (wrap) wrap.style.opacity = "0.4"; // Smooth visual loading indicator
+    
+    let fetchMsg = document.getElementById("cm-fetch-msg");
+    if (!fetchMsg) {
+        fetchMsg = document.createElement("div");
+        fetchMsg.id = "cm-fetch-msg";
+        fetchMsg.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10,14,20,0.95); border:1px solid rgba(255,255,255,0.1); padding:16px 32px; border-radius:8px; font-family:monospace; font-size:14px; z-index:9999; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8);";
+        document.body.appendChild(fetchMsg);
     }
-
-    const btn = e.target.closest("button");
-    const divBtn = e.target.closest("div");
-
-    if ((btn && btn.textContent.includes("+ Add Repository")) ||
-        (divBtn && divBtn.textContent.includes("+ Add Repository")) ||
-        (e.target.getAttribute && e.target.getAttribute("onclick") && e.target.getAttribute("onclick").includes("ADD_REPO"))) {
-        e.preventDefault();
-        hub.emit("ACTION:ADD_REPO_REQUESTED");
-        return;
-    }
-
-    if (btn && (btn.textContent.includes("Refresh Ledger") || btn.textContent.includes("Initialize"))) {
-        e.preventDefault();
-        hub.emit("ACTION:REFRESH_LEDGER");
-        return;
-    }
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const o = (payload && payload.org) || urlParams.get('org') || 'Account';
+    const r = (payload && payload.repo) || urlParams.get('repo') || 'Repo';
+    const ru = (payload && payload.rubric) || urlParams.get('rubric') || 'Rubric';
+    
+    fetchMsg.innerHTML = `<span style="color:#8ab4f0; font-weight:bold;">${o}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#8ed068; font-weight:bold;">${r}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#a38b4f; font-weight:bold;">${ru.toUpperCase()}</span> <span style="color:#aaa; margin-left:8px;">metrics being fetched...</span>`;
+    
+    window.triggerSilentRefresh().then(() => {
+        if (wrap) wrap.style.opacity = "1";
+        const msg = document.getElementById("cm-fetch-msg");
+        if (msg) msg.remove();
+    });
 });
 
-// --- 2. CHART INTERACTION DELEGATOR ---
-document.addEventListener("click", (e) => {
-    const fbtn = e.target.closest('.cm-fbtn[data-action]');
-    if (!fbtn) return;
-    
-    const action = fbtn.dataset.action;
-    const target = fbtn.dataset.target;
-    
-    console.log(`📊 Chart Button Clicked: [${action}] targeting [${target}]`);
-    
-    try {
-        const processed = processCommits(window.MATRIX_PAYLOAD || []);
-
-        if (action === 'toggleChron') {
-            UI_STATE[target] = !UI_STATE[target];
-            fbtn.classList.toggle('active', UI_STATE[target]);
-            if (target === 'stack') renderStackChart(processed);
-            if (target === 'trend') renderTrendChart(processed);
-            if (target === 'heat') renderHeatmap(processed);
-            if (['frag','churn','blast'].includes(target)) renderAnalytics(processed);
-            if (target === 'conv') renderConvergenceChart(processed);
-        }
-
-        if (action === 'cycleAvg') {
-            const key = 'avg' + target.charAt(0).toUpperCase() + target.slice(1);
-            UI_STATE[key] = (UI_STATE[key] + 1) % 6;
-            const modeNames = ['Off', 'Trailing 5', 'Daily Peak', 'Daily Median', 'Vol-Weighted', '7D High-Water'];
-            fbtn.textContent = ` Avg: ${modeNames[UI_STATE[key]]}`;
-            fbtn.classList.toggle('active', UI_STATE[key] !== 0);
-            if (target === 'trend') renderTrendChart(processed);
-            if (['frag','churn','blast'].includes(target)) renderAnalytics(processed);
-        }
-    } catch (err) {
-        console.error(`❌ Chart render failed for target [${target}]:`, err);
-    }
+// Formalize Event-Driven Rendering to silence terminal warnings
+hub.on("DATA:LEDGER_UPDATED", () => {
+    if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });

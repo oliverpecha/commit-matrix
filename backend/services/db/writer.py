@@ -327,7 +327,7 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
     """
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -603,7 +603,7 @@ def write_state_pointer(repo_path: str, meta: dict) -> None:
     import json as _json
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -631,7 +631,7 @@ def read_state_pointer(repo_path: str) -> dict | None:
     import json as _json
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -653,7 +653,7 @@ def read_state_pointer(repo_path: str) -> dict | None:
 
 def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
     """Update scan head/tail and track previous head for reclassification."""
-    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -689,7 +689,7 @@ def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
 
 def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int) -> None:
     """Detect gaps in commit coverage and record as vacuums."""
-    db = Path("data") / repo_label / "db" / "commit_matrix.db"
+    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:

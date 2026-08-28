@@ -8,6 +8,17 @@ RUBRIC_NAME = os.environ.get('RUBRIC_NAME', 'cirsd')
 CSV_PATH = f'/app/data/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}.csv'
 RUBRIC_PATH = f'/app/rubrics/{RUBRIC_NAME}.md'
 
+
+def get_csv_path(repo_name: str | None = None, rubric_name: str | None = None) -> str:
+    repo = repo_name or os.environ.get('HOST_REPO_NAME', 'commit-matrix')
+    rubric = rubric_name or os.environ.get('RUBRIC_NAME', 'cirsd')
+    return f'/app/data/{repo}/db/{repo}_ledger_{rubric}.csv'
+
+
+def get_rubric_path(rubric_name: str | None = None) -> str:
+    rubric = rubric_name or os.environ.get('RUBRIC_NAME', 'cirsd')
+    return f'/app/rubrics/{rubric}.md'
+
 # Architecture generator configuration (Milestone 1)
 MATRIX_ARCH_ENABLED = os.environ.get('MATRIX_ARCH_ENABLED', 'true').strip().lower() in ('1', 'true', 'yes', 'on')
 MATRIX_ARCH_MODEL = os.environ.get('MATRIX_ARCH_MODEL', MODEL_NAME)

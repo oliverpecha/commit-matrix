@@ -13,11 +13,10 @@ from backend.services.pipeline.pipeline_config import (
 
 
 def repo_id_from_path(repo_path: str) -> str:
-    if HOST_REPO_NAME:
-        return HOST_REPO_NAME
-
     base = os.path.basename(os.path.abspath(repo_path))
-    return base or "target_repo"
+    if base and base != "target_repo":
+        return base
+    return os.environ.get("HOST_REPO_NAME", "commit-matrix")
 
 
 def architecture_paths(repo_path: str) -> Path:
