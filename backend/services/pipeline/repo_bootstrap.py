@@ -1,9 +1,7 @@
 import os
-
-from backend.utils.git_ops import get_commits, get_commit_diff
+from backend.utils.git_ops import get_commits, get_commit_diff, extract_org_from_remote_url
 
 QUEUE_ORDER = os.environ.get("MATRIX_QUEUE_ORDER", "retrospective").strip().lower()
-
 
 def build_topo_index(repo_path):
     topo = {}
@@ -14,7 +12,6 @@ def build_topo_index(repo_path):
         hash_full = line.split('|')[0].strip()
         topo[hash_full[:7]] = idx
     return topo
-
 
 def discover_unscanned_commits(repo_path, existing_hashes):
     log_output = get_commits(repo_path)
@@ -39,7 +36,6 @@ def discover_unscanned_commits(repo_path, existing_hashes):
 
     return commits
 
-
 def build_commit_queue(repo_path, existing_hashes):
     topo_map = build_topo_index(repo_path)
     commits = discover_unscanned_commits(repo_path, existing_hashes)
@@ -63,7 +59,6 @@ def build_commit_queue(repo_path, existing_hashes):
     else:
         raise ValueError(f"Unsupported MATRIX_QUEUE_ORDER={QUEUE_ORDER!r}; expected 'chronological' or 'retrospective'")
 
-    # Read previous scan range from DB for overlap detection
     previous_tail = None
     try:
         from backend.services.db.reader import read_scan_range
@@ -78,7 +73,6 @@ def build_commit_queue(repo_path, existing_hashes):
     if max_commits > 0 and len(commits_with_ids) > max_commits:
         limited = commits_with_ids[:max_commits]
 
-        # Grace window: if overlap is within 5 commits, extend to connect
         if previous_tail is not None and QUEUE_ORDER == "retrospective" and limited:
             last_topo = limited[-1][0]
             if last_topo > previous_tail:
@@ -98,3 +92,28 @@ def build_commit_queue(repo_path, existing_hashes):
         "total_unscanned": len(commits_with_ids),
         "previous_tail_topo": previous_tail,
     }
+
+def bootstrap_repo_metadata(db_path: str, repo_path: str):
+    """Extracts directory-agnostic metadata (like namespace/org) and syncs to DB."""
+    import sqlite3
+    import re
+    
+    try:
+        with sqlite3.connect(db_path) as meta_conn:
+            meta_conn.execute(
+                "CREATE TABLE IF NOT EXISTS repo_metadata (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            org_name = "Unknown"
+            conf_path = os.path.join(repo_path, ".git", "config")
+
+            if os.path.exists(conf_path):
+                with open(conf_path, "r", errors="ignore") as f:
+                    m = re.search(r'url\s*=\s*(.+)', f.read())
+                    if m:
+                        org_name = extract_org_from_remote_url(m.group(1).strip())
+
+            meta_conn.execute("INSERT OR IGNORE INTO repo_metadata (key, value) VALUES ('org_name', ?)", (org_name,))
+            if org_name != "Unknown":
+                meta_conn.execute("UPDATE repo_metadata SET value = ? WHERE key = 'org_name'", (org_name,))
+    except Exception as e:
+        print(f"⚠️ Metadata extraction failed: {e}", flush=True)

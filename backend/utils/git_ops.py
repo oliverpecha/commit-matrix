@@ -49,3 +49,86 @@ def read_file_at_commit(repo_path, commit_sha, rel_path):
     if result.returncode != 0:
         return ""
     return result.stdout
+
+# --- Git remote URL -> human-readable Organization/Entity/Namespace heuristic ---
+import re
+
+_AZURE_VISUALSTUDIO = re.compile(r'^([\w-]+)\.visualstudio\.com$', re.I)
+_IPV4 = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
+
+_FLAT_HOSTS = {
+    'github.com', 'bitbucket.org', 'gitea.com', 'codeberg.org',
+    'git.sr.ht', 'sr.ht', 'sourceforge.net', 'launchpad.net',
+}
+
+_INFRA_SUBS = {
+    'git', 'cgit', 'code', 'gitlab', 'gitea', 'src', 'dev', 'svn', 'vcs',
+    'source', 'gitbox', 'cvsweb', 'anongit', 'invent', 'salsa', 'www',
+}
+
+_NOISE = {'git', 'src', 'tree', 'blob', 'repos', 'pub', 'scm'}
+
+
+def _strip_port(host_and_rest: str) -> str:
+    m = re.match(r'^([^/:]+):(\d{1,5})(/.*|$)', host_and_rest)
+    return (m.group(1) + m.group(3)) if m else host_and_rest
+
+
+def extract_org_from_remote_url(url: str) -> str:
+    """Extract a human-readable org/entity/namespace name from a git remote URL."""
+    u = url.strip()
+    u = re.sub(r'[?#].*$', '', u)
+    u = re.sub(r'^(?:https?://|ssh://|git://|file://)?(?:[^@\s/]+@)?', '', u)
+    u = re.sub(r'\.git/?$', '', u)
+    u = u.rstrip('/')
+
+    if ':' in u.split('/', 1)[0]:
+        host, _, rest = u.partition(':')
+        if re.match(r'^\d{1,5}$', rest.split('/', 1)[0]):
+            u = _strip_port(host + ':' + rest)
+        else:
+            u = host + '/' + rest
+    else:
+        u = _strip_port(u)
+
+    pts = [p for p in u.split('/') if p]
+    if not pts:
+        return "Unknown"
+
+    host = pts[0].lower()
+
+    if host in ('vs-ssh.visualstudio.com', 'ssh.dev.azure.com') and 'v3' in pts:
+        idx = pts.index('v3')
+        if idx + 1 < len(pts):
+            return pts[idx + 1]
+
+    m = _AZURE_VISUALSTUDIO.match(host)
+    if m:
+        return m.group(1)
+
+    if '_git' in pts:
+        idx = pts.index('_git')
+        if idx >= 2:
+            return pts[idx - 2]
+
+    org_name = None
+    if len(pts) >= 3:
+        if host in _FLAT_HOSTS:
+            org_name = pts[-2]
+        else:
+            offset = 2
+            while offset < len(pts) and pts[-offset] in _NOISE:
+                offset += 1
+            org_name = pts[-offset] if offset < len(pts) else host
+    else:
+        org_name = pts[0]
+
+    if '.' in org_name:
+        if _IPV4.match(org_name):
+            return org_name
+        dom_parts = org_name.split('.')
+        while len(dom_parts) > 1 and dom_parts[0].lower() in _INFRA_SUBS:
+            dom_parts = dom_parts[1:]
+        org_name = dom_parts[0] if dom_parts else org_name
+
+    return org_name
