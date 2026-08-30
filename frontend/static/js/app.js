@@ -1,15 +1,16 @@
-import { hub } from "./core/eventHub.js?v=0.6.19";
-import "./core/appStateCtrl.js?v=0.6.19";
-import "./engine/repoManager.js?v=0.6.19";
-import "./engine/telemetryStream.js?v=0.6.19";
-import "./engine/engineControl.js?v=0.6.19";
-import "./ui/terminalView.js?v=0.6.19";
+// v0.1.11
+import { hub } from "./core/eventHub.js?v=0.6.51";
+import "./core/appStateCtrl.js?v=0.6.51";
+import "./engine/repoManager.js?v=0.6.51";
+import "./engine/telemetryStream.js?v=0.6.51";
+import "./engine/engineControl.js?v=0.6.51";
+import "./ui/terminalView.js?v=0.6.51";
 
-import { processCommits } from './core/dataEngine.js?v=0.6.19';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.6.19';
-import { renderHeatmap } from './ui/heatmap.js?v=0.6.19';
-import { renderTable } from './ui/tableCtrl.js?v=0.6.19';
-import { UI_STATE } from './core/state.js?v=0.6.19';
+import { processCommits } from './core/dataEngine.js?v=0.6.51';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.6.51';
+import { renderHeatmap } from './ui/heatmap.js?v=0.6.51';
+import { renderTable } from './ui/tableCtrl.js?v=0.6.51';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.6.51';
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
@@ -69,97 +70,199 @@ function runRenderQueue(steps, gen) {
     requestAnimationFrame(step);
 }
 
-function attemptRender() {
-    const p = processCommits(window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || []);
-    if (p.length === 0) return;
-
-    const canvas = document.getElementById('cm-c-types');
-    if (!canvas || canvas.clientHeight === 0) {
-        if (!window.CM_CANVAS_RO && canvas) {
-            window.CM_CANVAS_RO = new ResizeObserver((entries, obs) => {
-                if (canvas.clientHeight > 0) {
-                    obs.disconnect();
-                    window.CM_CANVAS_RO = null;
-                    requestAnimationFrame(attemptRender);
-                }
-            });
-            window.CM_CANVAS_RO.observe(canvas.parentElement || document.body);
+function setDashboardVisibility(hasData, errorMsg = "") {
+    const rows = document.querySelectorAll('.cm-row');
+    const flexes = document.querySelectorAll('.cm-kpi-row, #cm-ledger-card');
+    
+    // Broad selector to capture common header action containers holding the Toggle/Filter/Sync buttons
+    const actions = document.querySelectorAll('#cm-header-actions, .cm-header-actions, #cm-toolbar, .cm-toolbar, #cm-actions, .cm-actions');
+    const wrap = document.getElementById("main-dashboard-wrap");
+    
+    if (hasData) {
+        // Clear inline display style to safely restore original CSS stylesheet layout (restores full width grid/flex)
+        rows.forEach(el => el.style.display = '');
+        flexes.forEach(el => el.style.display = '');
+        actions.forEach(el => el.style.display = '');
+        const zs = document.getElementById('cm-zero-state');
+        if (zs) zs.remove();
+        if (wrap) wrap.style.opacity = "1";
+    } else {
+        rows.forEach(el => el.style.display = 'none');
+        flexes.forEach(el => el.style.display = 'none');
+        actions.forEach(el => el.style.display = 'none');
+        if (wrap) wrap.style.opacity = "1";
+        
+        let zs = document.getElementById('cm-zero-state');
+        if (!zs && wrap) {
+            zs = document.createElement("div");
+            zs.id = "cm-zero-state";
+            zs.style.cssText = "position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%; pointer-events:none;";
+            wrap.insertBefore(zs, wrap.firstChild);
         }
+        const activeZs = document.getElementById('cm-zero-state');
+        if (activeZs) {
+            const activeRubric = new URLSearchParams(window.location.search).get('rubric');
+            const msg = errorMsg ? errorMsg : (activeRubric ? `No telemetry found for rubric: ${activeRubric.toUpperCase()}.` : `Please select an available rubric ledger to continue.`);
+            activeZs.innerHTML = `
+                <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
+                <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Ledger Empty</h2>
+                <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">${msg}</p>
+            `;
+        }
+    }
+}
+
+function attemptRender() {
+    const rawData = window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
+    let p = [];
+    try {
+        p = processCommits(rawData);
+    } catch (e) {
+        console.error("[Data Engine] processCommits failed silently:", e);
+    }
+    
+    console.log(`[Data Engine] attemptRender -> rawData: ${rawData.length}, processed: ${p.length}`);
+
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get('rubric')) {
+        setDashboardVisibility(false, "Please select an available rubric ledger to continue.");
         return;
     }
 
-    const gen = ++window.CM_RENDER_GEN;
-    paintKPIs(computeKPIs(p));
+    if (p.length === 0) {
+        setDashboardVisibility(false);
+        return;
+    }
+    
+    setDashboardVisibility(true);
 
-    const steps = buildRenderSteps(p);
-    runRenderQueue(steps, gen);
+    const gen = window.CM_RENDER_GEN;
+    
+    // Force browser layout recalculation immediately so dimensions are available
+    void document.body.offsetHeight;
+
+    // Yield one frame to ensure DOM layout is fully resolved before drawing canvas contexts
+    requestAnimationFrame(() => {
+        if (gen !== window.CM_RENDER_GEN) return;
+        try {
+            paintKPIs(computeKPIs(p));
+            const steps = buildRenderSteps(p);
+            runRenderQueue(steps, gen);
+        } catch (err) {
+            console.error("MATRIX UI RENDER ERROR:", err);
+        }
+    });
 }
-window.addEventListener('load', attemptRender);
+window.addEventListener('load', async () => {
+    attemptRender();
+    const urlParams = new URLSearchParams(window.location.search);
+    const repo = urlParams.get('repo');
+    if (repo) {
+        let url = `/api/engine/status?repo=${repo}`;
+        if (urlParams.get('rubric')) url += `&rubric=${urlParams.get('rubric')}`;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.running && window.hub) {
+                console.log("Found running scan, auto-attaching...");
+                window.hub.emit("ACTION:REFRESH_LEDGER");
+            }
+        } catch (e) {}
+    }
+});
 
 window.triggerSilentRefresh = async function(opts = {}) {
+    const myGen = opts.gen || window.CM_RENDER_GEN;
     try {
         if (window.CM_CLOSE_IN_PROGRESS) return;
         const urlParams = new URLSearchParams(window.location.search);
         const repo = opts.repo || urlParams.get('repo') || '';
         const token = opts.token || urlParams.get('token') || '';
-        const rubric = opts.rubric || urlParams.get('rubric') || 'cirsd';
-        const res = await fetch(`/api/data?repo=${repo}&rubric=${rubric}&token=${token}`);
-        if (!res.ok) return;
+        const rubric = opts.rubric || urlParams.get('rubric') || '';
+        const isForce = !!opts.force;
+
+        let urlChanged = false;
+        if (opts.repo && opts.repo !== urlParams.get('repo')) { urlParams.set('repo', opts.repo); urlChanged = true; }
+        if (opts.rubric && opts.rubric !== urlParams.get('rubric')) { urlParams.set('rubric', opts.rubric); urlChanged = true; }
+        if (urlChanged) window.history.replaceState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
+        
+        if (!rubric) {
+            if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false, "Please select an available rubric ledger to continue.");
+            return;
+        }
+
+        console.log(`[Data Engine] Loading ledger payload: data/${repo}/db/${repo}_ledger_${rubric}.csv`);
+        const res = await fetch(`/api/data?repo=${repo}&rubric=${rubric}&token=${token}&_t=${Date.now()}`);
+        if (!res.ok) {
+            if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false);
+            return;
+        }
 
         const newData = await res.json();
         if (window.CM_CLOSE_IN_PROGRESS) return;
 
-        window.CM_RENDER_GEN = (window.CM_RENDER_GEN || 0) + 1;
-        if (window.CM_SCROLL_ABORT) { window.CM_SCROLL_ABORT.abort(); window.CM_SCROLL_ABORT = null; }
-        if (window.CM_CANVAS_RO) { window.CM_CANVAS_RO.disconnect(); window.CM_CANVAS_RO = null; }
-        if (window.CM_TABLE_OBSERVER) { window.CM_TABLE_OBSERVER.disconnect(); window.CM_TABLE_OBSERVER = null; }
+        // Gate: Drop response if generation drifted during our fetch round trip
+        if (myGen !== window.CM_RENDER_GEN) return; 
+        
+        console.log(`[Data Engine] Fetched ${repo}/${rubric} | Array Size: ${Array.isArray(newData) ? newData.length : 'Not Array (Err)'}`);
 
-        if (JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
+        if (isForce || JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
             window.MATRIX_PAYLOAD = newData;
             window.MATRIX_CHART_PAYLOAD = null;
 
-            const zs = document.getElementById('cm-zero-state');
-            if (zs) zs.remove();
-
-            document.querySelectorAll('.cm-row, .cm-kpi-row, #cm-ledger-card').forEach(el => {
-                el.style.display = '';
-            });
-
             if (window.hub) {
-                window.hub.emit("DATA:LEDGER_UPDATED"); 
+                window.hub.emit("DATA:LEDGER_UPDATED", { gen: myGen }); 
+            } else {
+                attemptRender();
             }
         }
-    } catch (e) { }
+    } catch (e) {
+        console.error("Silent refresh error:", e);
+        if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false);
+    }
 };
 
 // --- Standardized Soft-Routing Data Pipeline ---
 hub.on("CONTEXT_CHANGED", (payload) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const o = (payload && payload.org) || urlParams.get('org') || 'Account';
+    const r = (payload && payload.repo) || urlParams.get('repo') || 'Repo';
+    const ru = (payload && payload.rubric) || urlParams.get('rubric') || '';
+
+    // Very first line: Synchronous state lockdown and increment
+    const myGen = bumpGeneration(r, ru);
+
     const wrap = document.getElementById("main-dashboard-wrap");
-    if (wrap) wrap.style.opacity = "0.4"; // Smooth visual loading indicator
+    if (wrap) wrap.style.opacity = "0.4";
     
+    // Invalidate stale payload immediately to fix the Equality Trap
+    window.MATRIX_PAYLOAD = null;
+    window.MATRIX_CHART_PAYLOAD = null;
+
     let fetchMsg = document.getElementById("cm-fetch-msg");
     if (!fetchMsg) {
         fetchMsg = document.createElement("div");
         fetchMsg.id = "cm-fetch-msg";
-        fetchMsg.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10,14,20,0.95); border:1px solid rgba(255,255,255,0.1); padding:16px 32px; border-radius:8px; font-family:monospace; font-size:14px; z-index:9999; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8);";
+        fetchMsg.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10,14,20,0.95); border:1px solid rgba(255,255,255,0.1); padding:16px 32px; border-radius:8px; font-family:monospace; font-size:14px; z-index:9999; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); pointer-events:none;";
         document.body.appendChild(fetchMsg);
     }
     
-    const urlParams = new URLSearchParams(window.location.search);
-    const o = (payload && payload.org) || urlParams.get('org') || 'Account';
-    const r = (payload && payload.repo) || urlParams.get('repo') || 'Repo';
-    const ru = (payload && payload.rubric) || urlParams.get('rubric') || 'Rubric';
-    
-    fetchMsg.innerHTML = `<span style="color:#8ab4f0; font-weight:bold;">${o}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#8ed068; font-weight:bold;">${r}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#a38b4f; font-weight:bold;">${ru.toUpperCase()}</span> <span style="color:#aaa; margin-left:8px;">metrics being fetched...</span>`;
-    
-    window.triggerSilentRefresh({ repo: r, rubric: ru }).then(() => {
-        if (wrap) wrap.style.opacity = "1";
-        const msg = document.getElementById("cm-fetch-msg");
-        if (msg) msg.remove();
+    if (ru) {
+        fetchMsg.innerHTML = `<span style="color:#8ab4f0; font-weight:bold;">${o}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#8ed068; font-weight:bold;">${r}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#a38b4f; font-weight:bold;">${ru.toUpperCase()}</span> <span style="color:#aaa; margin-left:8px;">metrics being fetched...</span>`;
+    } else {
+        fetchMsg.innerHTML = `<span style="color:#a38b4f; font-weight:bold;">Loading Repository Data...</span>`;
+    }
+
+    window.triggerSilentRefresh({ repo: r, rubric: ru, force: true, gen: myGen }).finally(() => {
+        if (myGen === window.CM_RENDER_GEN) {
+            if (wrap) wrap.style.opacity = "1";
+            const msg = document.getElementById("cm-fetch-msg");
+            if (msg) msg.remove();
+        }
     });
 });
 
-// Formalize Event-Driven Rendering to silence terminal warnings
-hub.on("DATA:LEDGER_UPDATED", () => {
+hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
+    if (payload.gen && payload.gen !== window.CM_RENDER_GEN) return;
     if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });

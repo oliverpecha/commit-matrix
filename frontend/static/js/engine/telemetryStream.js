@@ -1,5 +1,6 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.19";
-import { hub } from "../core/eventHub.js?v=0.6.19";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.51";
+import { hub } from "../core/eventHub.js?v=0.6.51";
+import { contextKey } from "../core/state.js?v=0.6.51";
 
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
@@ -13,12 +14,19 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
     const urlParams = new URLSearchParams(window.location.search);
     const repoName = repo || urlParams.get("repo") || "";
     const authToken = token || urlParams.get("token") || "";
+    const rubricName = urlParams.get("rubric") || "cirsd";
 
+    const myContext = contextKey(repoName, rubricName);
+    window.CM_SCAN_CONTEXT = myContext;
+
+    const abortCtrl = new AbortController();
+    window.CM_SCAN_ABORT = abortCtrl;
     window.CM_ENGINE_CONTROLLABLE = false;
 
     try {
-        const response = await fetch(`/api/scan?repo=${encodeURIComponent(repoName)}&token=${encodeURIComponent(authToken)}`, {
-            method: "POST"
+        const response = await fetch(`/api/scan?repo=${encodeURIComponent(repoName)}&rubric=${encodeURIComponent(rubricName)}&token=${encodeURIComponent(authToken)}`, {
+            method: "POST",
+            signal: abortCtrl.signal
         });
 
         if (!response.ok) {
@@ -26,10 +34,9 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
                 chunk: `\n❌ Stream Processing Interrupted: HTTP ${response.status}\n`
             });
             window.CM_SCAN_IN_FLIGHT = false;
+            window.CM_SCAN_ABORT = null;
             hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
-if (window.setTableStreamMode) {
-    window.setTableStreamMode(false);
-}
+            if (window.setTableStreamMode) window.setTableStreamMode(false);
             return;
         }
 
@@ -39,14 +46,22 @@ if (window.setTableStreamMode) {
         let firstChunkSeen = false;
 
         while (true) {
+            // Immediately drop loop execution on context drift
+            if (window.CM_ACTIVE_CONTEXT && window.CM_ACTIVE_CONTEXT !== myContext) {
+                reader.cancel();
+                break;
+            }
+
             const { value, done } = await reader.read();
 
             if (done) {
                 if (!streamBuffer.includes("[__MATRIX_EOF_SUCCESS__]") && !streamBuffer.includes("[__MATRIX_EOF_FAIL")) {
                     window.CM_SCAN_IN_FLIGHT = false;
+                    window.CM_SCAN_ABORT = null;
                     hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
                 } else {
                     window.CM_SCAN_IN_FLIGHT = false;
+                    window.CM_SCAN_ABORT = null;
                 }
                 break;
             }
@@ -66,17 +81,18 @@ if (window.setTableStreamMode) {
             }
 
             if (chunk.includes("Queued for ledger flush")) {
-                if (window.triggerSilentRefresh) window.triggerSilentRefresh();
+                if (window.triggerSilentRefresh) {
+                    window.triggerSilentRefresh({ repo: repoName, rubric: rubricName, gen: window.CM_RENDER_GEN });
+                }
             }
 
             if (streamBuffer.includes("[__MATRIX_EOF_SUCCESS__]")) {
                 const cleanChunk = chunk.split("[__MATRIX_EOF_SUCCESS__]").join("");
                 if (cleanChunk) hub.emit("ENGINE:CHUNK_RECEIVED", { chunk: cleanChunk });
                 window.CM_SCAN_IN_FLIGHT = false;
+                window.CM_SCAN_ABORT = null;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: true });
-if (window.setTableStreamMode) {
-    window.setTableStreamMode(false);
-}
+                if (window.setTableStreamMode) window.setTableStreamMode(false);
                 break;
             }
 
@@ -84,6 +100,7 @@ if (window.setTableStreamMode) {
                 const cleanChunk = chunk.replace(/\[__MATRIX_EOF_.*__\]/g, "");
                 if (cleanChunk) hub.emit("ENGINE:CHUNK_RECEIVED", { chunk: cleanChunk });
                 window.CM_SCAN_IN_FLIGHT = false;
+                window.CM_SCAN_ABORT = null;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
                 break;
             }
@@ -91,10 +108,15 @@ if (window.setTableStreamMode) {
             hub.emit("ENGINE:CHUNK_RECEIVED", { chunk });
         }
     } catch (err) {
-        hub.emit("ENGINE:CHUNK_RECEIVED", {
-            chunk: `\n❌ Stream Processing Interrupted: ${err.message}\n`
-        });
+        if (err.name === 'AbortError') {
+            console.log(`Scan aborted gracefully: user navigated away from ${myContext}`);
+        } else {
+            hub.emit("ENGINE:CHUNK_RECEIVED", {
+                chunk: `\n❌ Stream Processing Interrupted: ${err.message}\n`
+            });
+        }
         window.CM_SCAN_IN_FLIGHT = false;
+        window.CM_SCAN_ABORT = null;
         hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
     }
 });
@@ -120,7 +142,7 @@ window.cmToggleEngine = async function(action) {
     if (action === 'pause' && !window.CM_ENGINE_CONTROLLABLE) return null;
 
     try {
-        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || ''}`, { method: 'POST' });
+        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || ''}&rubric=${urlParams.get('rubric') || 'cirsd'}`, { method: 'POST' });
         const data = await resp.json();
 
         if (action === 'pause' && data.status === 'paused') {

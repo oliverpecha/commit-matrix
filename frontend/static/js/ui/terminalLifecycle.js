@@ -1,5 +1,5 @@
-import { hub } from "../core/eventHub.js?v=0.6.19";
-import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.6.19";
+import { hub } from "../core/eventHub.js?v=0.6.51";
+import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.6.51";
 
 let closeInFlight = false;
 let closeTimer = null;
@@ -60,4 +60,12 @@ export function scheduleAutoClose(seconds) {
 hub.on("ENGINE:EXIT_REQUESTED", () => {
     cancelAutoClose();
     closeTerminalPanel();
+});
+
+hub.on("CONTEXT_CHANGED", () => {
+    if (window.CM_CLOSE_IN_PROGRESS || closeInFlight) return;
+    cancelAutoClose();
+    // Do not hard reload the page, just clear the terminal state flag
+    window.CM_CLOSE_IN_PROGRESS = false;
+    closeInFlight = false;
 });

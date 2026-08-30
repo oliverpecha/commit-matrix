@@ -172,7 +172,8 @@ export function initInfiniteScroll(repo, initialOffset = 100) {
         if (entries[0].isIntersecting && !isLoading && hasMore) {
             isLoading = true;
             try {
-                const res = await fetch(`/api/ledger?repo=${repo}&offset=${offset}&limit=${limit}`, { signal: window.CM_SCROLL_ABORT.signal });
+                const rubric = new URLSearchParams(window.location.search).get("rubric") || "cirsd";
+                const res = await fetch(`/api/ledger?repo=${repo}&rubric=${rubric}&offset=${offset}&limit=${limit}`, { signal: window.CM_SCROLL_ABORT.signal });
                 const data = await res.json();
                 
                 if (!data || data.length === 0) {
