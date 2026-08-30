@@ -1,6 +1,6 @@
-import { APP_STATES } from "./state.js?v=0.6.9";
-import { applyLayout } from "../ui/layoutCtrl.js?v=0.6.9";
-import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.6.9";
+import { APP_STATES } from "./state.js?v=0.6.19";
+import { applyLayout } from "../ui/layoutCtrl.js?v=0.6.19";
+import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.6.19";
 
 window.CM_APP_STATE = window.CM_APP_STATE || APP_STATES.ZERO;
 

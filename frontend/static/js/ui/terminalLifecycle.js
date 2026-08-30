@@ -1,5 +1,5 @@
-import { hub } from "../core/eventHub.js?v=0.6.9";
-import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.6.9";
+import { hub } from "../core/eventHub.js?v=0.6.19";
+import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.6.19";
 
 let closeInFlight = false;
 let closeTimer = null;
@@ -36,7 +36,7 @@ export function scheduleAutoClose(seconds) {
     const toastSlot = document.getElementById("cm-terminal-toast-slot");
 
     const closeIfLedgerExists = () => {
-        const hasLedger = Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0;
+        const hasLedger = (Array.isArray(window.MATRIX_CHART_PAYLOAD) && window.MATRIX_CHART_PAYLOAD.length > 0) || (Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0);
         if (hasLedger) {
             closeTerminalPanel();
         } else {

@@ -1,6 +1,10 @@
 import csv
 import os
+import time
 from datetime import datetime
+
+_CACHE = {}
+CACHE_TTL = 60  # Cache ledger reads for 60 seconds
 
 from backend.services.pipeline.pipeline_config import HOST_REPO_NAME, RUBRIC_NAME
 
@@ -13,7 +17,7 @@ def parse_date_to_timestamp(date_str):
     except:
         return 0
 
-def fetch_ledger(repo):
+def fetch_ledger_raw(repo):
     candidates = [
         f"/app/data/{repo}/db/{repo}_ledger_cirsd.csv",
         f"/app/data/{repo}/db/{repo}_ledger_{RUBRIC_NAME}.csv",
@@ -56,3 +60,11 @@ def fetch_ledger(repo):
     except Exception as e:
         print(f"LEDGER FETCH ERROR: {e}", flush=True)
     return out
+
+def fetch_ledger(repo):
+    now = time.time()
+    if repo in _CACHE and now - _CACHE[repo].get('ts', 0) < CACHE_TTL:
+        return _CACHE[repo]['data']
+    data = fetch_ledger_raw(repo)
+    _CACHE[repo] = {'ts': now, 'data': data}
+    return data

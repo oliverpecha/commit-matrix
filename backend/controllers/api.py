@@ -123,3 +123,14 @@ async def get_rubric_guide():
     if guide_path.exists():
         return JSONResponse(content={"title": "RUBRIC_AUTHORING_GUIDE.md", "content": guide_path.read_text(encoding="utf-8")})
     return JSONResponse(content={"title": "Rubric Guide", "content": "# Rubric Authoring Guide\n\nGuide file not found on disk."})
+
+
+@api_router.get("/ledger")
+async def get_ledger_paginated(repo: str, offset: int = 0, limit: int = 100):
+    available_repos = get_available_repos()
+    if not repo or repo not in available_repos:
+        return JSONResponse(content=[])
+    
+    ledger = fetch_ledger(repo)
+    paginated_chunk = ledger[offset : offset + limit]
+    return JSONResponse(content=paginated_chunk)

@@ -3,8 +3,8 @@
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.6.9"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.6.9">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.6.19"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.6.19">
 
 <div class="cm-top-bar" style="position:relative; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
@@ -99,7 +99,9 @@
     <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Blast Radius</div><button class="cm-fbtn" data-action="toggleChron" data-target="blast">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-blast"></canvas></div></div>
     <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Risk Convergence</div><button class="cm-fbtn" data-action="toggleChron" data-target="conv">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-conv"></canvas></div></div>
   </div>
-  <div class="cm-card" id="cm-ledger-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table></div></div>
+  <div class="cm-card" id="cm-ledger-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table>
+    <div id="cm-table-sentinel" style="height: 1px; width: 100%;"></div>
+  </div></div>
 </div>
 {% endblock %}
 
@@ -128,11 +130,11 @@
     } catch (e) { console.error("FOUC resolver error", e); }
 })();
 </script>
-<script id="cm-page-payload" type="application/json">{{ {'commits_data': commits_data, 'time_autoclose': time_autoclose, 'system_empty': system_empty|default(false), 'invalid_repo': invalid_repo|default(false)} | tojson | safe }}</script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.6.9"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.6.9"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.6.9"></script>
-<script type="module" src="/static/js/app.js?v=0.6.9"></script>
+<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data, 'table_data': table_data, 'time_autoclose': time_autoclose, 'system_empty': system_empty|default(false), 'invalid_repo': invalid_repo|default(false)} | tojson | safe }}</script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.6.19"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.6.19"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.6.19"></script>
+<script type="module" src="/static/js/app.js?v=0.6.19"></script>
 
 
 {% endblock %}

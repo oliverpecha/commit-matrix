@@ -1,5 +1,5 @@
 console.log('📦 Module Boot: repoManager.js loaded and active.');
-import { hub } from "../core/eventHub.js?v=0.6.9";
+import { hub } from "../core/eventHub.js?v=0.6.19";
 
 hub.on("ACTION:REFRESH_LEDGER", () => {
     // If we are currently in invalid repo state, do not trigger a backend scan

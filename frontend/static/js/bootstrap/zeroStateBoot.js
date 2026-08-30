@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", function() {
         console.log("🤖 Auto-initialization halted: system empty or invalid repo.");
         return;
     }
-    const serverHasData = Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0;
+    const serverHasData = (Array.isArray(window.MATRIX_CHART_PAYLOAD) && window.MATRIX_CHART_PAYLOAD.length > 0) || (Array.isArray(window.MATRIX_PAYLOAD) && window.MATRIX_PAYLOAD.length > 0);
     if (serverHasData) {
         sessionStorage.removeItem("CM_AUTO_INIT_ATTEMPTED");
         return;

@@ -1,6 +1,6 @@
-import { SC_COLORS } from '../core/constants.js?v=0.6.9';
-import { UI_STATE } from '../core/state.js?v=0.6.9';
-import { MD_TOP } from '../charts/plugins.js?v=0.6.9';
+import { SC_COLORS } from '../core/constants.js?v=0.6.19';
+import { UI_STATE } from '../core/state.js?v=0.6.19';
+import { MD_TOP } from '../charts/plugins.js?v=0.6.19';
 
 // FIX: Aligned perfectly with your CSV headers
 const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];
@@ -32,22 +32,49 @@ export function renderHeatmap(commits) {
     const ns = 'http://www.w3.org/2000/svg';
     svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`); svgEl.setAttribute('preserveAspectRatio', 'none');
 
+    const fragment = document.createDocumentFragment();
+
     SVCS.forEach((lbl, row) => {
+        // 1. Text Label
         const t = document.createElementNS(ns, 'text');
-        t.setAttribute('x', PAD_L - 6); t.setAttribute('y', PAD_T + row * rowH + rowH / 2 + 3.5);
-        t.setAttribute('text-anchor', 'end'); t.setAttribute('font-family', 'Satoshi, sans-serif'); t.setAttribute('font-size', '9.5'); t.setAttribute('fill', '#7a7874'); t.textContent = lbl;
-        svgEl.appendChild(t);
+        t.setAttribute('x', PAD_L - 6); 
+        t.setAttribute('y', PAD_T + row * rowH + rowH / 2 + 3.5);
+        t.setAttribute('text-anchor', 'end'); 
+        t.setAttribute('font-family', 'Satoshi, sans-serif'); 
+        t.setAttribute('font-size', '9.5'); 
+        t.setAttribute('fill', '#7a7874'); 
+        t.textContent = lbl;
+        fragment.appendChild(t);
+
+        // 2. Full-width faint background row (Replaces thousands of empty rects)
+        const bgRect = document.createElementNS(ns, 'rect');
+        bgRect.setAttribute('x', PAD_L); 
+        bgRect.setAttribute('y', PAD_T + row * rowH + 1);
+        bgRect.setAttribute('width', plotW); 
+        bgRect.setAttribute('height', rowH - 2); 
+        bgRect.setAttribute('rx', 2);
+        bgRect.setAttribute('fill', 'rgba(255,255,255,.04)');
+        fragment.appendChild(bgRect);
     });
 
     commits.forEach((c, col) => {
         SVCS.forEach((svc, row) => {
-            // Because the keys now match the CSV, this hit check will pass!
             const hit = c[SVC_KEYS[row]] === true || c[SVC_KEYS[row]] === "True";
+            
+            // OPTIMIZATION: Only generate DOM nodes for actual data hits
+            if (!hit) return; 
+
             const rect = document.createElementNS(ns, 'rect');
-            rect.setAttribute('x', xPos[col] - (colW / 2)); rect.setAttribute('y', PAD_T + row * rowH + 1);
-            rect.setAttribute('width', colW); rect.setAttribute('height', rowH - 2); rect.setAttribute('rx', 2);
-            rect.setAttribute('fill', hit ? SC_COLORS[SVC_KEYS[row]] || '#4f98a3' : 'rgba(255,255,255,.04)'); rect.setAttribute('opacity', hit ? '0.85' : '1');
-            svgEl.appendChild(rect);
+            rect.setAttribute('x', xPos[col] - (colW / 2)); 
+            rect.setAttribute('y', PAD_T + row * rowH + 1);
+            rect.setAttribute('width', colW); 
+            rect.setAttribute('height', rowH - 2); 
+            rect.setAttribute('rx', 2);
+            rect.setAttribute('fill', SC_COLORS[SVC_KEYS[row]] || '#4f98a3'); 
+            rect.setAttribute('opacity', '0.85');
+            fragment.appendChild(rect);
         });
     });
+
+    svgEl.appendChild(fragment);
 }

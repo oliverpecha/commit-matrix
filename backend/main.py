@@ -46,19 +46,23 @@ async def index(request: Request, repo: str = None):
     # 1. System Empty State (No DBs at all)
     if not available_repos:
         return templates.TemplateResponse(request=request, name="matrix.html", context={
-            "repo": "system-setup", "commits_data": [], "system_empty": True, "invalid_repo": False,
+            "repo": "system-setup", "chart_data": [], "table_data": [], "system_empty": True, "invalid_repo": False,
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
 
     # 2. Invalid or Missing Repo in URL
     if not repo or repo not in available_repos:
         return templates.TemplateResponse(request=request, name="matrix.html", context={
-            "repo": repo if repo else "", "commits_data": [], "system_empty": False, "invalid_repo": True,
+            "repo": repo if repo else "", "chart_data": [], "table_data": [], "system_empty": False, "invalid_repo": True,
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
 
     # 3. Normal Load
+    ledger = fetch_ledger(repo)
+    chart_data = [{k: v for k, v in c.items() if k not in ('s', 'h')} for c in ledger]
+    table_data = ledger[:100]
+
     return templates.TemplateResponse(request=request, name="matrix.html", context={
-        "repo": repo, "commits_data": fetch_ledger(repo), "system_empty": False, "invalid_repo": False,
+        "repo": repo, "chart_data": chart_data, "table_data": table_data, "system_empty": False, "invalid_repo": False,
         "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
     })

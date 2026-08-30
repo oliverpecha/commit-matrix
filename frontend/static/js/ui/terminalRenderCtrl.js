@@ -1,4 +1,4 @@
-import { renderTerminalShell } from "./terminalShell.js?v=0.6.9";
+import { renderTerminalShell } from "./terminalShell.js?v=0.6.19";
 
 export function captureShellSnapshot() {
     return {

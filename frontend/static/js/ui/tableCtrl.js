@@ -1,5 +1,5 @@
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.6.9";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRows } from "./tableRender.js?v=0.6.9";
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.6.19";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.6.19";
 
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");
@@ -37,8 +37,14 @@ export function renderTable(commits) {
     const currentSort = getLiveSort();
     syncHeaderCarets(columns);
 
+        // Force clear the table body on render to prevent the massive attached DOM leak
+    tbody.innerHTML = '';
+    
     const displayData = sortDisplayData(normalizeCommits(commits), currentSort);
-    tbody.innerHTML = renderTableRows(displayData);
+    renderTableRowsBatched(displayData, "cm-tbody", 100, true);
+    
+    const repo = new URLSearchParams(window.location.search).get("repo") || "";
+    initInfiniteScroll(repo, 100);
 }
 
 window.setTableStreamMode = function(isActive, opts = {}) {

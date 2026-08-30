@@ -1,5 +1,5 @@
-import { fmtCD } from '../core/dataEngine.js?v=0.6.9';
-import { CM_COLORS, BP_AX, BP_AXC, SC_COLORS } from '../core/constants.js?v=0.6.9';
+import { fmtCD } from '../core/dataEngine.js?v=0.6.19';
+import { CM_COLORS, BP_AX, BP_AXC, SC_COLORS } from '../core/constants.js?v=0.6.19';
 export const MD_TOP = 18;
 export const monthDiv = (commits) => ({
     id: 'monthDiv',

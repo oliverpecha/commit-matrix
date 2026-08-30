@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.6.9";
+import { hub } from "../core/eventHub.js?v=0.6.19";
 
 const UI_THEME = {
     account: {

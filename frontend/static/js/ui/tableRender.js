@@ -126,3 +126,73 @@ export function renderTableRows(displayData) {
         </tr>`;
     }).join("");
 }
+
+
+export function renderTableRowsBatched(displayData, tbodyId = "cm-tbody", batchSize = 100, replace = true) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const currentGen = window.CM_RENDER_GEN;
+    if (replace) tbody.innerHTML = "";
+
+    let index = 0;
+
+    function renderBatch() {
+        if (currentGen !== window.CM_RENDER_GEN) return;
+        const fragment = document.createDocumentFragment();
+        const end = Math.min(index + batchSize, displayData.length);
+        const batch = displayData.slice(index, end);
+
+        const tempDiv = document.createElement('tbody');
+        tempDiv.innerHTML = renderTableRows(batch);
+        
+        while(tempDiv.firstChild) {
+            fragment.appendChild(tempDiv.firstChild);
+        }
+
+        tbody.appendChild(fragment);
+        index = end;
+
+        if (index < displayData.length) {
+            requestAnimationFrame(renderBatch);
+        }
+    }
+    requestAnimationFrame(renderBatch);
+}
+
+export function initInfiniteScroll(repo, initialOffset = 100) {
+    if (window.CM_SCROLL_ABORT) window.CM_SCROLL_ABORT.abort();
+    window.CM_SCROLL_ABORT = new AbortController();
+
+    let offset = initialOffset;
+    const limit = 200;
+    let isLoading = false;
+    let hasMore = true;
+
+    const observer = new IntersectionObserver(async (entries) => {
+        if (entries[0].isIntersecting && !isLoading && hasMore) {
+            isLoading = true;
+            try {
+                const res = await fetch(`/api/ledger?repo=${repo}&offset=${offset}&limit=${limit}`, { signal: window.CM_SCROLL_ABORT.signal });
+                const data = await res.json();
+                
+                if (!data || data.length === 0) {
+                    hasMore = false;
+                } else {
+                    if (window.MATRIX_PAYLOAD) {
+                        window.MATRIX_PAYLOAD = window.MATRIX_PAYLOAD.concat(data);
+                    }
+                    const normalized = normalizeCommits(data);
+                    renderTableRowsBatched(normalized, "cm-tbody", 100, false);
+                    offset += data.length;
+                }
+            } catch (e) {
+                if (e.name !== "AbortError") console.error("Ledger pagination failed", e);
+            }
+            isLoading = false;
+        }
+    }, { rootMargin: '300px' });
+
+    const sentinel = document.getElementById('cm-table-sentinel');
+    window.CM_TABLE_OBSERVER = observer;
+    if (sentinel) observer.observe(sentinel);
+}
