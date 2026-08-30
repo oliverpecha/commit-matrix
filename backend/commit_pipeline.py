@@ -116,8 +116,8 @@ def main():
     except Exception:
         pass
     
-    _initial_db = Path(db_path)
-    is_genuine_warm_start = _initial_db.exists() and _initial_db.stat().st_size > 8192
+    _csv_path = Path(CSV_PATH)
+    is_genuine_warm_start = _csv_path.exists() and _csv_path.stat().st_size > 50
 
     from backend.services.architecture.arch_sync import ensure_architecture_oracle, wait_for_oracle_sync
     ensure_architecture_oracle(repo_path, db_path)
@@ -133,7 +133,10 @@ def main():
             with _boot_sq.connect(db_path) as _b_conn:
                 _t_exists = _b_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
                 if _t_exists:
-                    _b_count = _b_conn.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0]
+                    _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+                    _r_row = _b_conn.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone()
+                    _run_id = _r_row[0] if _r_row else -1
+                    _b_count = _b_conn.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 else 0
                     if _b_count > 0:
                         print("\n[arch-oracle] ♨️  Warm start detected. Linking to existing ledger...", flush=True)
         except Exception:
@@ -143,9 +146,13 @@ def main():
     import sqlite3 as _summary_sq
     try:
         with _summary_sq.connect(db_path) as _conn_b:
-            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots").fetchone()[0] if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone() else 0
-            _b_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0] if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone() else 0
-            _c_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_commits").fetchone()[0] if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_commits'").fetchone() else 0
+            _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+            _r_row = _conn_b.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_runs'").fetchone() else None
+            _run_id = _r_row[0] if _r_row else -1
+            
+            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone() else 0
+            _b_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone() else 0
+            _c_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_commits WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_commits'").fetchone() else 0
 
         boot_type = "Ledger Linked (Warm Boot)" if is_genuine_warm_start else "Cold Boot"
 
@@ -167,6 +174,12 @@ def main():
     bootstrap_res = build_commit_queue(repo_path, existing_hashes)
     commits_with_ids = bootstrap_res['commits_with_ids']
     total_unscanned = bootstrap_res.get('total_found', len(commits_with_ids))
+
+    if total_unscanned == 0 and len(existing_hashes) == 0:
+        print('\n⚠️ FATAL: No commits found in target repository.')
+        print(f'Please ensure the source code is present at: {repo_path}')
+        print('Pipeline aborting to prevent empty ledger creation.\n', flush=True)
+        sys.exit(1)
 
     aimd = AIMDController(initial=1, max_workers=MAX_WORKERS)
     rate_limits = RateLimitsController(target_rpm=TARGET_RPM)
@@ -322,6 +335,7 @@ def main():
             head_topo = commits_with_ids[0][0]
             tail_topo = commits_with_ids[-1][0]
             from backend.services.db.writer import update_scan_range
+            _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
             update_scan_range(repo_label, head_topo, tail_topo)
     except Exception:
         pass
@@ -341,7 +355,10 @@ def main():
         import sqlite3
         with sqlite3.connect(db_path) as _c:
             _t_exists = _c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
-            b_count = _c.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0] if _t_exists else 0
+            _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+            _r_row = _c.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _t_exists else None
+            _run_id = _r_row[0] if _r_row else -1
+            b_count = _c.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _t_exists else 0
             
         print(f"    Commits       │ processed (#{run_head} to #{run_tail})", flush=True)
         print(f"    Boundaries    │ {b_count} structural era triggers", flush=True)

@@ -32,31 +32,73 @@ async def list_repos():
 
 
 @api_router.get("/rubrics")
-async def list_rubrics():
+async def list_rubrics(repo: str = None):
+    import glob
+    from pathlib import Path
+    from backend.services.db.reader import get_available_repos
+    
+    if not repo:
+        repos = get_available_repos()
+        if repos:
+            repo = repos[0]
+            
+    active_rubrics = set()
+    if repo:
+        for path in glob.glob(f"data/{repo}/db/{repo}_ledger_*.csv"):
+            filename = Path(path).stem
+            prefix = f"{repo}_ledger_"
+            if filename.startswith(prefix):
+                active_rubrics.add(filename[len(prefix):].lower())
+
     rubrics = []
     for path in glob.glob("rubrics/*.md"):
         name = Path(path).stem
-        rubrics.append({"id": name, "name": name.upper()})
+        rubrics.append({
+            "id": name, 
+            "name": name.upper(),
+            "has_data": name.lower() in active_rubrics
+        })
+        
     if not rubrics:
-        rubrics = [{"id": "cirsd", "name": "CIRSD v1"}]
+        rubrics = [{"id": "cirsd", "name": "CIRSD V1", "has_data": "cirsd" in active_rubrics}]
+
+    # Bulletproof sorting using .get() to prevent ANY KeyError crashes
+    rubrics.sort(key=lambda x: (not x.get("has_data", False), x.get("name", "")))
+        
+    from fastapi.responses import JSONResponse
     return JSONResponse(content={"rubrics": rubrics})
 
 
 @api_router.get("/data")
-async def get_data(repo: str = None, token: str = ""):
+async def get_data(repo: str = None, rubric: str = "cirsd", token: str = ""):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
-    return JSONResponse(content=fetch_ledger(repo))
+    return JSONResponse(content=fetch_ledger(repo, rubric))
 
 
 @api_router.post("/engine/control")
-async def control_engine(request: Request, action: str, repo: str = "commit-matrix"):
+async def control_engine(request: Request, action: str, repo: str = "commit-matrix", rubric: str = "cirsd"):
     if action == "pause":
         return JSONResponse(content=pause_container(repo))
     elif action == "play":
         return JSONResponse(content=unpause_container(repo))
+    elif action == "stop":
+        force_remove_container(repo, rubric)
+        return JSONResponse(content={"status": "stopped", "action": "stop", "repo": repo})
     return JSONResponse(content={"status": "acknowledged", "action": action, "repo": repo})
+
+@api_router.get("/engine/status")
+async def get_engine_status(repo: str, rubric: str = "cirsd"):
+    from backend.services.docker_runtime import get_container_name
+    import subprocess
+    c_name = get_container_name(repo, rubric)
+    try:
+        res = subprocess.check_output(f"docker ps -q -f name=^{c_name}$", shell=True).strip()
+        return JSONResponse(content={"running": bool(res)})
+    except Exception:
+        return JSONResponse(content={"running": False})
+
 
 
 @api_router.post("/scan")
@@ -105,6 +147,10 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
             if inspect_returncode != 0 or "No such object" in exit_code:
                 yield cleanup_race_success_eof()
             elif exit_code == "0":
+                from backend.services.ledger_reader import _CACHE
+                cache_key = f"{repo}_{rubric}"
+                if cache_key in _CACHE:
+                    del _CACHE[cache_key]
                 yield success_eof()
             else:
                 yield failure_eof(exit_code)
@@ -126,11 +172,11 @@ async def get_rubric_guide():
 
 
 @api_router.get("/ledger")
-async def get_ledger_paginated(repo: str, offset: int = 0, limit: int = 100):
+async def get_ledger_paginated(repo: str, rubric: str = "cirsd", offset: int = 0, limit: int = 100):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
     
-    ledger = fetch_ledger(repo)
+    ledger = fetch_ledger(repo, rubric)
     paginated_chunk = ledger[offset : offset + limit]
     return JSONResponse(content=paginated_chunk)

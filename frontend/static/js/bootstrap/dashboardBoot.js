@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.6.19";
+import { hub } from "../core/eventHub.js?v=0.6.51";
 
 const UI_THEME = {
     account: {
@@ -173,20 +173,32 @@ const initDashboard = async () => {
 
     const urlParams = new URLSearchParams(window.location.search);
     const activeRepo = urlParams.get("repo") || "";
-    const activeRubric = urlParams.get("rubric") || "cirsd";
+    const activeRubric = urlParams.get("rubric") || "";
     const currentToken = urlParams.get("token") || "";
 
     try {
-        const [reposRes, rubricsRes] = await Promise.all([
-            fetch("/api/repos?_t=" + Date.now()),
-            fetch("/api/rubrics?_t=" + Date.now())
+        window.fetchRubricsForRepo = async (repoName) => {
+            const res = await fetch(`/api/rubrics?repo=${repoName}&_t=` + Date.now());
+            const data = await res.json();
+            // Explicitly filter out system documentation files
+            const rawRubrics = (data.rubrics || []).filter(r => !['RUBRIC_AUTHORING_GUIDE', 'README'].includes((r.id || '').toUpperCase()));
+            const existing = rawRubrics.filter(r => r.has_data).sort((a, b) => a.name.localeCompare(b.name));
+            const unexisting = rawRubrics.filter(r => !r.has_data).sort((a, b) => a.name.localeCompare(b.name));
+            let finalRubrics = [...existing];
+            if (existing.length > 0 && unexisting.length > 0) finalRubrics.push({ id: "__DIVIDER__", isDivider: true });
+            return finalRubrics.concat(unexisting);
+        };
+
+        const [reposRes] = await Promise.all([
+            fetch("/api/repos?_t=" + Date.now())
         ]);
         const reposData = await reposRes.json();
-        const rubricsData = await rubricsRes.json();
 
         const orgs = reposData.organizations || [];
         const allRepos = reposData.repos || [];
-        const validRubrics = (rubricsData.rubrics || []).filter(r => r.id !== r.id.toUpperCase());
+        let fetchRepo = activeRepo;
+        if (!fetchRepo && allRepos.length > 0) fetchRepo = allRepos[0].name;
+        window.VALID_RUBRICS = await window.fetchRubricsForRepo(fetchRepo);
 
         const updLabel = (cfg, text) => {
             const el = document.getElementById(cfg.labelId);
@@ -205,7 +217,7 @@ const initDashboard = async () => {
             }
         };
 
-        const updateContext = (paramKey, paramValue, displayLabel, themeCfg) => {
+        const updateContext = async (paramKey, paramValue, displayLabel, themeCfg) => {
             const urlParams = new URLSearchParams(window.location.search);
             urlParams.set(paramKey, paramValue);
             
@@ -213,6 +225,22 @@ const initDashboard = async () => {
             if (paramKey === "org") {
                 const orgRepos = allRepos.filter(r => r.org === paramValue);
                 if (orgRepos.length > 0) urlParams.set("repo", orgRepos[0].name);
+            }
+            
+            if (paramKey === "org" || paramKey === "repo") {
+                const newRepo = urlParams.get("repo");
+                window.VALID_RUBRICS = await window.fetchRubricsForRepo(newRepo);
+                const existing = window.VALID_RUBRICS.filter(r => r.has_data === true);
+                const currentRubricId = urlParams.get("rubric");
+                
+                // Try to preserve the current rubric if it's available in the new repo
+                const isCurrentAvailable = existing.some(r => r.id === currentRubricId);
+                
+                if (!isCurrentAvailable) {
+                    // Default to first alphabetical scanned rubric, or first valid unscanned if empty
+                    const firstTarget = existing.length > 0 ? existing[0] : window.VALID_RUBRICS.find(r => !r.isDivider);
+                    if (firstTarget) urlParams.set("rubric", firstTarget.id);
+                }
             }
             
             history.pushState({}, '', '?' + urlParams.toString());
@@ -232,21 +260,36 @@ const initDashboard = async () => {
                 html += `<div style="color:#666; font-size:12px; font-family:monospace; padding:8px;">No data</div>`;
             } else {
                 items.forEach(item => {
+                    if (item.isDivider) {
+                        html += `<div style="height:1px; background:rgba(255,255,255,0.08); margin:8px 10px;"></div>`;
+                        return;
+                    }
+
                     const isSelected = String(item[idKey]) === String(activeId);
                     const labelStr = item[labelKey];
                     const valStr = item[idKey];
                     
                     if (isSelected) {
+                        const dotColor = cfg.menuId === "cm-rubric-menu" ? (item.has_data === false ? "#ff4a4a" : "#34d399") : cfg.color;
                         html += `
                         <div style="padding:8px 10px; margin-bottom:4px; border-radius:4px; background:${cfg.bg}; border:1px solid ${cfg.border}; color:${cfg.color}; font-family:monospace; font-size:12px; display:flex; align-items:center; justify-content:space-between; cursor:default;">
-                            <span>${labelStr}</span><div style="width:6px; height:6px; background:${cfg.color}; border-radius:50%; box-shadow:0 0 4px ${cfg.color};"></div>
+                            <span>${labelStr}</span><div style="width:6px; height:6px; background:${dotColor}; border-radius:50%; box-shadow:0 0 4px ${dotColor};"></div>
                         </div>`;
                     } else {
+                        let dotHtml = "";
+                        let baseStyle = "padding:8px 10px; margin-bottom:4px; border-radius:4px; font-family:monospace; font-size:12px; display:flex; align-items:center; cursor:pointer; transition:background 0.2s;";
+                        let textStyle = "color:#aaa;";
+                        
+                        if (cfg.menuId === "cm-rubric-menu" && item.has_data === false) {
+                            dotHtml = `<div style="width:6px; height:6px; background:#444; border-radius:50%; margin-left:auto;" title="No ledger data"></div>`;
+                            textStyle = "color:#666; opacity:0.6;";
+                        }
+                        
                         html += `
                         <div class="cm-menu-item" data-val="${valStr}" data-label="${labelStr}" data-param="${paramKey}" 
-                             style="padding:8px 10px; margin-bottom:4px; border-radius:4px; color:#aaa; font-family:monospace; font-size:12px; display:flex; align-items:center; cursor:pointer; transition:background 0.2s;" 
+                             style="${baseStyle} ${textStyle}" 
                              onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-                            <span>${labelStr}</span>
+                            <span>${labelStr}</span>${dotHtml}
                         </div>`;
                     }
                 });
@@ -266,7 +309,16 @@ const initDashboard = async () => {
         const hydrateState = () => {
             const urlParams = new URLSearchParams(window.location.search);
             const activeRepo = urlParams.get("repo") || "";
-            const activeRubric = urlParams.get("rubric") || "cirsd";
+            let activeRubric = urlParams.get("rubric");
+
+            if (!activeRubric && window.VALID_RUBRICS && window.VALID_RUBRICS.length > 0) {
+                const existing = window.VALID_RUBRICS.filter(r => r.has_data === true);
+                if (existing.length > 0) {
+                    activeRubric = existing[0].id;
+                    urlParams.set("rubric", activeRubric);
+                    window.history.replaceState({}, '', '?' + urlParams.toString());
+                }
+            }
             
             let activeOrg = "";
             const activeRepoObj = allRepos.find(r => r.name === activeRepo);
@@ -277,7 +329,7 @@ const initDashboard = async () => {
 
             renderList(UI_THEME.account, orgs, activeOrg, "org", "org", "org", createBtn(UI_THEME.account, "window.triggerAddRepo()", "Add Repository"));
             renderList(UI_THEME.repo, allRepos.filter(r => r.org === activeOrg), activeRepo, "name", "name", "repo", createBtn(UI_THEME.repo, "window.triggerAddRepo()", "Add Repository"));
-            renderList(UI_THEME.rubric, validRubrics, activeRubric, "id", "name", "rubric", createBtn(UI_THEME.rubric, "window.triggerOwnRubric()", "Own Rubric"));
+            renderList(UI_THEME.rubric, window.VALID_RUBRICS, activeRubric, "id", "name", "rubric", createBtn(UI_THEME.rubric, "window.triggerOwnRubric()", "Own Rubric"));
 
             const requestedRepoMissing = activeRepo && !activeRepoObj;
             const isInvalidState = requestedRepoMissing || window.MATRIX_INVALID_REPO || window.MATRIX_SYSTEM_EMPTY;
@@ -289,7 +341,7 @@ const initDashboard = async () => {
             } else {
                 updLabel(UI_THEME.account, activeOrg || UI_THEME.account.title);
                 updLabel(UI_THEME.repo, activeRepoObj ? activeRepoObj.name : UI_THEME.repo.title);
-                const rObj = validRubrics.find(r => String(r.id) === String(activeRubric));
+                const rObj = window.VALID_RUBRICS.find(r => String(r.id) === String(activeRubric));
                 updLabel(UI_THEME.rubric, rObj ? rObj.name.toUpperCase() : UI_THEME.rubric.title);
             }
         };

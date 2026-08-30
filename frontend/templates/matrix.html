@@ -3,8 +3,8 @@
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.6.19"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.6.19">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.6.51"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.6.51">
 
 <div class="cm-top-bar" style="position:relative; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
@@ -70,7 +70,7 @@
   <div id="cm-repo-controls" class="cm-action-group" style="display:{% if invalid_repo or system_empty %}none{% else %}flex{% endif %}; gap:12px; align-items:center;">
     <button onclick="toggleDashboardLayout()" class="cm-fbtn" style="padding:6px 14px;">🔲 Toggle View</button>
     <button class="cm-fbtn" style="padding:6px 14px;">📅 Filter Dates</button>
-    <button class="cm-fbtn" style="background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); padding:6px 14px; font-weight:bold; color:#4f98a3;">🔄 Refresh Ledger</button>
+        <button id="cm-sync-btn" class="cm-fbtn" style="background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); padding:6px 14px; font-weight:bold; color:#4f98a3;"></button>
   </div>
 </div>
 
@@ -130,11 +130,11 @@
     } catch (e) { console.error("FOUC resolver error", e); }
 })();
 </script>
-<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data, 'table_data': table_data, 'time_autoclose': time_autoclose, 'system_empty': system_empty|default(false), 'invalid_repo': invalid_repo|default(false)} | tojson | safe }}</script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.6.19"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.6.19"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.6.19"></script>
-<script type="module" src="/static/js/app.js?v=0.6.19"></script>
+<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data, 'table_data': table_data, 'time_autoclose': time_autoclose, 'system_empty': system_empty|default(false), 'invalid_repo': invalid_repo|default(false), 'invalid_rubric': invalid_rubric|default(false)} | tojson | safe }}</script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.6.51"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.6.51"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.6.51"></script>
+<script type="module" src="/static/js/app.js?v=0.6.51"></script>
 
 
 {% endblock %}

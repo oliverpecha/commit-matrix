@@ -1,5 +1,6 @@
-import { hub } from "../core/eventHub.js?v=0.6.19";
-import { APP_STATES } from "../core/state.js?v=0.6.19";
+// v0.1.11
+import { hub } from "../core/eventHub.js?v=0.6.51";
+import { APP_STATES } from "../core/state.js?v=0.6.51";
 import {
     getAppState,
     setAppState,
@@ -7,7 +8,7 @@ import {
     hasSeenLedger,
     initAppStateFromLedger,
 } from "../core/appStateCtrl.js";
-import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.6.19";
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.6.51";
 import {
     renderShell,
     appendTerminalChunk,
@@ -51,7 +52,7 @@ hub.on("ENGINE:CHUNK_RECEIVED", ({ chunk }) => {
     const appended = appendTerminalChunk(chunk);
     if (!appended) return;
 
-    if (chunk.includes("🐳 ENGINE INITIALIZED CONTAINER")) {
+    if (chunk.includes("🐳 ENGINE INITIALIZED CONTAINER") || chunk.includes("🐳 ENGINE FOUND RUNNING CONTAINER")) {
         showPauseButton();
     }
 

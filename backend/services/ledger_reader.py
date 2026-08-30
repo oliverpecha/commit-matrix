@@ -6,8 +6,6 @@ from datetime import datetime
 _CACHE = {}
 CACHE_TTL = 60  # Cache ledger reads for 60 seconds
 
-from backend.services.pipeline.pipeline_config import HOST_REPO_NAME, RUBRIC_NAME
-
 def parse_date_to_timestamp(date_str):
     """Convert 'May 30, \'26' format to Unix timestamp"""
     try:
@@ -17,12 +15,10 @@ def parse_date_to_timestamp(date_str):
     except:
         return 0
 
-def fetch_ledger_raw(repo):
+def fetch_ledger_raw(repo, rubric="cirsd"):
     candidates = [
-        f"/app/data/{repo}/db/{repo}_ledger_cirsd.csv",
-        f"/app/data/{repo}/db/{repo}_ledger_{RUBRIC_NAME}.csv",
-        f"/app/data/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_cirsd.csv",
-        f"/app/data/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}.csv",
+        f"/app/data/{repo}/db/{repo}_ledger_{rubric}.csv",
+        f"data/{repo}/db/{repo}_ledger_{rubric}.csv",
     ]
 
     p = next((candidate for candidate in candidates if os.path.exists(candidate)), None)
@@ -61,10 +57,11 @@ def fetch_ledger_raw(repo):
         print(f"LEDGER FETCH ERROR: {e}", flush=True)
     return out
 
-def fetch_ledger(repo):
+def fetch_ledger(repo, rubric="cirsd"):
+    cache_key = f"{repo}_{rubric}"
     now = time.time()
-    if repo in _CACHE and now - _CACHE[repo].get('ts', 0) < CACHE_TTL:
-        return _CACHE[repo]['data']
-    data = fetch_ledger_raw(repo)
-    _CACHE[repo] = {'ts': now, 'data': data}
+    if cache_key in _CACHE and now - _CACHE[cache_key].get('ts', 0) < CACHE_TTL:
+        return _CACHE[cache_key]['data']
+    data = fetch_ledger_raw(repo, rubric)
+    _CACHE[cache_key] = {'ts': now, 'data': data}
     return data

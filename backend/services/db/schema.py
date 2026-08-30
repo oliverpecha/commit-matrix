@@ -17,6 +17,11 @@ def ensure_generation_columns(conn):
     if "generation_index" not in cols:
         conn.execute("ALTER TABLE architecture_boundaries ADD COLUMN generation_index INTEGER")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_arch_boundaries_topo_unique ON architecture_boundaries(boundary_commit_topo_id)")
+    
+    cols_runs = [r[1] for r in conn.execute("PRAGMA table_info(architecture_runs)")]
+    if "rubric_name" not in cols_runs:
+        conn.execute("ALTER TABLE architecture_runs ADD COLUMN rubric_name TEXT DEFAULT 'cirsd'")
+        
     conn.commit()
 
 SCHEMA_SQL = """
@@ -35,6 +40,7 @@ CREATE TABLE IF NOT EXISTS taxonomy (
 CREATE TABLE IF NOT EXISTS architecture_runs (
     run_id INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_label TEXT NOT NULL,
+    rubric_name TEXT DEFAULT 'cirsd',
     repo_display TEXT,
     generated_at TEXT NOT NULL,
     contract_version TEXT,
@@ -121,6 +127,7 @@ CREATE TABLE IF NOT EXISTS architecture_boundaries (
     displaced_was_dominant BOOLEAN
 );
 
+CREATE INDEX IF NOT EXISTS idx_arch_runs_repo ON architecture_runs(repo_label);
 CREATE INDEX IF NOT EXISTS idx_snapshots_run ON architecture_snapshots(run_id);
 CREATE INDEX IF NOT EXISTS idx_snapshots_sig ON architecture_snapshots(snapshot_sig);
 CREATE INDEX IF NOT EXISTS idx_snapshots_boundary ON architecture_snapshots(run_id, boundary_commit_sig);

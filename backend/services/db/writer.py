@@ -17,7 +17,7 @@ from pathlib import Path
 from backend.services.db.schema import SCHEMA_SQL, SCHEMA_VERSION
 from backend.services.db.taxonomy_sync import sync_taxonomy
 
-def _latest_run_id(conn, repo_label: str):
+def _latest_run_id(conn, repo_label: str, rubric_name: str = "cirsd"):
     """Return latest run_id for a repo_label, or None if none exist."""
     row = conn.execute(
         "SELECT run_id FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1",
@@ -74,7 +74,7 @@ def _extract_commits(entry: dict, run_id: int) -> list[tuple]:
     return rows
 
 
-def write_architecture_run(db_path: str, payload: dict) -> int:
+def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "cirsd") -> int:
     """Write a complete architecture history run to SQLite.
 
     Single run per repo. On subsequent calls for the same repo_label,
@@ -127,12 +127,12 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
     else:
         cur = conn.execute(
             """INSERT INTO architecture_runs
-            (repo_label, repo_display, generated_at, contract_version,
+            (repo_label, rubric_name, repo_display, generated_at, contract_version,
              computation_version, last_recomputed_at,
              total_commits, total_blueprints, total_generations)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
             (
-                repo_label, payload.get("repo_display"), now,
+                repo_label, rubric_name, payload.get("repo_display"), now,
                 payload.get("contract_version"), now,
                 payload.get("total_commits"),
                 payload.get("total_blueprints"),
@@ -318,7 +318,7 @@ def write_architecture_run(db_path: str, payload: dict) -> int:
     return run_id
 
 
-def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
+def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_name: str = "cirsd") -> None:
     """Write a single snapshot's metadata to the DB.
 
     Called by arch_builder.py after each architecture generation.
@@ -357,10 +357,10 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict) -> None:
         now = datetime.now(UTC).isoformat()
         cur = conn.execute(
             """INSERT INTO architecture_runs
-            (repo_label, generated_at, contract_version, computation_version,
+            (repo_label, rubric_name, generated_at, contract_version, computation_version,
              last_recomputed_at)
-            VALUES (?, ?, ?, 1, ?)""",
-            (repo_label, now, "1.0", now),
+            VALUES (?, ?, ?, ?, 1, ?)""",
+            (repo_label, rubric_name, now, "1.0", now),
         )
         run_id = cur.lastrowid
 
@@ -651,7 +651,7 @@ def read_state_pointer(repo_path: str) -> dict | None:
     return None
 
 
-def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
+def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "cirsd") -> None:
     """Update scan head/tail and track previous head for reclassification."""
     db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
@@ -687,7 +687,7 @@ def update_scan_range(repo_label: str, scan_head: int, scan_tail: int) -> None:
     conn.close()
 
 
-def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int) -> None:
+def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "cirsd") -> None:
     """Detect gaps in commit coverage and record as vacuums."""
     db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
@@ -789,7 +789,8 @@ def incremental_sync_commit_states(repo_label: str, db_path: str, resolved_state
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA journal_mode=WAL")
     
-    run_row = conn.execute("SELECT run_id FROM architecture_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+    _rubric = __import__("os").environ.get("RUBRIC_NAME", "cirsd")
+    run_row = conn.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1", (repo_label,)).fetchone()
     if not run_row: 
         conn.close()
         return

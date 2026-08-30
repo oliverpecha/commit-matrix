@@ -6,9 +6,14 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+import glob
+from pathlib import Path
 from backend.controllers.api import api_router
 from backend.services.ledger_reader import fetch_ledger
 from backend.services.db.reader import get_available_repos
+
+def get_available_rubrics():
+    return [Path(p).stem for p in glob.glob("rubrics/*.md")] or ["cirsd"]
 
 # --- LITELM LOGGING SWITCH ---
 if str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on"):
@@ -39,26 +44,31 @@ async def prevent_browser_caching(request: Request, call_next):
 
 
 @app.get("/")
-async def index(request: Request, repo: str = None):
+async def index(request: Request, repo: str = None, rubric: str = "cirsd"):
     available_repos = get_available_repos()
     ts = int(time.time())
+
+    available_rubrics = get_available_rubrics()
 
     # 1. System Empty State (No DBs at all)
     if not available_repos:
         return templates.TemplateResponse(request=request, name="matrix.html", context={
-            "repo": "system-setup", "chart_data": [], "table_data": [], "system_empty": True, "invalid_repo": False,
+            "repo": "system-setup", "chart_data": [], "table_data": [], "system_empty": True, "invalid_repo": False, "invalid_rubric": False,
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
 
-    # 2. Invalid or Missing Repo in URL
-    if not repo or repo not in available_repos:
+    invalid_repo = bool(repo and repo not in available_repos)
+    invalid_rubric = bool(rubric and rubric not in available_rubrics)
+
+    # 2. Invalid or Missing Repo/Rubric in URL
+    if not repo or invalid_repo or invalid_rubric:
         return templates.TemplateResponse(request=request, name="matrix.html", context={
-            "repo": repo if repo else "", "chart_data": [], "table_data": [], "system_empty": False, "invalid_repo": True,
+            "repo": repo if repo else "", "chart_data": [], "table_data": [], "system_empty": False, "invalid_repo": invalid_repo or not repo, "invalid_rubric": invalid_rubric,
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
 
     # 3. Normal Load
-    ledger = fetch_ledger(repo)
+    ledger = fetch_ledger(repo, rubric)
     chart_data = [{k: v for k, v in c.items() if k not in ('s', 'h')} for c in ledger]
     table_data = ledger[:100]
 
