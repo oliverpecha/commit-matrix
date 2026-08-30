@@ -1,3 +1,4 @@
+__version__ = "0.1.1"
 import os
 from backend.utils.git_ops import get_commits, get_commit_diff, extract_org_from_remote_url
 
@@ -115,5 +116,7 @@ def bootstrap_repo_metadata(db_path: str, repo_path: str):
             meta_conn.execute("INSERT OR IGNORE INTO repo_metadata (key, value) VALUES ('org_name', ?)", (org_name,))
             if org_name != "Unknown":
                 meta_conn.execute("UPDATE repo_metadata SET value = ? WHERE key = 'org_name'", (org_name,))
+            actual_host_path = os.environ.get("HOST_REPO_PATH", str(os.path.abspath(repo_path)))
+            meta_conn.execute("INSERT OR REPLACE INTO repo_metadata (key, value) VALUES ('repo_path', ?)", (actual_host_path,))
     except Exception as e:
         print(f"⚠️ Metadata extraction failed: {e}", flush=True)

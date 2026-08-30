@@ -1,38 +1,40 @@
+__version__ = "0.1.3"
 import asyncio
 import os
+import subprocess
 
 
-def get_container_name(repo: str = "commit-matrix") -> str:
-    return f"matrix-analyzer-{repo}"
+def get_container_name(repo: str = "commit-matrix", rubric: str = "cirsd") -> str:
+    return f"matrix-analyzer-{repo}-{rubric}"
 
 
-def remove_container(repo_or_container: str = "commit-matrix"):
+def remove_container(repo_or_container: str = "commit-matrix", rubric: str = "cirsd"):
     debug_mode = str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on")
     if debug_mode:
         return
-    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
-    os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container, rubric)
+    subprocess.run(["docker", "rm", "-f", c_name], capture_output=True)
 
 
-def force_remove_container(repo_or_container: str = "commit-matrix"):
-    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
-    os.system(f"docker rm -f {c_name} > /dev/null 2>&1")
+def force_remove_container(repo_or_container: str = "commit-matrix", rubric: str = "cirsd"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container, rubric)
+    subprocess.run(["docker", "rm", "-f", c_name], capture_output=True)
 
 
-def pause_container(repo_or_container: str = "commit-matrix"):
-    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
-    os.system(f"docker pause {c_name} > /dev/null 2>&1")
+def pause_container(repo_or_container: str = "commit-matrix", rubric: str = "cirsd"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container, rubric)
+    subprocess.run(["docker", "pause", c_name], capture_output=True)
     return {"status": "paused", "action": "pause", "target": c_name}
 
 
-def unpause_container(repo_or_container: str = "commit-matrix"):
-    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
-    os.system(f"docker unpause {c_name} > /dev/null 2>&1")
+def unpause_container(repo_or_container: str = "commit-matrix", rubric: str = "cirsd"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container, rubric)
+    subprocess.run(["docker", "unpause", c_name], capture_output=True)
     return {"status": "running", "action": "play", "target": c_name}
 
 
 def build_scan_docker_cmd(repo: str, rubric: str, container_name: str | None = None):
-    c_name = container_name or get_container_name(repo)
+    c_name = container_name or get_container_name(repo, rubric)
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     max_w = os.environ.get("MATRIX_MAX_WORKERS", "32")
     max_commits = os.environ.get("MATRIX_MAX_COMMITS", "0")
@@ -44,7 +46,20 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name: str | None = N
     random_score = os.environ.get("RANDOM_SCORE", "false")
     matrix_debug = os.environ.get("MATRIX_DEBUG", "false")
 
-    target_volume = f"/root/commit-matrix" if repo == "commit-matrix" else f"/root/commit-matrix/data/{repo}/src"
+    target_volume = f"/root/commit-matrix/data/{repo}/src"
+    if repo == "commit-matrix":
+        target_volume = "/root/commit-matrix"
+    else:
+        import sqlite3
+        db_path = f"data/{repo}/db/{repo}.db"
+        if os.path.exists(db_path):
+            try:
+                with sqlite3.connect(db_path) as conn:
+                    row = conn.execute("SELECT value FROM repo_metadata WHERE key='repo_path'").fetchone()
+                    if row and row[0]:
+                        target_volume = row[0]
+            except Exception:
+                pass
     data_volume = "/root/commit-matrix/data"
 
     return [
@@ -69,6 +84,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name: str | None = N
         "-e", "SUPPRESS_LITELLM_LOGS=True",
         "-e", f"HOST_REPO_NAME={repo}",
         "-e", f"RUBRIC_NAME={rubric}",
+        "-e", f"HOST_REPO_PATH={target_volume}",
         "commit-matrix-core:latest",
         "python", "-u", "/app/backend/commit_pipeline.py", "--repo", "/target_repo"
     ]
@@ -84,8 +100,8 @@ async def run_docker_detached(docker_cmd):
     return process.returncode, stdout, stderr
 
 
-async def follow_container_logs(repo_or_container: str = "commit-matrix"):
-    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
+async def follow_container_logs(repo_or_container: str = "commit-matrix", rubric: str = "cirsd"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container, rubric)
     return await asyncio.create_subprocess_exec(
         "docker", "logs", "-f", c_name,
         stdout=asyncio.subprocess.PIPE,
@@ -93,8 +109,8 @@ async def follow_container_logs(repo_or_container: str = "commit-matrix"):
     )
 
 
-async def inspect_container_exit_code(repo_or_container: str = "commit-matrix"):
-    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container)
+async def inspect_container_exit_code(repo_or_container: str = "commit-matrix", rubric: str = "cirsd"):
+    c_name = repo_or_container if repo_or_container.startswith("matrix-analyzer-") else get_container_name(repo_or_container, rubric)
     inspect = await asyncio.create_subprocess_exec(
         "docker", "inspect", "-f", "{{.State.ExitCode}}", c_name,
         stdout=asyncio.subprocess.PIPE,

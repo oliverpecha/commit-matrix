@@ -15,7 +15,7 @@ def resolve_db_path(repo_label: str | None = None) -> str:
     """Robust dynamic path resolution supporting environment targets and overrides."""
     target_repo = os.environ.get("TARGET_REPO")
     if target_repo:
-        possible_path = os.path.join(target_repo, "data/db/{repo_label}.db")
+        possible_path = os.path.join(target_repo, f"data/{repo_label}/db/{repo_label}.db")
         if os.path.exists(possible_path):
             return possible_path
 
