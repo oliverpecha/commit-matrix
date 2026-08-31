@@ -59,8 +59,7 @@ async def list_rubrics(repo: str = None):
             "has_data": name.lower() in active_rubrics
         })
         
-    if not rubrics:
-        rubrics = [{"id": "cirsd", "name": "CIRSD V1", "has_data": "cirsd" in active_rubrics}]
+    # Hardcoded cirsd fallback removed
 
     # Bulletproof sorting using .get() to prevent ANY KeyError crashes
     rubrics.sort(key=lambda x: (not x.get("has_data", False), x.get("name", "")))
@@ -70,7 +69,7 @@ async def list_rubrics(repo: str = None):
 
 
 @api_router.get("/data")
-async def get_data(repo: str = None, rubric: str = "cirsd", token: str = ""):
+async def get_data(repo: str = None, rubric: str = None, token: str = ""):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
@@ -78,7 +77,7 @@ async def get_data(repo: str = None, rubric: str = "cirsd", token: str = ""):
 
 
 @api_router.post("/engine/control")
-async def control_engine(request: Request, action: str, repo: str = "commit-matrix", rubric: str = "cirsd"):
+async def control_engine(request: Request, action: str, repo: str = "commit-matrix", rubric: str = None):
     if action == "pause":
         return JSONResponse(content=pause_container(repo))
     elif action == "play":
@@ -89,7 +88,7 @@ async def control_engine(request: Request, action: str, repo: str = "commit-matr
     return JSONResponse(content={"status": "acknowledged", "action": action, "repo": repo})
 
 @api_router.get("/engine/status")
-async def get_engine_status(repo: str, rubric: str = "cirsd"):
+async def get_engine_status(repo: str, rubric: str = None):
     from backend.services.docker_runtime import get_container_name
     import subprocess
     c_name = get_container_name(repo, rubric)
@@ -102,7 +101,7 @@ async def get_engine_status(repo: str, rubric: str = "cirsd"):
 
 
 @api_router.post("/scan")
-async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = "cirsd", token: str = ""):
+async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = None, token: str = ""):
     available_repos = get_available_repos()
     
     async def generate():
@@ -172,7 +171,7 @@ async def get_rubric_guide():
 
 
 @api_router.get("/ledger")
-async def get_ledger_paginated(repo: str, rubric: str = "cirsd", offset: int = 0, limit: int = 100):
+async def get_ledger_paginated(repo: str, rubric: str, offset: int = 0, limit: int = 100):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
