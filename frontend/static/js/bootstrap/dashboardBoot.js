@@ -1,34 +1,6 @@
-import { hub } from "../core/eventHub.js?v=0.6.51";
+import { hub } from "../core/eventHub.js?v=0.6.67";
 
-const UI_THEME = {
-    account: {
-        title: "Account",
-        color: "#8ab4f0",
-        bg: "rgba(138,180,240,0.1)",
-        border: "rgba(138,180,240,0.2)",
-        toggleId: "cm-user-toggle",
-        labelId: "cm-active-user",
-        menuId: "cm-user-menu"
-    },
-    repo: {
-        title: "Repository",
-        color: "#8ed068",
-        bg: "rgba(142,208,104,0.1)",
-        border: "rgba(142,208,104,0.2)",
-        toggleId: "cm-repo-toggle",
-        labelId: "cm-active-repo-name",
-        menuId: "cm-repo-menu"
-    },
-    rubric: {
-        title: "Rubric",
-        color: "#a38b4f",
-        bg: "rgba(163,120,79,0.1)",
-        border: "rgba(163,120,79,0.2)",
-        toggleId: "cm-rubric-toggle",
-        labelId: "cm-active-rubric-name",
-        menuId: "cm-rubric-menu"
-    }
-};
+const UI_THEME = window.UI_THEME;
 
 const showScrollableModal = (title, contentText, color = "#a38b4f") => {
     const existing = document.getElementById("cm-modal-overlay");
@@ -110,7 +82,7 @@ window.triggerOwnRubric = async () => {
 
 const initDashboard = async () => {
     const initialParams = new URLSearchParams(window.location.search);
-    const initialOrg = initialParams.get("org");
+    const initialOrg = initialParams.get("owner");
     const initialRepo = initialParams.get("repo");
     const initialRubric = initialParams.get("rubric");
 
@@ -131,7 +103,7 @@ const initDashboard = async () => {
         
         // Synchronous Pre-Hydration: Use URL params immediately to prevent FOUC
         let defaultText = cfg.title;
-        if (cfg === UI_THEME.account && initialOrg) defaultText = initialOrg;
+        if (cfg === UI_THEME.owner && initialOrg) defaultText = initialOrg;
         if (cfg === UI_THEME.repo && initialRepo) defaultText = initialRepo;
         if (cfg === UI_THEME.rubric && initialRubric) defaultText = initialRubric.toUpperCase();
 
@@ -222,12 +194,12 @@ const initDashboard = async () => {
             urlParams.set(paramKey, paramValue);
             
             // Context Isolation: Re-sync dependent children
-            if (paramKey === "org") {
+            if (paramKey === "owner") {
                 const orgRepos = allRepos.filter(r => r.org === paramValue);
                 if (orgRepos.length > 0) urlParams.set("repo", orgRepos[0].name);
             }
             
-            if (paramKey === "org" || paramKey === "repo") {
+            if (paramKey === "owner" || paramKey === "repo") {
                 const newRepo = urlParams.get("repo");
                 window.VALID_RUBRICS = await window.fetchRubricsForRepo(newRepo);
                 const existing = window.VALID_RUBRICS.filter(r => r.has_data === true);
@@ -243,6 +215,12 @@ const initDashboard = async () => {
                 }
             }
             
+            // If recovering from a destructive error state, force a hard reload to reconstruct the DOM canvases.
+            if (window.MATRIX_SYSTEM_EMPTY || window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC) {
+                window.location.href = '?' + urlParams.toString();
+                return;
+            }
+
             history.pushState({}, '', '?' + urlParams.toString());
             updLabel(themeCfg, displayLabel);
             closeAll();
@@ -320,26 +298,54 @@ const initDashboard = async () => {
                 }
             }
             
-            let activeOrg = "";
+            let activeOrg = urlParams.get("owner") || "";
             const activeRepoObj = allRepos.find(r => r.name === activeRepo);
             if (activeRepoObj) activeOrg = activeRepoObj.org;
-            else if (orgs.length > 0) activeOrg = orgs[0].org;
+            else if (!activeOrg && orgs.length > 0) activeOrg = orgs[0].org;
 
             const createBtn = (cfg, actionStr, labelStr) => `<div style="padding:8px; background:#0a0e14; margin-top:auto;"><button onclick="${actionStr}" style="width:100%; padding:8px; background:transparent; border:1px dashed ${cfg.border}; color:${cfg.color}; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; transition:all 0.2s ease; font-family:Satoshi, sans-serif;" onmouseover="this.style.background='${cfg.bg}';" onmouseout="this.style.background='transparent';">+ ${labelStr}</button></div>`;
 
-            renderList(UI_THEME.account, orgs, activeOrg, "org", "org", "org", createBtn(UI_THEME.account, "window.triggerAddRepo()", "Add Repository"));
-            renderList(UI_THEME.repo, allRepos.filter(r => r.org === activeOrg), activeRepo, "name", "name", "repo", createBtn(UI_THEME.repo, "window.triggerAddRepo()", "Add Repository"));
-            renderList(UI_THEME.rubric, window.VALID_RUBRICS, activeRubric, "id", "name", "rubric", createBtn(UI_THEME.rubric, "window.triggerOwnRubric()", "Own Rubric"));
-
             const requestedRepoMissing = activeRepo && !activeRepoObj;
-            const isInvalidState = requestedRepoMissing || window.MATRIX_INVALID_REPO || window.MATRIX_SYSTEM_EMPTY;
+            
+            let repoList = allRepos.filter(r => r.org === activeOrg);
+            let rubricList = window.VALID_RUBRICS || [];
+            let highlightOrg = activeOrg;
+            let highlightRepo = activeRepo;
+            let highlightRubric = activeRubric;
 
-            if (isInvalidState) {
-                updLabel(UI_THEME.account, UI_THEME.account.title);
+            // Cascade clearing: If a parent is invalid, all children and active highlights must be cleared
+            if (window.MATRIX_SYSTEM_EMPTY || window.MATRIX_INVALID_OWNER) {
+                repoList = [];
+                rubricList = [];
+                highlightOrg = "";
+                highlightRepo = "";
+                highlightRubric = "";
+            } else if (window.MATRIX_INVALID_REPO || requestedRepoMissing) {
+                rubricList = [];
+                highlightRepo = "";
+                highlightRubric = "";
+            } else if (window.MATRIX_INVALID_RUBRIC) {
+                highlightRubric = "";
+            }
+
+            renderList(UI_THEME.owner, orgs, highlightOrg, "org", "org", "owner", createBtn(UI_THEME.owner, "window.triggerAddRepo()", "Add Repository"));
+            renderList(UI_THEME.repo, repoList, highlightRepo, "name", "name", "repo", createBtn(UI_THEME.repo, "window.triggerAddRepo()", "Add Repository"));
+            renderList(UI_THEME.rubric, rubricList, highlightRubric, "id", "name", "rubric", createBtn(UI_THEME.rubric, "window.triggerOwnRubric()", "Own Rubric"));
+
+            if (window.MATRIX_SYSTEM_EMPTY || window.MATRIX_INVALID_OWNER) {
+                updLabel(UI_THEME.owner, UI_THEME.owner.title);
                 updLabel(UI_THEME.repo, UI_THEME.repo.title);
                 updLabel(UI_THEME.rubric, UI_THEME.rubric.title);
+            } else if (window.MATRIX_INVALID_REPO || requestedRepoMissing) {
+                updLabel(UI_THEME.owner, activeOrg || UI_THEME.owner.title);
+                updLabel(UI_THEME.repo, UI_THEME.repo.title);
+                updLabel(UI_THEME.rubric, UI_THEME.rubric.title);
+            } else if (window.MATRIX_INVALID_RUBRIC) {
+                updLabel(UI_THEME.owner, activeOrg || UI_THEME.owner.title);
+                updLabel(UI_THEME.repo, activeRepoObj ? activeRepoObj.name : UI_THEME.repo.title);
+                updLabel(UI_THEME.rubric, UI_THEME.rubric.title);
             } else {
-                updLabel(UI_THEME.account, activeOrg || UI_THEME.account.title);
+                updLabel(UI_THEME.owner, activeOrg || UI_THEME.owner.title);
                 updLabel(UI_THEME.repo, activeRepoObj ? activeRepoObj.name : UI_THEME.repo.title);
                 const rObj = window.VALID_RUBRICS.find(r => String(r.id) === String(activeRubric));
                 updLabel(UI_THEME.rubric, rObj ? rObj.name.toUpperCase() : UI_THEME.rubric.title);

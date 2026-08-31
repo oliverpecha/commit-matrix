@@ -1,16 +1,16 @@
 // v0.1.11
-import { hub } from "./core/eventHub.js?v=0.6.51";
-import "./core/appStateCtrl.js?v=0.6.51";
-import "./engine/repoManager.js?v=0.6.51";
-import "./engine/telemetryStream.js?v=0.6.51";
-import "./engine/engineControl.js?v=0.6.51";
-import "./ui/terminalView.js?v=0.6.51";
+import { hub } from "./core/eventHub.js?v=0.6.67";
+import "./core/appStateCtrl.js?v=0.6.67";
+import "./engine/repoManager.js?v=0.6.67";
+import "./engine/telemetryStream.js?v=0.6.67";
+import "./engine/engineControl.js?v=0.6.67";
+import "./ui/terminalView.js?v=0.6.67";
 
-import { processCommits } from './core/dataEngine.js?v=0.6.51';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.6.51';
-import { renderHeatmap } from './ui/heatmap.js?v=0.6.51';
-import { renderTable } from './ui/tableCtrl.js?v=0.6.51';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.6.51';
+import { processCommits } from './core/dataEngine.js?v=0.6.67';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.6.67';
+import { renderHeatmap } from './ui/heatmap.js?v=0.6.67';
+import { renderTable } from './ui/tableCtrl.js?v=0.6.67';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.6.67';
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
@@ -31,7 +31,9 @@ function computeKPIs(p) {
 }
 
 function paintKPIs(k) {
-    document.getElementById('cm-kp').textContent = k.count;
+    const kp = document.getElementById('cm-kp');
+    if (!kp) return; // Prevent crash if dashboard UI is hidden due to invalid state
+    kp.textContent = k.count;
     document.getElementById('cm-ka').textContent = k.avg;
     document.getElementById('cm-kc').textContent = k.crit;
     document.getElementById('cm-ks').textContent = k.sig;
@@ -91,6 +93,9 @@ function setDashboardVisibility(hasData, errorMsg = "") {
         flexes.forEach(el => el.style.display = 'none');
         actions.forEach(el => el.style.display = 'none');
         if (wrap) wrap.style.opacity = "1";
+        
+        // Suppress Ledger Empty ghost dialog if the route itself is a 404 state
+        if (window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC) return;
         
         let zs = document.getElementById('cm-zero-state');
         if (!zs && wrap) {
@@ -154,9 +159,16 @@ function attemptRender() {
     });
 }
 window.addEventListener('load', async () => {
-    attemptRender();
     const urlParams = new URLSearchParams(window.location.search);
     const repo = urlParams.get('repo');
+    const rubric = urlParams.get('rubric');
+    
+    const isInvalid = window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC;
+    if (repo && rubric && !isInvalid && (window.MATRIX_PAYLOAD || window.MATRIX_CHART_PAYLOAD)) {
+        console.log(`[Data Engine] Loading ledger payload: data/${repo}/db/${repo}_ledger_${rubric}.csv`);
+    }
+
+    attemptRender();
     if (repo) {
         let url = `/api/engine/status?repo=${repo}`;
         if (urlParams.get('rubric')) url += `&rubric=${urlParams.get('rubric')}`;

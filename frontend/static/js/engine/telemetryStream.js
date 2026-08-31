@@ -1,6 +1,6 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.51";
-import { hub } from "../core/eventHub.js?v=0.6.51";
-import { contextKey } from "../core/state.js?v=0.6.51";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.67";
+import { hub } from "../core/eventHub.js?v=0.6.67";
+import { contextKey } from "../core/state.js?v=0.6.67";
 
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
