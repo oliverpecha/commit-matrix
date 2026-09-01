@@ -17,7 +17,7 @@ from pathlib import Path
 from backend.services.db.schema import SCHEMA_SQL, SCHEMA_VERSION
 from backend.services.db.taxonomy_sync import sync_taxonomy
 
-def _latest_run_id(conn, repo_label: str, rubric_name: str = "cirsd"):
+def _latest_run_id(conn, repo_label: str, rubric_name: str = "unknown"):
     """Return latest run_id for a repo_label, or None if none exist."""
     row = conn.execute(
         "SELECT run_id FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1",
@@ -74,7 +74,7 @@ def _extract_commits(entry: dict, run_id: int) -> list[tuple]:
     return rows
 
 
-def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "cirsd") -> int:
+def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "unknown") -> int:
     """Write a complete architecture history run to SQLite.
 
     Single run per repo. On subsequent calls for the same repo_label,
@@ -260,7 +260,7 @@ def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "cirs
             last_sig = snapshot_sig
 
     # Unmapped commits from ledger
-    ledger_path = Path("data") / repo_label / "db" / f"{repo_label}_ledger_cirsd.csv"
+    ledger_path = Path("data") / repo_label / "db" / f"{repo_label}_ledger_{rubric_name}.csv"
     unmapped_count = 0
     if ledger_path.exists():
         print(
@@ -318,7 +318,7 @@ def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "cirs
     return run_id
 
 
-def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_name: str = "cirsd") -> None:
+def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_name: str = "unknown") -> None:
     """Write a single snapshot's metadata to the DB.
 
     Called by arch_builder.py after each architecture generation.
@@ -651,7 +651,7 @@ def read_state_pointer(repo_path: str) -> dict | None:
     return None
 
 
-def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "cirsd") -> None:
+def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "unknown") -> None:
     """Update scan head/tail and track previous head for reclassification."""
     db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
@@ -687,7 +687,7 @@ def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_na
     conn.close()
 
 
-def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "cirsd") -> None:
+def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "unknown") -> None:
     """Detect gaps in commit coverage and record as vacuums."""
     db = Path("data") / repo_label / "db" / f"{repo_label}.db"
     try:
@@ -789,7 +789,7 @@ def incremental_sync_commit_states(repo_label: str, db_path: str, resolved_state
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA journal_mode=WAL")
     
-    _rubric = __import__("os").environ.get("RUBRIC_NAME", "cirsd")
+    _rubric = __import__("os").environ.get("RUBRIC_NAME", "unknown")
     run_row = conn.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1", (repo_label,)).fetchone()
     if not run_row: 
         conn.close()

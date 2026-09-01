@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.6.67";
+import { hub } from "../core/eventHub.js?v=0.6.73";
 
 const UI_THEME = window.UI_THEME;
 
@@ -209,9 +209,11 @@ const initDashboard = async () => {
                 const isCurrentAvailable = existing.some(r => r.id === currentRubricId);
                 
                 if (!isCurrentAvailable) {
-                    // Default to first alphabetical scanned rubric, or first valid unscanned if empty
-                    const firstTarget = existing.length > 0 ? existing[0] : window.VALID_RUBRICS.find(r => !r.isDivider);
-                    if (firstTarget) urlParams.set("rubric", firstTarget.id);
+                    // 💥 Prevent auto-selecting physical files if the system is completely empty
+                    if (!window.MATRIX_SYSTEM_EMPTY) {
+                        const firstTarget = existing.length > 0 ? existing[0] : window.VALID_RUBRICS.find(r => !r.isDivider);
+                        if (firstTarget) urlParams.set("rubric", firstTarget.id);
+                    }
                 }
             }
             
@@ -285,6 +287,10 @@ const initDashboard = async () => {
         };
 
         const hydrateState = () => {
+            // 💥 URL SANITIZER: Defeat browser autocomplete. If system is empty, strip all URL parameters.
+            if (window.MATRIX_SYSTEM_EMPTY && window.location.search) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
             const urlParams = new URLSearchParams(window.location.search);
             const activeRepo = urlParams.get("repo") || "";
             let activeRubric = urlParams.get("rubric");

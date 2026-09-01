@@ -20,7 +20,7 @@ def ensure_generation_columns(conn):
     
     cols_runs = [r[1] for r in conn.execute("PRAGMA table_info(architecture_runs)")]
     if "rubric_name" not in cols_runs:
-        conn.execute("ALTER TABLE architecture_runs ADD COLUMN rubric_name TEXT DEFAULT 'cirsd'")
+        conn.execute("ALTER TABLE architecture_runs ADD COLUMN rubric_name TEXT DEFAULT 'unknown'")
         
     conn.commit()
 
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS taxonomy (
 CREATE TABLE IF NOT EXISTS architecture_runs (
     run_id INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_label TEXT NOT NULL,
-    rubric_name TEXT DEFAULT 'cirsd',
+    rubric_name TEXT DEFAULT 'unknown',
     repo_display TEXT,
     generated_at TEXT NOT NULL,
     contract_version TEXT,

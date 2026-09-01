@@ -50,17 +50,18 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
     available_rubrics = get_available_rubrics()
     ts = int(time.time())
 
-    # 1. System Empty State (No DBs or Rubrics found)
-    if not grouped or not available_rubrics:
+    # Extract valid owners and repositories from the structured grouped dict
+    organizations = grouped.get("organizations", [])
+    owner_repo_map = {o["org"]: o["repos"] for o in organizations}
+    available_owners = sorted(owner_repo_map.keys())
+
+    # 1. System Empty State (No valid owners or Rubrics found)
+    if not available_owners or not available_rubrics:
         return templates.TemplateResponse(request=request, name="matrix.html", context={
             "repo": "system-setup", "chart_data": [], "table_data": [], "system_empty": True, "invalid_repo": False, "invalid_rubric": False,
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
 
-    # Extract valid owners and repositories from the structured grouped dict
-    organizations = grouped.get("organizations", [])
-    owner_repo_map = {o["org"]: o["repos"] for o in organizations}
-    available_owners = sorted(owner_repo_map.keys())
     
     # 1. Start with alphabetical defaults
     first_owner = available_owners[0] if available_owners else "unknown"
@@ -68,7 +69,6 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
     first_rubric = available_rubrics[0] if available_rubrics else "unknown"
 
     # 2. Upgrade defaults to the first combo that actually has a scanned ledger
-    import os
     found_scanned = False
     for o in available_owners:
         for r in sorted(owner_repo_map[o]):

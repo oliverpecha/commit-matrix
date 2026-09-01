@@ -1,6 +1,6 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.67";
-import { hub } from "../core/eventHub.js?v=0.6.67";
-import { contextKey } from "../core/state.js?v=0.6.67";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.6.73";
+import { hub } from "../core/eventHub.js?v=0.6.73";
+import { contextKey } from "../core/state.js?v=0.6.73";
 
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
@@ -14,7 +14,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
     const urlParams = new URLSearchParams(window.location.search);
     const repoName = repo || urlParams.get("repo") || "";
     const authToken = token || urlParams.get("token") || "";
-    const rubricName = urlParams.get("rubric") || "cirsd";
+    const rubricName = urlParams.get("rubric") || "unknown";
 
     const myContext = contextKey(repoName, rubricName);
     window.CM_SCAN_CONTEXT = myContext;
@@ -142,7 +142,7 @@ window.cmToggleEngine = async function(action) {
     if (action === 'pause' && !window.CM_ENGINE_CONTROLLABLE) return null;
 
     try {
-        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || ''}&rubric=${urlParams.get('rubric') || 'cirsd'}`, { method: 'POST' });
+        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || ''}&rubric=${urlParams.get('rubric') || 'unknown'}`, { method: 'POST' });
         const data = await resp.json();
 
         if (action === 'pause' && data.status === 'paused') {

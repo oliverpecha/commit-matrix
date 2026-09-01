@@ -1,8 +1,12 @@
-import { APP_STATES } from "./state.js?v=0.6.67";
-import { applyLayout } from "../ui/layoutCtrl.js?v=0.6.67";
-import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.6.67";
+import { APP_STATES } from "./state.js?v=0.6.73";
+import { applyLayout } from "../ui/layoutCtrl.js?v=0.6.73";
+import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.6.73";
 
 window.CM_APP_STATE = window.CM_APP_STATE || APP_STATES.ZERO;
+
+function isEffectivelyEmpty() {
+    return window.MATRIX_SYSTEM_EMPTY === true || !hasLedgerData();
+}
 
 export function getAppState() {
     return window.CM_APP_STATE || APP_STATES.ZERO;
@@ -14,22 +18,26 @@ export function setAppState(state) {
 }
 
 export function syncInitialAppState() {
+    if (window.MATRIX_SYSTEM_EMPTY) {
+        window.CM_APP_STATE = 'SYSTEM_EMPTY';
+        return; // Abort standard layout application to prevent UI overlapping with pageBoot's Welcome Screen
+    }
     return setAppState(hasLedgerData() ? APP_STATES.DASHBOARD_READY : APP_STATES.ZERO);
 }
 
 export function beginScanState() {
-    return setAppState(hasLedgerData() ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_BOOT);
+    return setAppState(!isEffectivelyEmpty() ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_BOOT);
 }
 
 export function onFirstChunkState() {
-    if (!hasLedgerData()) {
+    if (isEffectivelyEmpty()) {
         return setAppState(APP_STATES.INGESTION_STREAMING_FIRST);
     }
     return setAppState(APP_STATES.DASHBOARD_STREAMING);
 }
 
 export function onLedgerAvailableState() {
-    return setAppState(hasLedgerData() ? APP_STATES.INGESTION_STREAMING_WITH_LEDGER : APP_STATES.INGESTION_STREAMING_FIRST);
+    return setAppState(!isEffectivelyEmpty() ? APP_STATES.INGESTION_STREAMING_WITH_LEDGER : APP_STATES.INGESTION_STREAMING_FIRST);
 }
 
 export function onPauseState() {
@@ -37,11 +45,11 @@ export function onPauseState() {
 }
 
 export function onPlayState() {
-    return setAppState(hasLedgerData() ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_STREAMING_FIRST);
+    return setAppState(!isEffectivelyEmpty() ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_STREAMING_FIRST);
 }
 
 export function onCompleteState() {
-    return setAppState(hasLedgerData() ? APP_STATES.COMPLETE_PENDING_CLOSE : APP_STATES.ZERO);
+    return setAppState(!isEffectivelyEmpty() ? APP_STATES.COMPLETE_PENDING_CLOSE : APP_STATES.ZERO);
 }
 
 export function onFailureState() {
@@ -49,7 +57,7 @@ export function onFailureState() {
 }
 
 export function hasSeenLedger() {
-    return hasLedgerData();
+    return !isEffectivelyEmpty();
 }
 
 export function markLedgerSeen() {
@@ -59,4 +67,3 @@ export function markLedgerSeen() {
 export function initAppStateFromLedger() {
     return syncInitialAppState();
 }
-

@@ -133,7 +133,7 @@ def main():
             with _boot_sq.connect(db_path) as _b_conn:
                 _t_exists = _b_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
                 if _t_exists:
-                    _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+                    _rubric = os.environ.get("RUBRIC_NAME", "unknown")
                     _r_row = _b_conn.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone()
                     _run_id = _r_row[0] if _r_row else -1
                     _b_count = _b_conn.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 else 0
@@ -146,7 +146,7 @@ def main():
     import sqlite3 as _summary_sq
     try:
         with _summary_sq.connect(db_path) as _conn_b:
-            _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+            _rubric = os.environ.get("RUBRIC_NAME", "unknown")
             _r_row = _conn_b.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_runs'").fetchone() else None
             _run_id = _r_row[0] if _r_row else -1
             
@@ -335,7 +335,7 @@ def main():
             head_topo = commits_with_ids[0][0]
             tail_topo = commits_with_ids[-1][0]
             from backend.services.db.writer import update_scan_range
-            _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+            _rubric = os.environ.get("RUBRIC_NAME", "unknown")
             update_scan_range(repo_label, head_topo, tail_topo)
     except Exception:
         pass
@@ -355,7 +355,7 @@ def main():
         import sqlite3
         with sqlite3.connect(db_path) as _c:
             _t_exists = _c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
-            _rubric = os.environ.get("RUBRIC_NAME", "cirsd")
+            _rubric = os.environ.get("RUBRIC_NAME", "unknown")
             _r_row = _c.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _t_exists else None
             _run_id = _r_row[0] if _r_row else -1
             b_count = _c.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _t_exists else 0

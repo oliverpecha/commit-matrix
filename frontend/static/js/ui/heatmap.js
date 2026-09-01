@@ -1,6 +1,6 @@
-import { SC_COLORS } from '../core/constants.js?v=0.6.67';
-import { UI_STATE } from '../core/state.js?v=0.6.67';
-import { MD_TOP } from '../charts/plugins.js?v=0.6.67';
+import { SC_COLORS } from '../core/constants.js?v=0.6.73';
+import { UI_STATE } from '../core/state.js?v=0.6.73';
+import { MD_TOP } from '../charts/plugins.js?v=0.6.73';
 
 // FIX: Aligned perfectly with your CSV headers
 const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];

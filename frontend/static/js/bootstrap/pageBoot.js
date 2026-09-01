@@ -1,6 +1,6 @@
 
-import { hub } from "../core/eventHub.js?v=0.6.67";
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.6.67";
+import { hub } from "../core/eventHub.js?v=0.6.73";
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.6.73";
 
 // Hydrate header button
 document.addEventListener("DOMContentLoaded", () => {
@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 (async function initPageBoot() {
-    console.log("[CommitMatrix] 🚀 pageBoot.js v0.2.3 executing (Pure JS Edition)...");
+    console.log("[CommitMatrix] 🚀 pageBoot.js v0.2.5 executing (Pure JS Edition)...");
 
     const payloadScript = document.getElementById("cm-page-payload");
     if (payloadScript) {
@@ -80,14 +80,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const THEME = window.UI_THEME;
 
-    if (window.MATRIX_SYSTEM_EMPTY && wrap) {
-        document.querySelectorAll('#cm-header-actions, .cm-header-actions, #cm-toolbar, .cm-toolbar, #cm-actions, .cm-actions, #cm-repo-controls').forEach(el => el.remove());
-        wrap.innerHTML = `<div style="padding:80px 20px; text-align:center; color:#aaa; font-family:Satoshi, sans-serif;">
-            <h2 style="color:#d9d8d5; margin-bottom:12px;">No repository added.</h2>
-            <p style="margin-bottom:16px;">To ingest a new repository, open your host terminal and run:</p>
-            <pre style="background:rgba(255,255,255,0.05); padding:16px; border-radius:6px; color:#a38b4f; display:inline-block; text-align:left; margin-bottom:16px; font-family:monospace; border:1px solid rgba(163,139,79,0.3);"><code>cd /path/to/your/repo\ncommit-matrix</code></pre>
-            <p style="font-size:13px; opacity:0.7;">(The dashboard will automatically detect the new ledger once the page is refreshed)</p>
+    if (window.MATRIX_SYSTEM_EMPTY) {
+        // Bulletproof the empty state: hide ALL other UI elements and render a full-viewport overlay
+        document.head.insertAdjacentHTML('beforeend', '<style>body > *:not(#cm-zero-state-overlay):not(script) { display: none !important; }</style>');
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'cm-zero-state-overlay';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#141414; z-index:999999; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden;';
+        
+        overlay.innerHTML = `<div style="padding:40px 20px; text-align:center; color:#aaa; font-family:Satoshi, sans-serif;">
+            <div style="font-size:48px; margin-bottom:16px;">🌌</div>
+            <h2 style="color:#d9d8d5; margin-bottom:12px; font-weight:600;">Welcome to Commit-Matrix</h2>
+            <p style="max-width:500px; margin:0 auto 24px auto; line-height:1.6; color:#888;">Let's get started by ingesting your first repository!</p>
+            <button onclick="window.triggerAddRepo()" style="padding:12px 24px; background:rgba(79,152,163,0.1); border:1px solid #4f98a3; color:#4f98a3; border-radius:6px; cursor:pointer; font-weight:bold; font-size:15px; font-family:Satoshi, sans-serif; transition:all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" onmouseover="this.style.background='rgba(79,152,163,0.2)';" onmouseout="this.style.background='rgba(79,152,163,0.1)';">+ Add Repository</button>
+            <div style="margin-top:32px; padding-top:24px; border-top:1px solid rgba(255,255,255,0.05);">
+                <p style="margin-bottom:12px; font-size:13px; color:#666;">Or ingest manually via host terminal:</p>
+                <pre style="background:rgba(255,255,255,0.02); padding:12px 16px; border-radius:6px; color:#a38b4f; display:inline-block; text-align:left; font-family:monospace; border:1px solid rgba(163,139,79,0.2); font-size:12px;"><code>cd /path/to/your/repo
+commit-matrix</code></pre>
+            </div>
         </div>`;
+        
+        if (wrap) wrap.style.display = 'none';
+        document.body.appendChild(overlay);
     } else if ((window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC) && wrap) {
         document.querySelectorAll('#cm-header-actions, .cm-header-actions, #cm-toolbar, .cm-toolbar, #cm-actions, .cm-actions, #cm-repo-controls').forEach(el => el.remove());
         
@@ -116,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
             actionHtml = `<div style="margin-top:24px;"><button onclick="window.triggerOwnRubric()" style="padding:10px 16px; background:transparent; border:1px dashed ${THEME.rubric.color}; color:${THEME.rubric.color}; border-radius:4px; cursor:pointer; font-weight:bold; font-family:Satoshi, sans-serif; transition:all 0.2s ease;" onmouseover="this.style.background='${THEME.rubric.bg}';" onmouseout="this.style.background='transparent';">+ Create Own Rubric</button></div>`;
         }
 
-        wrap.innerHTML = `<div style="padding:80px 20px; text-align:center; color:#aaa; font-family:Satoshi, sans-serif;">
+        wrap.innerHTML = `<style>header, #cm-header, .cm-header-nav, .cm-top-nav, nav, .header-container { display: none !important; }</style><div style="padding:80px 20px; text-align:center; color:#aaa; font-family:Satoshi, sans-serif;">
             <h2 style="color:${themeColor}; margin-bottom:12px;">${titleText}</h2>
             <p>${bodyText}</p>
             ${actionHtml}
@@ -126,13 +140,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Listen to Context Changes & Init Observers ---
     try {
-        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.6.67");
+        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.6.77");
         if (!window.MATRIX_SYSTEM_EMPTY && !window.MATRIX_INVALID_REPO) {
             const p = new URLSearchParams(window.location.search);
             initInfiniteScroll(p.get("repo") || "commit-matrix", 100);
         }
 
-        const { hub } = await import("../core/eventHub.js?v=0.6.67");
+        const { hub } = await import("../core/eventHub.js?v=0.6.77");
         window.hub = hub; // Ensure inline handlers like (Add Repo) retain access
         
         hub.on("CONTEXT_CHANGED", (payload) => {

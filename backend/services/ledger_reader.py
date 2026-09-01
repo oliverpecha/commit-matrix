@@ -15,7 +15,7 @@ def parse_date_to_timestamp(date_str):
     except:
         return 0
 
-def fetch_ledger_raw(repo, rubric="cirsd"):
+def fetch_ledger_raw(repo, rubric="unknown"):
     candidates = [
         f"/app/data/{repo}/db/{repo}_ledger_{rubric}.csv",
         f"data/{repo}/db/{repo}_ledger_{rubric}.csv",
@@ -57,7 +57,7 @@ def fetch_ledger_raw(repo, rubric="cirsd"):
         print(f"LEDGER FETCH ERROR: {e}", flush=True)
     return out
 
-def fetch_ledger(repo, rubric="cirsd"):
+def fetch_ledger(repo, rubric="unknown"):
     cache_key = f"{repo}_{rubric}"
     now = time.time()
     if cache_key in _CACHE and now - _CACHE[cache_key].get('ts', 0) < CACHE_TTL:

@@ -194,7 +194,7 @@ def _reanchor_reuse_by_signature(entries: list[SnapshotEntry]) -> list[SnapshotE
 
 def _find_ledger_path(repo_label: str) -> Path | None:
     candidates = [
-        Path("data") / repo_label / f"{repo_label}_ledger_cirsd.csv",
+        Path("data") / repo_label / f"{repo_label}_ledger_unknown.csv",
         Path("data") / repo_label / f"{repo_label}_ledger_{RUBRIC_NAME}.csv",
     ]
     for candidate in candidates:
