@@ -1,3 +1,4 @@
+import os
 """
 CommitMatrix SQLite writer — boundary-anchored architecture persistence.
 
@@ -17,7 +18,8 @@ from pathlib import Path
 from backend.services.db.schema import SCHEMA_SQL, SCHEMA_VERSION
 from backend.services.db.taxonomy_sync import sync_taxonomy
 
-def _latest_run_id(conn, repo_label: str, rubric_name: str = "unknown"):
+def _latest_run_id(conn, repo_label: str, rubric_name: str = None):
+    rubric_name = rubric_name or __import__("os").environ.get("RUBRIC_NAME", "unknown")
     """Return latest run_id for a repo_label, or None if none exist."""
     row = conn.execute(
         "SELECT run_id FROM architecture_runs WHERE repo_label = ? ORDER BY run_id DESC LIMIT 1",
@@ -30,7 +32,7 @@ def _latest_run_id(conn, repo_label: str, rubric_name: str = "unknown"):
 
 def _blueprint_hash(snapshot_sig: str, repo_label: str) -> str | None:
     prefix = snapshot_sig[:16]
-    md_path = Path("data") / repo_label / "past_blueprints" / f"arch_snapshot-{prefix}.md"
+    md_path = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "past_blueprints" / f"arch_snapshot-{prefix}.md"
     if md_path.exists():
         return hashlib.sha256(md_path.read_bytes()).hexdigest()
     return None
@@ -74,7 +76,8 @@ def _extract_commits(entry: dict, run_id: int) -> list[tuple]:
     return rows
 
 
-def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "unknown") -> int:
+def write_architecture_run(db_path: str, payload: dict, rubric_name: str = None) -> int:
+    rubric_name = rubric_name or __import__("os").environ.get("RUBRIC_NAME", "unknown")
     """Write a complete architecture history run to SQLite.
 
     Single run per repo. On subsequent calls for the same repo_label,
@@ -260,7 +263,7 @@ def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "unkn
             last_sig = snapshot_sig
 
     # Unmapped commits from ledger
-    ledger_path = Path("data") / repo_label / "db" / f"{repo_label}_ledger_{rubric_name}.csv"
+    ledger_path = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}_ledger_{rubric_name}.csv"
     unmapped_count = 0
     if ledger_path.exists():
         print(
@@ -318,7 +321,8 @@ def write_architecture_run(db_path: str, payload: dict, rubric_name: str = "unkn
     return run_id
 
 
-def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_name: str = "unknown") -> None:
+def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_name: str = None) -> None:
+    rubric_name = rubric_name or __import__("os").environ.get("RUBRIC_NAME", "unknown")
     """Write a single snapshot's metadata to the DB.
 
     Called by arch_builder.py after each architecture generation.
@@ -327,7 +331,7 @@ def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_na
     """
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
+    db = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -603,7 +607,7 @@ def write_state_pointer(repo_path: str, meta: dict) -> None:
     import json as _json
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
+    db = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -631,7 +635,7 @@ def read_state_pointer(repo_path: str) -> dict | None:
     import json as _json
     from backend.services.architecture.arch_storage import repo_id_from_path
     repo_label = repo_id_from_path(repo_path)
-    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
+    db = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -651,9 +655,10 @@ def read_state_pointer(repo_path: str) -> dict | None:
     return None
 
 
-def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "unknown") -> None:
+def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = None) -> None:
+    rubric_name = rubric_name or __import__("os").environ.get("RUBRIC_NAME", "unknown")
     """Update scan head/tail and track previous head for reclassification."""
-    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
+    db = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -687,9 +692,10 @@ def update_scan_range(repo_label: str, scan_head: int, scan_tail: int, rubric_na
     conn.close()
 
 
-def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = "unknown") -> None:
+def detect_and_record_vacuums(repo_label: str, scan_head: int, scan_tail: int, rubric_name: str = None) -> None:
+    rubric_name = rubric_name or __import__("os").environ.get("RUBRIC_NAME", "unknown")
     """Detect gaps in commit coverage and record as vacuums."""
-    db = Path("data") / repo_label / "db" / f"{repo_label}.db"
+    db = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
     except Exception:

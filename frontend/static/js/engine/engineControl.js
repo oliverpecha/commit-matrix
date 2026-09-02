@@ -1,10 +1,10 @@
 // v0.1.11
-import { hub } from "../core/eventHub.js?v=0.6.73";
+import { hub } from "../core/eventHub.js?v=0.7.75";
 
 async function postEngineControl(action) {
     const urlParams = new URLSearchParams(window.location.search);
     const repo = urlParams.get("repo") || "";
-    const rubric = urlParams.get("rubric") || "unknown";
+    const rubric = urlParams.get("rubric") || window.MATRIX_DEFAULT_RUBRIC || "unknown";
     const resp = await fetch(`/api/engine/control?action=${action}&repo=${repo}&rubric=${rubric}`, { method: "POST" });
     return resp.json();
 }

@@ -21,7 +21,7 @@ def repo_id_from_path(repo_path: str) -> str:
 
 def architecture_paths(repo_path: str) -> Path:
     repo_id = repo_id_from_path(repo_path)
-    data_dir = Path("data") / repo_id
+    data_dir = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_id)
     data_dir.absolute().mkdir(parents=True, exist_ok=True)
     md_path = data_dir / f"{repo_id}_current_arch_blueprint.md"
     return md_path

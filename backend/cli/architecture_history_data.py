@@ -194,8 +194,8 @@ def _reanchor_reuse_by_signature(entries: list[SnapshotEntry]) -> list[SnapshotE
 
 def _find_ledger_path(repo_label: str) -> Path | None:
     candidates = [
-        Path("data") / repo_label / f"{repo_label}_ledger_unknown.csv",
-        Path("data") / repo_label / f"{repo_label}_ledger_{RUBRIC_NAME}.csv",
+        (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / f"{repo_label}_ledger_unknown.csv",
+        (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / f"{repo_label}_ledger_{RUBRIC_NAME}.csv",
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -321,7 +321,7 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
     repo_path = Path(".").resolve()
     repo_display = derive_repo_display(repo_path, repo_label)
 
-    data_dir = Path("data") / repo_label
+    data_dir = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label)
     meta_path = data_dir / f"{repo_label}_arch_blueprint.meta.json"
     versions_dir = data_dir / "architecture_versions"
     used_by_map, topo_by_sha, ledger_rows = _load_used_by_map(repo_label)

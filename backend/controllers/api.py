@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from backend.services.db.reader import get_repos_grouped_by_org, get_available_repos
+from backend.services.db.reader import get_repos_grouped_by_owner, get_available_repos
 from backend.services.ledger_reader import fetch_ledger
 from backend.services.docker_runtime import (
     build_scan_docker_cmd,
@@ -28,11 +28,11 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.get("/repos")
 async def list_repos():
-    return JSONResponse(content=get_repos_grouped_by_org())
+    return JSONResponse(content=get_repos_grouped_by_owner())
 
 
 @api_router.get("/rubrics")
-async def list_rubrics(repo: str = None):
+async def list_rubrics(repo: str = None, owner: str = "local"):
     import glob
     from pathlib import Path
     from backend.services.db.reader import get_available_repos
@@ -44,7 +44,7 @@ async def list_rubrics(repo: str = None):
             
     active_rubrics = set()
     if repo:
-        for path in glob.glob(f"data/{repo}/db/{repo}_ledger_*.csv"):
+        for path in (glob.glob(f"data/{owner}/{repo}/db/{repo}_ledger_*.csv") + glob.glob(f"data/*/{repo}/db/{repo}_ledger_*.csv") + glob.glob(f"data/{repo}/db/{repo}_ledger_*.csv")):
             filename = Path(path).stem
             prefix = f"{repo}_ledger_"
             if filename.startswith(prefix):
@@ -69,11 +69,11 @@ async def list_rubrics(repo: str = None):
 
 
 @api_router.get("/data")
-async def get_data(repo: str = None, rubric: str = None, token: str = ""):
+async def get_data(repo: str = None, rubric: str = None, token: str = "", owner: str = "local"):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
-    return JSONResponse(content=fetch_ledger(repo, rubric))
+    return JSONResponse(content=fetch_ledger(repo, rubric, owner))
 
 
 @api_router.post("/engine/control")
@@ -88,10 +88,10 @@ async def control_engine(request: Request, action: str, repo: str = "commit-matr
     return JSONResponse(content={"status": "acknowledged", "action": action, "repo": repo})
 
 @api_router.get("/engine/status")
-async def get_engine_status(repo: str, rubric: str = None):
+async def get_engine_status(repo: str, rubric: str = None, owner: str = "local"):
     from backend.services.docker_runtime import get_container_name
     import subprocess
-    c_name = get_container_name(repo, rubric)
+    c_name = get_container_name(repo, rubric, owner)
     try:
         res = subprocess.check_output(f"docker ps -q -f name=^{c_name}$", shell=True).strip()
         return JSONResponse(content={"running": bool(res)})
@@ -171,11 +171,13 @@ async def get_rubric_guide():
 
 
 @api_router.get("/ledger")
-async def get_ledger_paginated(repo: str, rubric: str, offset: int = 0, limit: int = 100):
+async def get_ledger_paginated(repo: str, rubric: str, offset: int = 0, limit: int = 100, owner: str = "local"):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
     
-    ledger = fetch_ledger(repo, rubric)
+    ledger = fetch_ledger(repo, rubric, owner)
     paginated_chunk = ledger[offset : offset + limit]
     return JSONResponse(content=paginated_chunk)
+
+

@@ -74,7 +74,7 @@ def _strip_port(host_and_rest: str) -> str:
     return (m.group(1) + m.group(3)) if m else host_and_rest
 
 
-def extract_org_from_remote_url(url: str) -> str:
+def extract_owner_from_remote_url(url: str) -> str:
     """Extract a human-readable org/entity/namespace name from a git remote URL."""
     u = url.strip()
     u = re.sub(r'[?#].*$', '', u)
@@ -111,24 +111,24 @@ def extract_org_from_remote_url(url: str) -> str:
         if idx >= 2:
             return pts[idx - 2]
 
-    org_name = None
+    owner_name = None
     if len(pts) >= 3:
         if host in _FLAT_HOSTS:
-            org_name = pts[-2]
+            owner_name = pts[-2]
         else:
             offset = 2
             while offset < len(pts) and pts[-offset] in _NOISE:
                 offset += 1
-            org_name = pts[-offset] if offset < len(pts) else host
+            owner_name = pts[-offset] if offset < len(pts) else host
     else:
-        org_name = pts[0]
+        owner_name = pts[0]
 
-    if '.' in org_name:
-        if _IPV4.match(org_name):
-            return org_name
-        dom_parts = org_name.split('.')
+    if '.' in owner_name:
+        if _IPV4.match(owner_name):
+            return owner_name
+        dom_parts = owner_name.split('.')
         while len(dom_parts) > 1 and dom_parts[0].lower() in _INFRA_SUBS:
             dom_parts = dom_parts[1:]
-        org_name = dom_parts[0] if dom_parts else org_name
+        owner_name = dom_parts[0] if dom_parts else owner_name
 
-    return org_name
+    return owner_name

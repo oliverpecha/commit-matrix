@@ -1,3 +1,4 @@
+import backend.services.db.reader
 import os
 import time
 import logging
@@ -10,11 +11,19 @@ import glob
 from pathlib import Path
 from backend.controllers.api import api_router
 from backend.services.ledger_reader import fetch_ledger
-from backend.services.db.reader import get_repos_grouped_by_org
+from backend.services.db.reader import get_repos_grouped_by_owner
 
 def get_available_rubrics():
+    import glob
+    from pathlib import Path
     rubrics = [Path(p).stem for p in glob.glob("rubrics/*.md")]
-    return sorted([r for r in rubrics if r.upper() not in ("RUBRIC_AUTHORING_GUIDE", "README")])
+    rubrics = [r for r in rubrics if r.upper() not in ("RUBRIC_AUTHORING_GUIDE", "README")]
+    flat_rubrics = set()
+    for p in (glob.glob("data/*/db/*_ledger_*.csv") + glob.glob("data/*/*/db/*_ledger_*.csv")):
+        stem = Path(p).stem
+        if "_ledger_" in stem:
+            flat_rubrics.add(stem.split("_ledger_", 1)[1])
+    return sorted(set(rubrics) | flat_rubrics)
 
 # --- LITELM LOGGING SWITCH ---
 if str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on"):
@@ -46,18 +55,19 @@ async def prevent_browser_caching(request: Request, call_next):
 
 @app.get("/")
 async def index(request: Request, owner: str = None, repo: str = None, rubric: str = None):
-    grouped = get_repos_grouped_by_org()
+    grouped = get_repos_grouped_by_owner()
     available_rubrics = get_available_rubrics()
     ts = int(time.time())
 
     # Extract valid owners and repositories from the structured grouped dict
-    organizations = grouped.get("organizations", [])
-    owner_repo_map = {o["org"]: o["repos"] for o in organizations}
+    import os
+    owners_list = grouped.get("owners", [])
+    owner_repo_map = {o.get("owner", "local"): [(r.get("id") if isinstance(r, dict) else r) for r in o.get("repos", [])] for o in owners_list}
     available_owners = sorted(owner_repo_map.keys())
 
     # 1. System Empty State (No valid owners or Rubrics found)
     if not available_owners or not available_rubrics:
-        return templates.TemplateResponse(request=request, name="matrix.html", context={
+        return templates.TemplateResponse(request=request, name="matrix.html", context={"owners": backend.services.db.reader.get_repos_grouped_by_owner().get("owners", []), 
             "repo": "system-setup", "chart_data": [], "table_data": [], "system_empty": True, "invalid_repo": False, "invalid_rubric": False,
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
@@ -73,7 +83,7 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
     for o in available_owners:
         for r in sorted(owner_repo_map[o]):
             for rub in available_rubrics:
-                if os.path.exists(f"data/{r}/db/{r}_ledger_{rub}.csv"):
+                if any(glob.glob(f"data/*/{r}/db/{r}_ledger_{rub}.csv") + glob.glob(f"data/{r}/db/{r}_ledger_{rub}.csv")):
                     first_owner, first_repo, first_rubric = o, r, rub
                     found_scanned = True
                     break
@@ -100,17 +110,18 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
 
     # 2. Invalid Owner/Repo/Rubric in URL
     if invalid_owner or invalid_repo or invalid_rubric:
-        return templates.TemplateResponse(request=request, name="matrix.html", context={
+        return templates.TemplateResponse(request=request, name="matrix.html", context={"owners": backend.services.db.reader.get_repos_grouped_by_owner().get("owners", []), 
             "repo": repo, "chart_data": [], "table_data": [], "system_empty": False, "invalid_owner": invalid_owner, "invalid_repo": invalid_repo, "invalid_rubric": invalid_rubric,
+            "default_rubric": __import__("os").environ.get("RUBRIC_NAME", "unknown"),
             "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
         })
 
     # 3. Normal Load
-    ledger = fetch_ledger(repo, rubric=rubric)
+    ledger = fetch_ledger(repo, rubric=rubric, owner=request.query_params.get("owner", "local"))
     chart_data = [{k: v for k, v in c.items() if k not in ('s', 'h')} for c in ledger]
     table_data = ledger[:100]
 
-    return templates.TemplateResponse(request=request, name="matrix.html", context={
+    return templates.TemplateResponse(request=request, name="matrix.html", context={"owners": backend.services.db.reader.get_repos_grouped_by_owner().get("owners", []), 
         "repo": repo, "chart_data": chart_data, "table_data": table_data, "system_empty": False, "invalid_repo": False,
         "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
     })

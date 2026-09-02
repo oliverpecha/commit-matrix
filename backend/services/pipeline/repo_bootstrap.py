@@ -1,6 +1,6 @@
 __version__ = "0.1.1"
 import os
-from backend.utils.git_ops import get_commits, get_commit_diff, extract_org_from_remote_url
+from backend.utils.git_ops import get_commits, get_commit_diff, extract_owner_from_remote_url
 
 QUEUE_ORDER = os.environ.get("MATRIX_QUEUE_ORDER", "retrospective").strip().lower()
 
@@ -104,18 +104,18 @@ def bootstrap_repo_metadata(db_path: str, repo_path: str):
             meta_conn.execute(
                 "CREATE TABLE IF NOT EXISTS repo_metadata (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
             )
-            org_name = "Unknown"
+            owner_name = "Unknown"
             conf_path = os.path.join(repo_path, ".git", "config")
 
             if os.path.exists(conf_path):
                 with open(conf_path, "r", errors="ignore") as f:
                     m = re.search(r'url\s*=\s*(.+)', f.read())
                     if m:
-                        org_name = extract_org_from_remote_url(m.group(1).strip())
+                        owner_name = extract_owner_from_remote_url(m.group(1).strip())
 
-            meta_conn.execute("INSERT OR IGNORE INTO repo_metadata (key, value) VALUES ('org_name', ?)", (org_name,))
-            if org_name != "Unknown":
-                meta_conn.execute("UPDATE repo_metadata SET value = ? WHERE key = 'org_name'", (org_name,))
+            meta_conn.execute("INSERT OR IGNORE INTO repo_metadata (key, value) VALUES ('org_name', ?)", (owner_name,))
+            if owner_name != "Unknown":
+                meta_conn.execute("UPDATE repo_metadata SET value = ? WHERE key = 'org_name'", (owner_name,))
             actual_host_path = os.environ.get("HOST_REPO_PATH", str(os.path.abspath(repo_path)))
             meta_conn.execute("INSERT OR REPLACE INTO repo_metadata (key, value) VALUES ('repo_path', ?)", (actual_host_path,))
     except Exception as e:

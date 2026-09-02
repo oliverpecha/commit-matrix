@@ -1,6 +1,6 @@
 
-import { hub } from "../core/eventHub.js?v=0.6.73";
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.6.73";
+import { hub } from "../core/eventHub.js?v=0.7.75";
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.7.75";
 
 // Hydrate header button
 document.addEventListener("DOMContentLoaded", () => {
@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("[CommitMatrix] 🚀 pageBoot.js v0.2.5 executing (Pure JS Edition)...");
 
     const payloadScript = document.getElementById("cm-page-payload");
+    if (payloadScript) { window.MATRIX_DEFAULT_RUBRIC = JSON.parse(payloadScript.textContent).default_rubric || "unknown"; }
     if (payloadScript) {
         try {
             const payload = JSON.parse(payloadScript.textContent || "{}");
@@ -140,13 +141,13 @@ commit-matrix</code></pre>
 
     // --- Listen to Context Changes & Init Observers ---
     try {
-        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.6.77");
+        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.7.75");
         if (!window.MATRIX_SYSTEM_EMPTY && !window.MATRIX_INVALID_REPO) {
             const p = new URLSearchParams(window.location.search);
             initInfiniteScroll(p.get("repo") || "commit-matrix", 100);
         }
 
-        const { hub } = await import("../core/eventHub.js?v=0.6.77");
+        const { hub } = await import("../core/eventHub.js?v=0.7.75");
         window.hub = hub; // Ensure inline handlers like (Add Repo) retain access
         
         hub.on("CONTEXT_CHANGED", (payload) => {

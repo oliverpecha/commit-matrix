@@ -78,20 +78,23 @@ fi
 if [ ! -d "$TARGET_REPO/.git" ]; then echo "❌ Error: $TARGET_REPO is not a valid Git repository."; exit 1; fi
 
 HOST_REPO_NAME=$(basename "$TARGET_REPO")
+HOST_REPO_OWNER=$(cd "$TARGET_REPO" && git config --get remote.origin.url 2>/dev/null | python3 -c 'import sys,re; u=sys.stdin.read().strip(); u=re.sub(r"\.git$","",u); u=re.sub(r"^.*?://","",u); u=re.sub(r"^.*?@","",u); p=re.split(r"[:/]",u); print(p[-2] if len(p)>=2 and not p[-2].isdigit() else (p[-3] if len(p)>=3 else "local"))' 2>/dev/null)}')
+[ -z "$HOST_REPO_OWNER" ] && HOST_REPO_OWNER="local"
 
 echo "==========================================================================="
 echo " 🧬 MATRIX ENGINE: Analyzing [$HOST_REPO_NAME]"
 echo "==========================================================================="
 
-mkdir -p "/root/commit-matrix/data/$HOST_REPO_NAME/pipeline_runs"
+mkdir -p "/root/commit-matrix/data/$HOST_REPO_OWNER/$HOST_REPO_NAME/pipeline_runs"
 docker run --rm \
   -v "$TARGET_REPO:/$HOST_REPO_NAME" \
   -v "/root/commit-matrix/data:/app/data" \
   -v "/root/commit-matrix/rubrics:/app/rubrics" \
   --env-file "/root/commit-matrix/.env" \
   -e HOST_REPO_NAME="$HOST_REPO_NAME" \
+  -e HOST_REPO_OWNER="$HOST_REPO_OWNER" \
   commit-matrix-core:latest \
-  python -u -m backend.commit_pipeline --repo "/$HOST_REPO_NAME" 2>&1 | tee "/root/commit-matrix/data/$HOST_REPO_NAME/pipeline_runs/run_$(date -u +\%Y%m%d_\%H%M%S)_UTC.log" 
+  python -u -m backend.commit_pipeline --repo "/$HOST_REPO_NAME" 2>&1 | tee "/root/commit-matrix/data/$HOST_REPO_OWNER/$HOST_REPO_NAME/pipeline_runs/run_$(date -u +\%Y%m%d_\%H%M%S)_UTC.log" 
 
 if [ $? -eq 0 ]; then
     SERVER_IP=$(hostname -I | awk '{print $1}')

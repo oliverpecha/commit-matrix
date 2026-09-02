@@ -3,8 +3,8 @@
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.6.73"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.6.73">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.7.75"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.7.75">
 
 <div class="cm-top-bar" style="position:relative; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
@@ -13,24 +13,24 @@
 
     <div style="position:relative;">
         <div id="cm-owner-toggle" style="display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; cursor:pointer; display:flex; align-items:center; background:rgba(138,180,240,0.05); border:1px solid rgba(138,180,240,0.2); padding:4px 10px; border-radius:6px; font-family:monospace; color:#8ab4f0; gap:8px; transition:all 0.2s ease;">
-            <span id="cm-active-owner">Account</span>
+            <span id="cm-active-owner">Owner</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
         <div id="cm-owner-menu" style="display:none; position:absolute; top:100%; left:0; margin-top:8px; width:220px; background:#131314; border:1px solid rgba(255,255,255,0.08); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.8); z-index:9999; flex-direction:column; overflow:hidden;">
             <div style="padding:12px; border-bottom:1px solid rgba(255,255,255,0.05);">
-                <div style="font-size:10px; color:#7a7874; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; font-family:Satoshi, sans-serif;">Account</div>
+                <div style="font-size:10px; color:#7a7874; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; font-family:Satoshi, sans-serif;">Owner</div>
                 
                 <div style="padding:8px 10px; margin-bottom:4px; border-radius:4px; background:rgba(138,180,240,0.1); border:1px solid rgba(138,180,240,0.2); color:#8ab4f0; font-family:monospace; font-size:12px; display:flex; align-items:center; justify-content:space-between; cursor:default;">
-                    <span>oliverpecha</span><div style="width:6px; height:6px; background:#8ed068; border-radius:50%; box-shadow:0 0 4px #8ed068;"></div>
+                    <span style="opacity:0.3; font-style:italic;">Loading...</span><div style="width:6px; height:6px; background:#8ed068; border-radius:50%; box-shadow:0 0 4px #8ed068;"></div>
                 </div>
                 
                 <div style="padding:8px 10px; border-radius:4px; color:#aaa; font-family:monospace; font-size:12px; display:flex; align-items:center; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-                    <span>openclaw</span>
+                    <span style="opacity:0.3; font-style:italic;">Loading...</span>
                 </div>
             </div>
             <div style="padding:8px; background:#0a0e14;">
-                <button onclick="alert('Backend hook: Add Account')" style="width:100%; padding:8px; background:transparent; border:1px dashed rgba(79,152,163,0.4); color:#4f98a3; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; transition:all 0.2s ease; font-family:Satoshi, sans-serif;" onmouseover="this.style.background='rgba(79,152,163,0.1)';" onmouseout="this.style.background='transparent';">
-                    + Add Account
+                <button onclick="alert('Backend hook: Add Owner')" style="width:100%; padding:8px; background:transparent; border:1px dashed rgba(79,152,163,0.4); color:#4f98a3; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; transition:all 0.2s ease; font-family:Satoshi, sans-serif;" onmouseover="this.style.background='rgba(79,152,163,0.1)';" onmouseout="this.style.background='transparent';">
+                    + Add Owner
                 </button>
             </div>
         </div>
@@ -111,7 +111,7 @@
 (function() {
     try {
         const p = new URLSearchParams(window.location.search);
-        const o = p.get("org"), r = p.get("repo"), ru = p.get("rubric");
+        const o = p.get("owner"), r = p.get("repo"), ru = p.get("rubric");
         
         const upd = (id, val, fallback) => {
             const el = document.getElementById(id);
@@ -121,7 +121,7 @@
             }
         };
         
-        upd("cm-active-owner", o, "Account");
+        upd("cm-active-owner", o, "Owner");
         upd("cm-active-repo-name", r, "Repository");
         upd("cm-active-rubric-name", ru, "Rubric");
         
@@ -169,11 +169,11 @@ window.UI_THEME = {
     }
 };
 </script>
-<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data, 'table_data': table_data, 'time_autoclose': time_autoclose, 'system_empty': system_empty|default(false), 'invalid_owner': invalid_owner|default(false), 'invalid_repo': invalid_repo|default(false), 'invalid_rubric': invalid_rubric|default(false)} | tojson | safe }}</script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.6.73"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.6.73"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.6.73"></script>
-<script type="module" src="/static/js/app.js?v=0.6.73"></script>
+<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data|default([]), 'table_data': table_data|default([]), 'time_autoclose': time_autoclose|default(12), 'system_empty': system_empty|default(false), 'invalid_owner': invalid_owner|default(false), 'invalid_repo': invalid_repo|default(false), 'invalid_rubric': invalid_rubric|default(false), 'default_rubric': default_rubric|default('unknown')} | tojson | safe }}</script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.7.75"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.7.75"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.7.75"></script>
+<script type="module" src="/static/js/app.js?v=0.7.75"></script>
 
 
 {% endblock %}

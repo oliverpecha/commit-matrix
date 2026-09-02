@@ -1,16 +1,16 @@
 // v0.1.11
-import { hub } from "./core/eventHub.js?v=0.6.73";
-import "./core/appStateCtrl.js?v=0.6.73";
-import "./engine/repoManager.js?v=0.6.73";
-import "./engine/telemetryStream.js?v=0.6.73";
-import "./engine/engineControl.js?v=0.6.73";
-import "./ui/terminalView.js?v=0.6.73";
+import { hub } from "./core/eventHub.js?v=0.7.75";
+import "./core/appStateCtrl.js?v=0.7.75";
+import "./engine/repoManager.js?v=0.7.75";
+import "./engine/telemetryStream.js?v=0.7.75";
+import "./engine/engineControl.js?v=0.7.75";
+import "./ui/terminalView.js?v=0.7.75";
 
-import { processCommits } from './core/dataEngine.js?v=0.6.73';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.6.73';
-import { renderHeatmap } from './ui/heatmap.js?v=0.6.73';
-import { renderTable } from './ui/tableCtrl.js?v=0.6.73';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.6.73';
+import { processCommits } from './core/dataEngine.js?v=0.7.75';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.7.75';
+import { renderHeatmap } from './ui/heatmap.js?v=0.7.75';
+import { renderTable } from './ui/tableCtrl.js?v=0.7.75';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.7.75';
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
@@ -160,17 +160,18 @@ function attemptRender() {
 }
 window.addEventListener('load', async () => {
     const urlParams = new URLSearchParams(window.location.search);
+    const owner = urlParams.get('owner') || 'local';
     const repo = urlParams.get('repo');
     const rubric = urlParams.get('rubric');
     
     const isInvalid = window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC;
     if (repo && rubric && !isInvalid && (window.MATRIX_PAYLOAD || window.MATRIX_CHART_PAYLOAD)) {
-        console.log(`[Data Engine] Loading ledger payload: data/${repo}/db/${repo}_ledger_${rubric}.csv`);
+        console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv`);
     }
 
     attemptRender();
     if (repo) {
-        let url = `/api/engine/status?repo=${repo}`;
+        let url = `/api/engine/status?owner=${typeof owner !== "undefined" ? owner : (window.MATRIX_OWNER || "local")}&repo=${repo}`;
         if (urlParams.get('rubric')) url += `&rubric=${urlParams.get('rubric')}`;
         try {
             const res = await fetch(url);
@@ -203,8 +204,8 @@ window.triggerSilentRefresh = async function(opts = {}) {
             return;
         }
 
-        console.log(`[Data Engine] Loading ledger payload: data/${repo}/db/${repo}_ledger_${rubric}.csv`);
-        const res = await fetch(`/api/data?repo=${repo}&rubric=${rubric}&token=${token}&_t=${Date.now()}`);
+        console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv`);
+        const res = await fetch(`/api/data?owner=${owner}&repo=${repo}&rubric=${rubric}&token=${token}&_t=${Date.now()}`);
         if (!res.ok) {
             if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false);
             return;
@@ -237,7 +238,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
 // --- Standardized Soft-Routing Data Pipeline ---
 hub.on("CONTEXT_CHANGED", (payload) => {
     const urlParams = new URLSearchParams(window.location.search);
-    const o = (payload && payload.org) || urlParams.get('org') || 'Account';
+    const o = (payload && payload.owner) || urlParams.get('owner') || 'Owner';
     const r = (payload && payload.repo) || urlParams.get('repo') || 'Repo';
     const ru = (payload && payload.rubric) || urlParams.get('rubric') || '';
 

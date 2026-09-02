@@ -87,7 +87,7 @@ def main():
         repo_label = "commit-matrix"
 
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
-    log_dir = f"/app/data/{repo_label}/pipeline_runs" if os.path.exists("/app") else f"data/{repo_label}/pipeline_runs"
+    log_dir = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/pipeline_runs" if os.path.exists("/app") else f"data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/pipeline_runs"
     log_filename = f"run_{timestamp}_UTC.log"
     full_log_path = os.path.join(log_dir, log_filename)
 
@@ -110,7 +110,7 @@ def main():
 
     print(render_bootstrap_banner(repo_path, repo_label, full_log_path if logger_instance else None), flush=True)
 
-    db_path = f"data/{repo_label}/db/{repo_label}.db"
+    db_path = f"data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/db/{repo_label}.db"
     try:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
     except Exception:

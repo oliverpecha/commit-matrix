@@ -420,7 +420,7 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
         inferred_label = repo_path if repo_path else actual_user_dir.name
         db = project_root / "data" / inferred_label / "db" / f"{repo_label}.db"
         if not db.exists():
-            fallback = Path("data") / inferred_label / "db" / f"{repo_label}.db"
+            fallback = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / inferred_label) / "db" / f"{repo_label}.db"
             if fallback.exists():
                 db = fallback
 

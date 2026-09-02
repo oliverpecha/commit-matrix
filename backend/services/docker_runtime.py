@@ -1,11 +1,12 @@
+import glob
 __version__ = "0.1.3"
 import asyncio
 import os
 import subprocess
 
 
-def get_container_name(repo: str = "commit-matrix", rubric: str = None) -> str:
-    return f"matrix-analyzer-{repo}-{rubric}"
+def get_container_name(repo: str = "commit-matrix", rubric: str = None, owner: str = "local") -> str:
+    return f"matrix-analyzer-{owner}-{repo}-{rubric}"
 
 
 def remove_container(repo_or_container: str = "commit-matrix", rubric: str = None):
@@ -51,7 +52,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, container_name: str | None = N
         target_volume = "/root/commit-matrix"
     else:
         import sqlite3
-        db_path = f"data/{repo}/db/{repo}.db"
+        db_path = (glob.glob(f"data/*/{repo}/db/{repo}.db") + [f"data/local/{repo}/db/{repo}.db"])[0]
         if os.path.exists(db_path):
             try:
                 with sqlite3.connect(db_path) as conn:

@@ -15,23 +15,23 @@ def resolve_db_path(repo_label: str | None = None) -> str:
     """Robust dynamic path resolution supporting environment targets and overrides."""
     target_repo = os.environ.get("TARGET_REPO")
     if target_repo:
-        possible_path = os.path.join(target_repo, f"data/{repo_label}/db/{repo_label}.db")
+        possible_path = os.path.join(target_repo, f"data/*/{repo_label}/db/{repo_label}.db")
         if os.path.exists(possible_path):
             return possible_path
 
     if repo_label:
-        specific_path = str(Path("data") / repo_label / "db" / f"{repo_label}.db")
+        specific_path = str(Path((glob.glob(f"data/*/{repo_label}") + [f"data/local/{repo_label}"])[0]) / "db" / f"{repo_label}.db")
         if os.path.exists(specific_path):
             return specific_path
         raise ValueError(f"Strict DB enforcement failed: {specific_path} does not exist.")
 
     host_repo = os.environ.get('HOST_REPO_NAME')
     if host_repo:
-        path = str(Path("data") / host_repo / "db" / f"{host_repo}.db")
+        path = str(Path((glob.glob(f"data/*/{host_repo}") + [f"data/local/{host_repo}"])[0]) / "db" / f"{host_repo}.db")
         if os.path.exists(path): return path
         raise ValueError(f"Strict DB enforcement failed: {path} does not exist.")
 
-    db_paths = glob.glob('data/*/db/*.db')
+    db_paths = (glob.glob("data/*/db/*.db") + glob.glob("data/*/*/db/*.db"))
     valid_paths = [p for p in db_paths if len(Path(p).parts) >= 4 and Path(p).parts[3] == f"{Path(p).parts[1]}.db"]
     if valid_paths:
         return valid_paths[0]
@@ -198,7 +198,7 @@ def get_structural_boundaries_for_stream(repo_label: str, db_path: str = None) -
     from pathlib import Path
     
     if not db_path:
-        db_path = str(Path("data") / repo_label / "db" / f"{repo_label}.db")
+        db_path = str(Path((glob.glob(f"data/*/{repo_label}") + [f"data/local/{repo_label}"])[0]) / "db" / f"{repo_label}.db")
         try:
             __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
         except Exception:
@@ -283,7 +283,7 @@ def get_commit_arch_context(repo_label: str, topo_id: int, db_path: str = None):
         arch_context = None
         if snapshot_path:
             md_path = Path(snapshot_path)
-            candidate = md_path if md_path.is_absolute() or md_path.exists() else Path("data") / repo_label / "past_blueprints" / md_path.name
+            candidate = md_path if md_path.is_absolute() or md_path.exists() else Path((glob.glob(f"data/*/{repo_label}") + [f"data/local/{repo_label}"])[0]) / "past_blueprints" / md_path.name
             if candidate.exists(): arch_context = candidate.read_text(encoding="utf-8")
 
         return arch_context, cause_tag, generation, dominant_snapshot_sig, role
@@ -295,17 +295,17 @@ import glob
 import sqlite3
 from pathlib import Path
 
-def get_repos_grouped_by_org() -> dict:
+def get_repos_grouped_by_owner() -> dict:
     """Scans local database files and returns repositories grouped by organization."""
-    orgs_dict = {}
-    paths = glob.glob("data/*/db/*.db")
+    owners_dict = {}
+    paths = (glob.glob("data/*/db/*.db") + glob.glob("data/*/*/db/*.db"))
 
     for path_str in paths:
         path = Path(path_str)
         parts = path.parts
         if len(parts) >= 4 and parts[3] == f"{parts[1]}.db":
             repo_name = parts[1]
-            org_name = "Unknown"
+            owner_name = "Unknown"
             try:
                 uri = f"file:{path}?mode=ro"
                 conn = sqlite3.connect(uri, uri=True)
@@ -315,24 +315,56 @@ def get_repos_grouped_by_org() -> dict:
                     cursor.execute("SELECT value FROM repo_metadata WHERE key='org_name'")
                     row = cursor.fetchone()
                     if row and row[0]:
-                        org_name = row[0]
+                        owner_name = row[0]
                 conn.close()
             except Exception:
                 pass
 
-            if org_name not in orgs_dict:
-                orgs_dict[org_name] = []
-            if repo_name not in orgs_dict[org_name]:
-                orgs_dict[org_name].append(repo_name)
+            if owner_name not in owners_dict:
+                owners_dict[owner_name] = []
+            if repo_name not in owners_dict[owner_name]:
+                owners_dict[owner_name].append(repo_name)
 
-    result = [{"org": k, "repos": sorted(v)} for k, v in orgs_dict.items()]
-    flat_repos = [{"name": r, "org": k} for k, v in orgs_dict.items() for r in v]
+    result = [{"owner": k, "repos": sorted(v)} for k, v in owners_dict.items()]
+    flat_repos = [{"name": r, "owner": k} for k, v in owners_dict.items() for r in v]
     return {
-        "organizations": sorted(result, key=lambda x: x["org"]),
+        "owners": sorted(result, key=lambda x: x["owner"]),
         "repos": sorted(flat_repos, key=lambda x: x["name"])
     }
 
 def get_available_repos() -> list:
     """Returns a sorted list of all valid repository names found on disk."""
-    paths = glob.glob("data/*/db/*.db")
+    paths = (glob.glob("data/*/db/*.db") + glob.glob("data/*/*/db/*.db"))
     return sorted(list({Path(p).parts[1] for p in paths if len(Path(p).parts) >= 4 and Path(p).parts[3] == f"{Path(p).parts[1]}.db"}))
+
+def get_repos_grouped_by_owner():
+    import os
+    _nested = []
+    if os.path.exists("data"):
+        for item in os.listdir("data"):
+            p1 = os.path.join("data", item)
+            if os.path.isdir(os.path.join(p1, "db")):
+                if ("local", item) not in _nested: _nested.append(("local", item))
+            if os.path.isdir(p1):
+                for rep in os.listdir(p1):
+                    if os.path.isdir(os.path.join(p1, rep, "db")):
+                        if (item, rep) not in _nested: _nested.append((item, rep))
+    
+    owners_dict = {}
+    repos_list = []
+    for owner, rep in _nested:
+        if owner not in owners_dict: owners_dict[owner] = []
+        if rep not in owners_dict[owner]: owners_dict[owner].append(rep)
+        if not any(r.get("name") == rep and r.get("owner") == owner for r in repos_list): repos_list.append({"name": rep, "owner": owner, "id": f"{owner}/{rep}" if owner != "local" else rep})
+        
+    return {"owners": [{"owner": k, "repos": v} for k, v in owners_dict.items()], "repos": repos_list}
+
+def get_available_rubrics():
+    import os, glob
+    flat_r = set()
+    for f_csv in (glob.glob("data/*/db/*_ledger_*.csv") + glob.glob("data/*/*/db/*_ledger_*.csv")):
+        parts = os.path.basename(f_csv).replace(".csv", "").split("_ledger_")
+        if len(parts) == 2: flat_r.add(parts[1])
+    static_rubrics = set([os.path.basename(p).replace(".md", "") for p in glob.glob("rubrics/*.md")])
+    all_rubrics = sorted(list(static_rubrics | flat_r))
+    return [{"id": r, "name": r.upper(), "has_data": r in flat_r} for r in all_rubrics if r.upper() not in ("RUBRIC_AUTHORING_GUIDE", "README")]
