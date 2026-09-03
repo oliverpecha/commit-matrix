@@ -16,12 +16,18 @@ def parse_date_to_timestamp(date_str):
     except:
         return 0
 
-def fetch_ledger_raw(repo, rubric=None, owner="local"):
+def fetch_ledger_raw(repo, rubric=None, owner=None):
     rubric = rubric or __import__("os").environ.get("RUBRIC_NAME", "unknown")
-    candidates = [
-        (glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv") + [f"/app/data/local/{repo}/db/{repo}_ledger_{rubric}.csv"])[0],
-        ([f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv"] + glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv") + [f"data/local/{repo}/db/{repo}_ledger_{rubric}.csv"])[0],
-    ]
+    
+    candidates = []
+    if owner and owner != "local":
+        candidates.extend([
+            f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv",
+            f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv"
+        ])
+        
+    candidates.extend(glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv"))
+    candidates.extend(glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv"))
 
     p = next((candidate for candidate in candidates if os.path.exists(candidate)), None)
     if not p:
@@ -59,11 +65,11 @@ def fetch_ledger_raw(repo, rubric=None, owner="local"):
         print(f"LEDGER FETCH ERROR: {e}", flush=True)
     return out
 
-def fetch_ledger(repo, rubric=None, owner="local"):
+def fetch_ledger(repo, rubric=None, owner=None, force=False):
     rubric = rubric or __import__("os").environ.get("RUBRIC_NAME", "unknown")
     cache_key = f"{repo}_{rubric}"
     now = time.time()
-    if cache_key in _CACHE and now - _CACHE[cache_key].get('ts', 0) < CACHE_TTL:
+    if not force and cache_key in _CACHE and now - _CACHE[cache_key].get('ts', 0) < CACHE_TTL:
         return _CACHE[cache_key]['data']
     data = fetch_ledger_raw(repo, rubric, owner)
     if data:

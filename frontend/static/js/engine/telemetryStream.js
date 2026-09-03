@@ -12,6 +12,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
         window.setTableStreamMode(true, { asc: true });
     }
     const urlParams = new URLSearchParams(window.location.search);
+    const ownerName = urlParams.get("owner") || window.MATRIX_OWNER || "";
     const repoName = repo || urlParams.get("repo") || "";
     const authToken = token || urlParams.get("token") || "";
     const rubricName = urlParams.get("rubric") || window.MATRIX_DEFAULT_RUBRIC || "unknown";
@@ -24,7 +25,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
     window.CM_ENGINE_CONTROLLABLE = false;
 
     try {
-        const response = await fetch(`/api/scan?repo=${encodeURIComponent(repoName)}&rubric=${encodeURIComponent(rubricName)}&token=${encodeURIComponent(authToken)}`, {
+        const response = await fetch(`/api/scan?owner=${encodeURIComponent(ownerName)}&repo=${encodeURIComponent(repoName)}&rubric=${encodeURIComponent(rubricName)}&token=${encodeURIComponent(authToken)}`, {
             method: "POST",
             signal: abortCtrl.signal
         });
@@ -82,7 +83,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
 
             if (chunk.includes("Queued for ledger flush")) {
                 if (window.triggerSilentRefresh) {
-                    window.triggerSilentRefresh({ repo: repoName, rubric: rubricName, gen: window.CM_RENDER_GEN });
+                    window.triggerSilentRefresh({ repo: repoName, rubric: rubricName, owner: new URLSearchParams(window.location.search).get('owner') || window.MATRIX_OWNER, force: true, gen: window.CM_RENDER_GEN });
                 }
             }
 
@@ -142,7 +143,7 @@ window.cmToggleEngine = async function(action) {
     if (action === 'pause' && !window.CM_ENGINE_CONTROLLABLE) return null;
 
     try {
-        const resp = await fetch(`/api/engine/control?action=${action}&repo=${urlParams.get('repo') || ''}&rubric=${urlParams.get('rubric') || 'unknown'}`, { method: 'POST' });
+        const resp = await fetch(`/api/engine/control?action=${action}&owner=${urlParams.get('owner') || window.MATRIX_OWNER || ''}&repo=${urlParams.get('repo') || ''}&rubric=${urlParams.get('rubric') || 'unknown'}`, { method: 'POST' });
         const data = await resp.json();
 
         if (action === 'pause' && data.status === 'paused') {

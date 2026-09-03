@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
         const zs = document.createElement("div");
         zs.id = "cm-zero-state";
-        zs.style.cssText = "position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%; pointer-events:none;";
+        zs.style.cssText = "position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%;";
 
         zs.innerHTML = `
             <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>

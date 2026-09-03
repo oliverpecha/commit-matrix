@@ -101,7 +101,7 @@ function setDashboardVisibility(hasData, errorMsg = "") {
         if (!zs && wrap) {
             zs = document.createElement("div");
             zs.id = "cm-zero-state";
-            zs.style.cssText = "position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%; pointer-events:none;";
+            zs.style.cssText = "position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%; ";
             wrap.insertBefore(zs, wrap.firstChild);
         }
         const activeZs = document.getElementById('cm-zero-state');
@@ -160,13 +160,13 @@ function attemptRender() {
 }
 window.addEventListener('load', async () => {
     const urlParams = new URLSearchParams(window.location.search);
-    const owner = urlParams.get('owner') || 'local';
+    const owner = urlParams.get('owner') || window.MATRIX_OWNER || '';
     const repo = urlParams.get('repo');
     const rubric = urlParams.get('rubric');
     
     const isInvalid = window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC;
     if (repo && rubric && !isInvalid && (window.MATRIX_PAYLOAD || window.MATRIX_CHART_PAYLOAD)) {
-        console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv`);
+        console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv (Force: ${typeof isForce !== 'undefined' ? isForce : false})`);
     }
 
     attemptRender();
@@ -189,6 +189,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
     try {
         if (window.CM_CLOSE_IN_PROGRESS) return;
         const urlParams = new URLSearchParams(window.location.search);
+        const owner = opts.owner || urlParams.get('owner') || window.MATRIX_OWNER || '';
         const repo = opts.repo || urlParams.get('repo') || '';
         const token = opts.token || urlParams.get('token') || '';
         const rubric = opts.rubric || urlParams.get('rubric') || '';
@@ -205,7 +206,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
         }
 
         console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv`);
-        const res = await fetch(`/api/data?owner=${owner}&repo=${repo}&rubric=${rubric}&token=${token}&_t=${Date.now()}`);
+        const res = await fetch(`/api/data?owner=${owner}&repo=${repo}&rubric=${rubric}&token=${token}&force=${isForce ? 'true' : 'false'}&_t=${Date.now()}`);
         if (!res.ok) {
             if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false);
             return;
@@ -256,7 +257,7 @@ hub.on("CONTEXT_CHANGED", (payload) => {
     if (!fetchMsg) {
         fetchMsg = document.createElement("div");
         fetchMsg.id = "cm-fetch-msg";
-        fetchMsg.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10,14,20,0.95); border:1px solid rgba(255,255,255,0.1); padding:16px 32px; border-radius:8px; font-family:monospace; font-size:14px; z-index:9999; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); pointer-events:none;";
+        fetchMsg.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10,14,20,0.95); border:1px solid rgba(255,255,255,0.1); padding:16px 32px; border-radius:8px; font-family:monospace; font-size:14px; z-index:9999; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); ";
         document.body.appendChild(fetchMsg);
     }
     

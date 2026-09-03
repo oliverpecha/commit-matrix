@@ -32,7 +32,7 @@ async def list_repos():
 
 
 @api_router.get("/rubrics")
-async def list_rubrics(repo: str = None, owner: str = "local"):
+async def list_rubrics(repo: str = None, owner: str = None):
     import glob
     from pathlib import Path
     from backend.services.db.reader import get_available_repos
@@ -69,26 +69,33 @@ async def list_rubrics(repo: str = None, owner: str = "local"):
 
 
 @api_router.get("/data")
-async def get_data(repo: str = None, rubric: str = None, token: str = "", owner: str = "local"):
+async def get_data(repo: str = None, rubric: str = None, token: str = "", owner: str = None, force: bool = False):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
-    return JSONResponse(content=fetch_ledger(repo, rubric, owner))
+    
+    if not owner:
+        import glob
+        from pathlib import Path
+        db_paths = glob.glob(f"data/*/{repo}/db/{repo}.db")
+        owner = Path(db_paths[0]).parts[1] if db_paths else None
+        
+    return JSONResponse(content=fetch_ledger(repo, rubric, owner, force=force))
 
 
 @api_router.post("/engine/control")
-async def control_engine(request: Request, action: str, repo: str = "commit-matrix", rubric: str = None):
+async def control_engine(request: Request, action: str, repo: str = "commit-matrix", rubric: str = None, owner: str = None):
     if action == "pause":
-        return JSONResponse(content=pause_container(repo))
+        return JSONResponse(content=pause_container(repo, rubric, owner))
     elif action == "play":
-        return JSONResponse(content=unpause_container(repo))
+        return JSONResponse(content=unpause_container(repo, rubric, owner))
     elif action == "stop":
-        force_remove_container(repo, rubric)
+        force_remove_container(repo, rubric, owner)
         return JSONResponse(content={"status": "stopped", "action": "stop", "repo": repo})
     return JSONResponse(content={"status": "acknowledged", "action": action, "repo": repo})
 
 @api_router.get("/engine/status")
-async def get_engine_status(repo: str, rubric: str = None, owner: str = "local"):
+async def get_engine_status(repo: str, rubric: str = None, owner: str = None):
     from backend.services.docker_runtime import get_container_name
     import subprocess
     c_name = get_container_name(repo, rubric, owner)
@@ -101,7 +108,7 @@ async def get_engine_status(repo: str, rubric: str = None, owner: str = "local")
 
 
 @api_router.post("/scan")
-async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = None, token: str = ""):
+async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = None, token: str = "", owner: str = None):
     available_repos = get_available_repos()
     
     async def generate():
@@ -112,8 +119,8 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
 
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
         
-        force_remove_container(repo)
-        docker_cmd = build_scan_docker_cmd(repo=repo, rubric=rubric)
+        force_remove_container(repo, rubric, owner)
+        docker_cmd = build_scan_docker_cmd(repo=repo, rubric=rubric, owner=owner)
         
         try:
             returncode, stdout, stderr = await run_docker_detached(docker_cmd)
@@ -128,7 +135,7 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
             yield f"🐳 ENGINE INITIALIZED CONTAINER CONTAINER_ID: {container_id[:12]}\n\n"
             yield "🔌 ATTACHING TO CONTAINER LOG STREAM...\n\n"
             
-            log_stream = await follow_container_logs(repo)
+            log_stream = await follow_container_logs(repo, rubric, owner)
             
             while True:
                 if await request.is_disconnected():
@@ -141,7 +148,7 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
                 
             await log_stream.wait()
             
-            inspect_returncode, exit_code = await inspect_container_exit_code(repo)
+            inspect_returncode, exit_code = await inspect_container_exit_code(repo, rubric, owner)
 
             if inspect_returncode != 0 or "No such object" in exit_code:
                 yield cleanup_race_success_eof()
@@ -157,7 +164,7 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
         except Exception as ex:
             yield stream_exception_message(ex)
         finally:
-            remove_container(repo)
+            remove_container(repo, rubric, owner)
 
     return StreamingResponse(generate(), media_type="text/plain")
 
@@ -171,11 +178,17 @@ async def get_rubric_guide():
 
 
 @api_router.get("/ledger")
-async def get_ledger_paginated(repo: str, rubric: str, offset: int = 0, limit: int = 100, owner: str = "local"):
+async def get_ledger_paginated(repo: str, rubric: str, offset: int = 0, limit: int = 100, owner: str = None):
     available_repos = get_available_repos()
     if not repo or repo not in available_repos:
         return JSONResponse(content=[])
     
+    if not owner:
+        import glob
+        from pathlib import Path
+        db_paths = glob.glob(f"data/*/{repo}/db/{repo}.db")
+        owner = Path(db_paths[0]).parts[1] if db_paths else None
+        
     ledger = fetch_ledger(repo, rubric, owner)
     paginated_chunk = ledger[offset : offset + limit]
     return JSONResponse(content=paginated_chunk)

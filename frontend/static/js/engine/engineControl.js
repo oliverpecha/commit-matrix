@@ -5,7 +5,7 @@ async function postEngineControl(action) {
     const urlParams = new URLSearchParams(window.location.search);
     const repo = urlParams.get("repo") || "";
     const rubric = urlParams.get("rubric") || window.MATRIX_DEFAULT_RUBRIC || "unknown";
-    const resp = await fetch(`/api/engine/control?action=${action}&repo=${repo}&rubric=${rubric}`, { method: "POST" });
+    const resp = await fetch(`/api/engine/control?action=${action}&owner=${urlParams.get("owner") || window.MATRIX_OWNER || ""}&repo=${repo}&rubric=${rubric}`, { method: "POST" });
     return resp.json();
 }
 
