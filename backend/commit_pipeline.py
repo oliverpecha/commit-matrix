@@ -37,6 +37,13 @@ from backend.services.pipeline.prep_scoring import extract_commit_sha
 from backend.utils.logger import DualLogger
 from backend.services.pipeline.pipeline_presentation import render_bootstrap_banner, print_debug_boundary_table
 
+def get_db_connection(db_path: str):
+    import sqlite3
+    conn = sqlite3.connect(db_path, timeout=10.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    return conn
+
 def _sqlite_is_macro(tag):
     if not tag: return 0
     t = str(tag).lower()
@@ -116,6 +123,12 @@ def main():
     except Exception:
         pass
     
+    _csv_owner = os.environ.get('HOST_REPO_OWNER') or 'local'
+    _csv_rubric = os.environ.get('RUBRIC_NAME', 'unknown')
+    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}.csv"
+    _csv_owner = os.environ.get('HOST_REPO_OWNER') or 'local'
+    _csv_rubric = os.environ.get('RUBRIC_NAME', 'unknown')
+    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}.csv"
     _csv_path = Path(CSV_PATH)
     is_genuine_warm_start = _csv_path.exists() and _csv_path.stat().st_size > 50
 
@@ -130,7 +143,7 @@ def main():
 
     if is_genuine_warm_start:
         try:
-            with _boot_sq.connect(db_path) as _b_conn:
+            with get_db_connection(db_path) as _b_conn:
                 _t_exists = _b_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
                 if _t_exists:
                     _rubric = os.environ.get("RUBRIC_NAME", "unknown")
@@ -145,7 +158,7 @@ def main():
     # Un-gated: Display Architecture Boundary Map during standard execution
     import sqlite3 as _summary_sq
     try:
-        with _summary_sq.connect(db_path) as _conn_b:
+        with get_db_connection(db_path) as _conn_b:
             _rubric = os.environ.get("RUBRIC_NAME", "unknown")
             _r_row = _conn_b.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_runs'").fetchone() else None
             _run_id = _r_row[0] if _r_row else -1
@@ -290,7 +303,7 @@ def main():
                     try:
                         res_topo = int(m.group(1))
                         import sqlite3 as _sq
-                        _conn = _sq.connect(db_path)
+                        _conn = get_db_connection(db_path)
                         _cursor = _conn.cursor()
 
                         _cursor.execute("SELECT snapshot_sig, commit_sig FROM architecture_commits WHERE topo_id = ?", (res_topo,))
@@ -353,7 +366,7 @@ def main():
         run_tail = commits_with_ids[-1][0] if commits_with_ids else 0
         
         import sqlite3
-        with sqlite3.connect(db_path) as _c:
+        with get_db_connection(db_path) as _c:
             _t_exists = _c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
             _rubric = os.environ.get("RUBRIC_NAME", "unknown")
             _r_row = _c.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _t_exists else None

@@ -3,8 +3,8 @@ def success_eof():
 
 def cleanup_race_success_eof():
     return (
-        "\n\n⚠️ Engine cleanup race detected while resolving final container state. "
-        "Stream output above is authoritative.\n[__MATRIX_EOF_SUCCESS__]"
+        "\n\n⏸️  Scan safely detached or gracefully halted. "
+        "Stream output above is preserved.\n[__MATRIX_EOF_SUCCESS__]"
     )
 
 def failure_eof(exit_code):

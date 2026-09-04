@@ -1,4 +1,4 @@
-// v0.1.11
+// v0.1.15
 import { hub } from "./core/eventHub.js?v=0.7.75";
 import "./core/appStateCtrl.js?v=0.7.75";
 import "./engine/repoManager.js?v=0.7.75";
@@ -178,7 +178,7 @@ window.addEventListener('load', async () => {
             const data = await res.json();
             if (data.running && window.hub) {
                 console.log("Found running scan, auto-attaching...");
-                window.hub.emit("ACTION:REFRESH_LEDGER");
+                window.hub.emit("ENGINE:SCAN_REQUESTED", { repo: repo, rubric: urlParams.get("rubric") });
             }
         } catch (e) {}
     }

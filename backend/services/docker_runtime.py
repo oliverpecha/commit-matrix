@@ -1,8 +1,16 @@
 import glob
-__version__ = "0.1.18"
+__version__ = "0.1.19"
 import asyncio
 import os
 import subprocess
+
+def is_container_running(repo: str = "commit-matrix", rubric: str = None, owner: str = None) -> bool:
+    c_name = get_container_name(repo, rubric, owner)
+    try:
+        res = subprocess.check_output(f"docker ps -q -f name=^{c_name}$", shell=True).strip()
+        return bool(res)
+    except Exception:
+        return False
 
 
 def get_container_name(repo: str = "commit-matrix", rubric: str = None, owner: str = None) -> str:
@@ -48,24 +56,36 @@ def build_scan_docker_cmd(repo: str, rubric: str, owner: str = None, container_n
     random_score = os.environ.get("RANDOM_SCORE", "false")
     matrix_debug = os.environ.get("MATRIX_DEBUG", "false")
 
-    target_volume = f"/root/commit-matrix/data/{repo}/src"
-    if repo == "commit-matrix":
-        target_volume = "/root/commit-matrix"
-    else:
-        import sqlite3
-        db_path = (glob.glob(f"data/*/{repo}/db/{repo}.db") + [f"data/local/{repo}/db/{repo}.db"])[0]
-        if os.path.exists(db_path):
+    def resolve_target_volume(repo_name: str) -> str:
+        if repo_name == "commit-matrix":
+            return "/root/commit-matrix"
+        candidates = glob.glob(f"data/*/{repo_name}/db/{repo_name}.db") + [f"data/local/{repo_name}/db/{repo_name}.db"]
+        found_db = next((p for p in candidates if os.path.exists(p)), None)
+        if found_db:
             try:
-                with sqlite3.connect(db_path) as conn:
+                import sqlite3
+                with sqlite3.connect(found_db) as conn:
                     row = conn.execute("SELECT value FROM repo_metadata WHERE key='repo_path'").fetchone()
-                    if row and row[0]:
-                        target_volume = row[0]
+                    if row and row[0] and os.path.isdir(row[0]):
+                        return row[0]
             except Exception:
                 pass
+        fallback = f"/root/commit-matrix/data/{repo_name}/src"
+        if os.path.isdir(fallback):
+            return fallback
+        raise RuntimeError(
+            f"Cannot resolve source checkout path for repo='{repo_name}': "
+            f"repo_metadata is missing (db not found at any of {candidates}) "
+            f"and default path '{fallback}' does not exist on host. "
+            f"Re-register this repo (host CLI: python3 backend/scripts/register_repo.py --repo {repo_name} --path <checkout>) "
+            f"before scanning."
+        )
+
+    target_volume = resolve_target_volume(repo)
     data_volume = "/root/commit-matrix/data"
 
     return [
-        "docker", "run", "-d", "--name", c_name,
+        "docker", "run", "-d", "--rm", "--name", c_name,
         "-e", f"HOST_REPO_OWNER={owner or ''}",
         "-e", f"MATRIX_OWNER={owner or ''}",
         "-v", "/var/run/docker.sock:/var/run/docker.sock",
@@ -90,7 +110,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, owner: str = None, container_n
         "-e", f"RUBRIC_NAME={rubric}",
         "-e", f"HOST_REPO_PATH={target_volume}",
         "commit-matrix-core:latest",
-        "python", "-u", "/app/backend/commit_pipeline.py", "--repo", "/target_repo"
+        "sh", "-c", f"timeout 3600 python -u /app/backend/commit_pipeline.py --repo /target_repo 2>&1 | tee /app/data/{repo}_last_crash.log"
     ]
 
 

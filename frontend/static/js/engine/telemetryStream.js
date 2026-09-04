@@ -77,8 +77,16 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
                 hub.emit("DATA:FIRST_CHUNK_RECEIVED");
             }
 
-            if (!window.CM_ENGINE_CONTROLLABLE && chunk.includes("🐳 ENGINE INITIALIZED CONTAINER")) {
+            if (!window.CM_ENGINE_CONTROLLABLE && (chunk.includes("🐳 ENGINE INITIALIZED CONTAINER") || chunk.includes("🐳 ACTIVE CONTAINER DETECTED"))) {
                 window.CM_ENGINE_CONTROLLABLE = true;
+                
+                // Directly target the action buttons regardless of wrapper structure
+                const pauseBtn = document.getElementById('cm-btn-pause');
+                if (pauseBtn) {
+                    pauseBtn.style.display = 'block';
+                    pauseBtn.style.opacity = '1';
+                    pauseBtn.style.pointerEvents = 'auto';
+                }
             }
 
             if (chunk.includes("Queued for ledger flush")) {

@@ -110,61 +110,85 @@ async def get_engine_status(repo: str, rubric: str = None, owner: str = None):
 @api_router.post("/scan")
 async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str = None, token: str = "", owner: str = None):
     available_repos = get_available_repos()
-    
+
     async def generate():
-        if not repo or repo not in available_repos:
+        if not repo:
             yield f"⚠️ SCAN REJECTED: Repository '{repo}' is not registered or found in data directory.\n\n"
             yield failure_eof("INVALID_REPOSITORY")
             return
 
         yield "🤖 CONNECTED TO DOCKER ENGINE DAEMON.\n\n"
-        
-        force_remove_container(repo, rubric, owner)
-        docker_cmd = build_scan_docker_cmd(repo=repo, rubric=rubric, owner=owner)
-        
-        try:
-            returncode, stdout, stderr = await run_docker_detached(docker_cmd)
 
-            if returncode != 0:
-                stdout_text = stdout.decode(errors='ignore') if stdout else ""
-                stderr_text = stderr.decode(errors='ignore') if stderr else ""
-                yield docker_invocation_failed(stdout_text, stderr_text)
-                return
+        from backend.services.docker_runtime import is_container_running
+        is_running = is_container_running(repo, rubric, owner)
+        should_cleanup = True
+
+        if is_running:
+            yield "🐳 ACTIVE CONTAINER DETECTED. ATTACHING TO EXISTING LOG STREAM...\n\n"
+            should_cleanup = False
+        else:
+            force_remove_container(repo, rubric, owner)
+            docker_cmd = build_scan_docker_cmd(repo=repo, rubric=rubric, owner=owner)
+
+            try:
+                returncode, stdout, stderr = await run_docker_detached(docker_cmd)
+                if returncode != 0:
+                    stdout_text = stdout.decode(errors='ignore') if stdout else ""
+                    stderr_text = stderr.decode(errors='ignore') if stderr else ""
+                    yield docker_invocation_failed(stdout_text, stderr_text)
+                    return
+                container_id = (stdout.decode(errors='ignore') if stdout else "").strip()
+                yield f"🐳 ENGINE INITIALIZED CONTAINER CONTAINER_ID: {container_id[:12]}\n\n"
+                yield "🔌 ATTACHING TO CONTAINER LOG STREAM...\n\n"
                 
-            container_id = (stdout.decode(errors='ignore') if stdout else "").strip()
-            yield f"🐳 ENGINE INITIALIZED CONTAINER CONTAINER_ID: {container_id[:12]}\n\n"
-            yield "🔌 ATTACHING TO CONTAINER LOG STREAM...\n\n"
-            
+                import asyncio, os
+                await asyncio.sleep(0.5)
+                if not is_container_running(repo, rubric, owner):
+                    crash_log_path = f"data/{repo}_last_crash.log"
+                    if os.path.exists(crash_log_path):
+                        with open(crash_log_path, "r") as crash_file:
+                            yield f"💥 CONTAINER CRASHED BEFORE ATTACH. LAST LOGS:\n{crash_file.read()}\n"
+                    else:
+                        yield "💥 CONTAINER EXITED IMMEDIATELY. NO LOGS FOUND.\n"
+                    yield failure_eof("EARLY_CRASH")
+                    return
+            except Exception as ex:
+                yield stream_exception_message(ex)
+                return
+
+        try:
             log_stream = await follow_container_logs(repo, rubric, owner)
-            
+
             while True:
                 if await request.is_disconnected():
+                    should_cleanup = False
                     break
-                    
+
                 line = await log_stream.stdout.readline()
                 if not line:
                     break
                 yield line.decode(errors='ignore')
-                
-            await log_stream.wait()
-            
-            inspect_returncode, exit_code = await inspect_container_exit_code(repo, rubric, owner)
 
-            if inspect_returncode != 0 or "No such object" in exit_code:
-                yield cleanup_race_success_eof()
-            elif exit_code == "0":
-                from backend.services.ledger_reader import _CACHE
-                cache_key = f"{repo}_{rubric}"
-                if cache_key in _CACHE:
-                    del _CACHE[cache_key]
-                yield success_eof()
-            else:
-                yield failure_eof(exit_code)
+            if not await request.is_disconnected():
+                await log_stream.wait()
+                inspect_returncode, exit_code = await inspect_container_exit_code(repo, rubric, owner)
+
+                if inspect_returncode != 0 or "No such object" in exit_code:
+                    yield cleanup_race_success_eof()
+                elif exit_code == "0":
+                    from backend.services.ledger_reader import _CACHE
+                    cache_key = f"{repo}_{rubric}"
+                    if cache_key in _CACHE:
+                        del _CACHE[cache_key]
+                    yield success_eof()
+                else:
+                    yield failure_eof(exit_code)
 
         except Exception as ex:
             yield stream_exception_message(ex)
         finally:
-            remove_container(repo, rubric, owner)
+            if should_cleanup:
+                remove_container(repo, rubric, owner)
 
     return StreamingResponse(generate(), media_type="text/plain")
 
