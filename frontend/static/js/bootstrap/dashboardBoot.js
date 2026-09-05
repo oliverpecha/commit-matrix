@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.1.24";
+import { hub } from "../core/eventHub.js?v=0.1.30";
 
 const UI_THEME = window.UI_THEME;
 

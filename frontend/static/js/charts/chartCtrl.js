@@ -1,7 +1,7 @@
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS } from '../core/constants.js?v=0.1.24';
-import { calcMAvg, getTop25 } from '../core/dataEngine.js?v=0.1.24';
-import { UI_STATE } from '../core/state.js?v=0.1.24';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.24';
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS } from '../core/constants.js?v=0.1.30';
+import { calcMAvg, getTop25 } from '../core/dataEngine.js?v=0.1.30';
+import { UI_STATE } from '../core/state.js?v=0.1.30';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.30';
 
 let charts = {};
 

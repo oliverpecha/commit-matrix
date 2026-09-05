@@ -1,6 +1,6 @@
 // v0.1.11
-import { hub } from "../core/eventHub.js?v=0.1.24";
-import { APP_STATES } from "../core/state.js?v=0.1.24";
+import { hub } from "../core/eventHub.js?v=0.1.30";
+import { APP_STATES } from "../core/state.js?v=0.1.30";
 import {
     getAppState,
     setAppState,
@@ -8,7 +8,7 @@ import {
     hasSeenLedger,
     initAppStateFromLedger,
 } from "../core/appStateCtrl.js";
-import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.24";
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.30";
 import {
     renderShell,
     appendTerminalChunk,

@@ -1,4 +1,5 @@
 from __future__ import annotations
+__version__ = '0.1.9'
 import sys
 import threading
 from pathlib import Path
@@ -52,7 +53,7 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
 
 def _build_oracle_sync(repo_path: str, db_path: str) -> None:
     if str(__import__("os").environ.get("MATRIX_DEBUG", "")).lower() in ("1", "true", "yes"):
-        print("\n[arch-oracle] 🧊 Cold start detected. Initializing database state...", flush=True)
+        print("\n[arch-oracle] 🧊 Cold start detected. Retrospective architecture resolving...\n", flush=True)
 
     try:
         import sqlite3
@@ -85,9 +86,14 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                 _conn.execute("UPDATE architecture_commits SET role = 'successive' WHERE topo_id = ?", (max_db_topo,))
                 _conn.commit()
 
+        from backend.services.pipeline.pipeline_presentation import print_throttled_progress
         tracker = ArchitectureResolver(repo_path=repo_path)
         resolved_states = []
-        for topo_id, commit_parts in commits_with_ids:
+        
+        total_sync_items = len(commits_with_ids)
+        last_progress_pct = -1
+
+        for idx, (topo_id, commit_parts) in enumerate(commits_with_ids, start=1):
             commit_hash = str(commit_parts[0]).strip()
             date_str = str(commit_parts[1]) if len(commit_parts) > 1 else ""
             subject = str(commit_parts[3]) if len(commit_parts) > 3 else ""
@@ -112,6 +118,10 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                     "current_sig": getattr(state, "signature"), "shape": getattr(state, "change_shape", ""),
                     "is_merge": is_merge
                 })
+                
+            last_progress_pct = print_throttled_progress(
+                current=idx, total=total_sync_items, last_pct=last_progress_pct, prefix="[arch-oracle]"
+            )
 
         if resolved_states:
             from backend.services.db.writer import incremental_sync_commit_states
@@ -127,12 +137,7 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                 bound_count = conn.execute("SELECT COUNT(*) FROM architecture_boundaries").fetchone()[0]
                 commit_count = conn.execute("SELECT COUNT(*) FROM architecture_commits").fetchone()[0]
                 
-                print("\n" + "─" * 71, flush=True)
-                # Phase 2 silent
-                print(f"    Snapshots Generated │ {snap_count}", flush=True)
-                print(f"    Boundaries Mapped   │ {bound_count}", flush=True)
-                print(f"    Commits Linked      │ {commit_count}", flush=True)
-                print("─" * 71 + "\n", flush=True)
+                pass
                 
         _ORACLE_READY_EVENT.set()
     except (KeyboardInterrupt, SystemExit):

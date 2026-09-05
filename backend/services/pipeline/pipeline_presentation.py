@@ -1,4 +1,5 @@
 from __future__ import annotations
+__version__ = '0.1.9'
 
 _ACTUAL_WARNINGS = 0
 import os
@@ -32,6 +33,20 @@ def _axis_bar(value: int, max_val: int = 3, width: int = 5) -> str:
     value = max(0, int(value or 0))
     filled = min(int(width * value / max_val), width)
     return chr(9608) * filled + chr(9617) * (width - filled)
+
+def print_throttled_progress(current: int, total: int, last_pct: int, prefix: str = "Processing") -> int:
+    if total == 0: return last_pct
+    pct = int((current / total) * 100)
+    if pct > last_pct:
+        import sys
+        width = 40
+        filled = int((width * current) / total)
+        bar = "█" * filled + "░" * (width - filled)
+        if last_pct == -1: sys.stdout.write("\n")
+        sys.stdout.write(f"\033[1A\r{prefix} [{bar}] {pct}% ({current}/{total} commits)\033[K\n")
+        sys.stdout.flush()
+        return pct
+    return last_pct
 
 def render_boundary_banner(boundary_data: dict, snapshot_sig: str) -> str:
     cause_tag = boundary_data.get("cause_tag", "")
@@ -156,6 +171,7 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
             if not rows: return
 
             print("\n🗺️  Architecture Boundary Map")
+            print("───────────────────────────────────────────────────────────────────────")
             print(" Era     │ Trigger Snapshot            │ Trigger Commit    │ Beginning")
             print(" ────────┼─────────────────────────────┼───────────────────┼────────────")
             
@@ -209,13 +225,13 @@ def print_oracle_initialization(repo_label: str, db_path: str, is_genuine_warm_s
 
         boot_type = "Ledger Linked (Warm Boot)" if is_genuine_warm_start else "Cold Boot"
 
-        print('\n' + '─' * 71, flush=True)
-        print('🏛️  Architecture Oracle Initialized', flush=True)
-        print(f'    Boot Mode     │ {boot_type}', flush=True)
-        print(f'    Snapshots     │ {_s_count}', flush=True)
-        print(f'    Eras          │ {_b_count} Structural Eras', flush=True)
-        print(f'    Commits       │ {_c_count}', flush=True)
-        print(f'    Ledger Sync   │ SQLite WAL active ({db_path})', flush=True)
+        print('\n\n🏛️  Architecture Oracle ', flush=True)
+        print('─' * 71, flush=True)
+        print(f'    Boot Mode    │ {boot_type}', flush=True)
+        print(f'    Snapshots    │ {_s_count}', flush=True)
+        print(f'    Boundaries   │ {_b_count} ', flush=True)
+        print(f'    Commits      │ {_c_count}', flush=True)
+        print(f'    Ledger Sync  │ SQLite WAL active ({db_path})', flush=True)
         print('─' * 71 + '\n', flush=True)
     except (KeyboardInterrupt, SystemExit):
         raise
@@ -324,6 +340,9 @@ def render_bootstrap_banner(repo_path, repo_label, log_path=None):
     
     stress_status = "🔴 ACTIVE" if str(os.environ.get("MATRIX_STRESS_TEST", "0")) in ("1", "true", "yes", "on") else "⚪ INACTIVE"
     workers = os.environ.get("MATRIX_MAX_WORKERS", "32")
+    import socket
+    try: container_id = socket.gethostname()
+    except: container_id = "unknown"
 
     banner = [
         "═" * 71,
@@ -334,7 +353,8 @@ def render_bootstrap_banner(repo_path, repo_label, log_path=None):
         f"   Primary Model     │ {model_name}",
         f"   Debug Telemetry   │ {debug_status}",
         f"   Stress Test Mode  │ {stress_status}",
-        f"   Max Worker Units  │ {workers}"
+        f"   Max Worker Units  │ {workers}",
+        f"   Container         │ '{container_id}'"
     ]
     if log_path:
         banner.append(f"   Persistent Log    │ {log_path}")

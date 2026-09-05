@@ -1,6 +1,6 @@
 
-import { hub } from "../core/eventHub.js?v=0.1.24";
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.24";
+import { hub } from "../core/eventHub.js?v=0.1.30";
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.30";
 
 // Hydrate header button
 document.addEventListener("DOMContentLoaded", () => {

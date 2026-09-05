@@ -105,7 +105,7 @@ def main():
                         conn.commit()
                     finally:
                         conn.close()
-                    print(f"💓 Heartbeat registered → {exec_mode} run '{container_id}' linked to {repo_label} (log={full_log_path})", flush=True)
+                    print(f"\n[Heartbeat] registered\n", flush=True)
                 except (KeyboardInterrupt, SystemExit):
                     raise
                 except Exception as e:

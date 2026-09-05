@@ -1,16 +1,16 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.24";
-import "./core/appStateCtrl.js?v=0.1.24";
-import "./engine/repoManager.js?v=0.1.24";
-import "./engine/telemetryStream.js?v=0.1.24";
-import "./engine/engineControl.js?v=0.1.24";
-import "./ui/terminalView.js?v=0.1.24";
+import { hub } from "./core/eventHub.js?v=0.1.30";
+import "./core/appStateCtrl.js?v=0.1.30";
+import "./engine/repoManager.js?v=0.1.30";
+import "./engine/telemetryStream.js?v=0.1.30";
+import "./engine/engineControl.js?v=0.1.30";
+import "./ui/terminalView.js?v=0.1.30";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.24';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.24';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.24';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.24';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.24';
+import { processCommits } from './core/dataEngine.js?v=0.1.30';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.30';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.30';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.30';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.30';
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");

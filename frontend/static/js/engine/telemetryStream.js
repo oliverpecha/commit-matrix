@@ -1,6 +1,6 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.24";
-import { hub } from "../core/eventHub.js?v=0.1.24";
-import { contextKey } from "../core/state.js?v=0.1.24";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.30";
+import { hub } from "../core/eventHub.js?v=0.1.30";
+import { contextKey } from "../core/state.js?v=0.1.30";
 
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
@@ -69,7 +69,16 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
                 break;
             }
 
-            let chunk = decoder.decode(value, { stream: true });
+                        let chunk = decoder.decode(value, { stream: true });
+            
+            const progRegex = /\x1B\[1A\r.*?\[.*?\].*?(\d+)% \((\d+)\/(\d+) commits\)\x1B\[K\n?/g;
+            let match;
+            while ((match = progRegex.exec(chunk)) !== null) {
+                if (window.cmUpdateTerminalProgress) window.cmUpdateTerminalProgress(parseInt(match[1]), parseInt(match[3]) - parseInt(match[2]));
+            }
+            // Strip it so the frontend text box never sees it
+            chunk = chunk.replace(/\x1B\[1A\r.*?\[.*?\].*?\d+% \(\d+\/\d+ commits\)\x1B\[K\n?/g, "");
+
             chunk = formatTerminalChunk(chunk);
 
             streamBuffer += chunk;

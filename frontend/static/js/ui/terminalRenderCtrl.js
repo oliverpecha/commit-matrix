@@ -1,4 +1,4 @@
-import { renderTerminalShell } from "./terminalShell.js?v=0.1.24";
+import { renderTerminalShell } from "./terminalShell.js?v=0.1.30";
 
 export function captureShellSnapshot() {
     return {
@@ -43,7 +43,28 @@ export function renderShell(termSlot, hub) {
 export function appendTerminalChunk(chunk) {
     const body = document.getElementById("cm-terminal-body");
     if (!body) return false;
-    body.innerHTML += chunk.replace(/\[__MATRIX_EOF_.*__\]/g, "");
+    
+    let text = chunk.replace(/\[__MATRIX_EOF_.*__\]/g, "");
+    
+    if (text.includes('\r')) {
+        let parts = text.split('\r');
+        for (let i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                let html = body.innerHTML;
+                if (html.endsWith('\n')) html = html.slice(0, -1);
+                let lastNewlineIndex = html.lastIndexOf('\n');
+                if (lastNewlineIndex !== -1) {
+                    body.innerHTML = html.substring(0, lastNewlineIndex + 1);
+                } else {
+                    body.innerHTML = "";
+                }
+            }
+            body.innerHTML += parts[i];
+        }
+    } else {
+        body.innerHTML += text;
+    }
+    
     body.scrollTop = body.scrollHeight;
     return true;
 }
