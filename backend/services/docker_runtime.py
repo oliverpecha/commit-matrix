@@ -19,9 +19,12 @@ def get_container_name(repo: str = "commit-matrix", rubric: str = None, owner: s
     import os, sqlite3
     registry_db = "/app/data/registry.db" if os.path.exists("/.dockerenv") else "data/registry.db"
     try:
-        with sqlite3.connect(registry_db) as conn:
+        conn = sqlite3.connect(registry_db, timeout=5.0)
+        try:
             row = conn.execute("SELECT active_container_id FROM repositories WHERE repo_name=?", (repo,)).fetchone()
             if row and row[0]: return row[0]
+        finally:
+            conn.close()
     except Exception: pass
     owner = owner or "unknown"
     return f"matrix-analyzer-{owner}-{repo}-{rubric}"

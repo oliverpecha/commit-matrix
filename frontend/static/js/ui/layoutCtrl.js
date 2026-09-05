@@ -1,4 +1,4 @@
-import { applyLayoutMode } from "./layoutModes.js?v=0.7.75";
+import { applyLayoutMode } from "./layoutModes.js?v=0.1.24";
 
 export function applyLayout(layout) {
     return applyLayoutMode(layout);

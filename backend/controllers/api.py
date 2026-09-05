@@ -1,4 +1,6 @@
 import glob
+import os
+import sqlite3
 from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -33,8 +35,6 @@ async def list_repos():
 
 @api_router.get("/rubrics")
 async def list_rubrics(repo: str = None, owner: str = None):
-    import glob
-    from pathlib import Path
     from backend.services.db.reader import get_available_repos
     
     if not repo:
@@ -75,8 +75,6 @@ async def get_data(repo: str = None, rubric: str = None, token: str = "", owner:
         return JSONResponse(content=[])
     
     if not owner:
-        import glob
-        from pathlib import Path
         db_paths = glob.glob(f"data/*/{repo}/db/{repo}.db")
         owner = Path(db_paths[0]).parts[1] if db_paths else None
         
@@ -94,16 +92,73 @@ async def control_engine(request: Request, action: str, repo: str = "commit-matr
         return JSONResponse(content={"status": "stopped", "action": "stop", "repo": repo})
     return JSONResponse(content={"status": "acknowledged", "action": action, "repo": repo})
 
+
+def _registry_path():
+    return "/app/data/registry.db" if os.path.exists("/.dockerenv") else "data/registry.db"
+
+def _native_heartbeat(repo: str, rubric: str = None, owner: str = None):
+    conn = None
+    try:
+        conn = sqlite3.connect(_registry_path(), timeout=5.0)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(repositories)").fetchall()}
+        if "exec_mode" not in cols:
+            return None
+        row = conn.execute(
+            "SELECT active_log_path, exec_mode FROM repositories WHERE repo_name=?",
+            (repo,),
+        ).fetchone()
+        if not row or row[1] != "native" or not row[0]:
+            return None
+        log_path = row[0]
+        if not os.path.exists(log_path):
+            conn.execute(
+                "UPDATE repositories SET active_container_id=NULL, active_log_path=NULL, exec_mode=NULL WHERE repo_name=?",
+                (repo,),
+            )
+            conn.commit()
+            return None
+        return {"log_path": log_path}
+    except Exception:
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 @api_router.get("/engine/status")
 async def get_engine_status(repo: str, rubric: str = None, owner: str = None):
-    from backend.services.docker_runtime import get_container_name
-    import subprocess
-    c_name = get_container_name(repo, rubric, owner)
-    try:
-        res = subprocess.check_output(f"docker ps -q -f name=^{c_name}$", shell=True).strip()
-        return JSONResponse(content={"running": bool(res)})
-    except Exception:
-        return JSONResponse(content={"running": False})
+    from backend.services.docker_runtime import is_container_running
+    if is_container_running(repo, rubric, owner):
+        return JSONResponse(content={"running": True, "mode": "docker"})
+
+    native = _native_heartbeat(repo, rubric, owner)
+    if native:
+        return JSONResponse(content={"running": True, "mode": "native", "log_path": native["log_path"]})
+
+    return JSONResponse(content={"running": False})
+
+@api_router.post("/engine/tail")
+@api_router.get("/engine/tail")
+async def tail_native_log(request: Request, repo: str, rubric: str = None, owner: str = None):
+    native = _native_heartbeat(repo, rubric, owner)
+    if not native or not native.get("log_path") or not os.path.exists(native["log_path"]):
+        async def empty(): yield "💥 NO ACTIVE NATIVE RUN DETECTED.\n[__MATRIX_EOF_FAIL__]"
+        return StreamingResponse(empty(), media_type="text/plain")
+
+    async def generate():
+        import asyncio, os
+        yield "🐚 ATTACHED TO NATIVE TERMINAL\n\n"
+        log_path = native["log_path"]
+        with open(log_path, 'r') as f:
+            while True:
+                if await request.is_disconnected(): break
+                line = f.readline()
+                if line: yield line
+                else:
+                    if not _native_heartbeat(repo, rubric, owner):
+                        yield "\n[__MATRIX_EOF_SUCCESS__]"
+                        break
+                    await asyncio.sleep(0.5)
+    return StreamingResponse(generate(), media_type="text/plain")
 
 
 
@@ -214,8 +269,6 @@ async def get_ledger_paginated(repo: str, rubric: str, offset: int = 0, limit: i
         return JSONResponse(content=[])
     
     if not owner:
-        import glob
-        from pathlib import Path
         db_paths = glob.glob(f"data/*/{repo}/db/{repo}.db")
         owner = Path(db_paths[0]).parts[1] if db_paths else None
         

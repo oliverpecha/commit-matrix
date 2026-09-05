@@ -82,19 +82,30 @@ def main():
         try:
             container_id = socket.gethostname()
             def _heartbeat_conn():
-                conn = sqlite3.connect(r_db)
+                conn = sqlite3.connect(r_db, timeout=15.0)
+                conn.execute("PRAGMA journal_mode=WAL;")
                 conn.execute("CREATE TABLE IF NOT EXISTS repositories (repo_name TEXT PRIMARY KEY, owner TEXT, remote_url TEXT, target_branch TEXT, repo_path TEXT, root_commit TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
                 cols = {row[1] for row in conn.execute("PRAGMA table_info(repositories)").fetchall()}
-                if "active_container_id" not in cols:
-                    conn.execute("ALTER TABLE repositories ADD COLUMN active_container_id TEXT")
+                for col in ("active_container_id", "active_log_path", "exec_mode"):
+                    if col not in cols:
+                        conn.execute(f"ALTER TABLE repositories ADD COLUMN {col} TEXT")
+                conn.commit()
                 return conn
 
             def _register_heartbeat():
                 try:
-                    with _heartbeat_conn() as conn:
+                    conn = _heartbeat_conn()
+                    try:
                         conn.execute("INSERT OR IGNORE INTO repositories (repo_name) VALUES (?)", (repo_label,))
-                        conn.execute("UPDATE repositories SET active_container_id=? WHERE repo_name=?", (container_id, repo_label))
-                    print(f"💓 Heartbeat registered → Container {container_id} linked to {repo_label}", flush=True)
+                        exec_mode = "docker" if os.path.exists("/.dockerenv") else os.environ.get("EXEC_MODE", "native")
+                        conn.execute(
+                            "UPDATE repositories SET active_container_id=?, active_log_path=?, exec_mode=? WHERE repo_name=?",
+                            (container_id, full_log_path, exec_mode, repo_label)
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+                    print(f"💓 Heartbeat registered → {exec_mode} run '{container_id}' linked to {repo_label} (log={full_log_path})", flush=True)
                 except (KeyboardInterrupt, SystemExit):
                     raise
                 except Exception as e:
@@ -102,8 +113,15 @@ def main():
 
             def _clear_heartbeat():
                 try:
-                    with _heartbeat_conn() as conn:
-                        conn.execute("UPDATE repositories SET active_container_id=NULL WHERE repo_name=?", (repo_label,))
+                    conn = _heartbeat_conn()
+                    try:
+                        conn.execute(
+                            "UPDATE repositories SET active_container_id=NULL, active_log_path=NULL, exec_mode=NULL WHERE repo_name=?",
+                            (repo_label,)
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
                 except Exception: pass
 
             _register_heartbeat()

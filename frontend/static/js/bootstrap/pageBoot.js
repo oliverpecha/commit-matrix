@@ -1,6 +1,6 @@
 
-import { hub } from "../core/eventHub.js?v=0.7.75";
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.7.75";
+import { hub } from "../core/eventHub.js?v=0.1.24";
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.24";
 
 // Hydrate header button
 document.addEventListener("DOMContentLoaded", () => {
@@ -141,13 +141,13 @@ commit-matrix</code></pre>
 
     // --- Listen to Context Changes & Init Observers ---
     try {
-        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.7.82");
+        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.7.85");
         if (!window.MATRIX_SYSTEM_EMPTY && !window.MATRIX_INVALID_REPO) {
             const p = new URLSearchParams(window.location.search);
             initInfiniteScroll(p.get("repo") || "commit-matrix", 100);
         }
 
-        const { hub } = await import("../core/eventHub.js?v=0.7.82");
+        const { hub } = await import("../core/eventHub.js?v=0.7.85");
         window.hub = hub; // Ensure inline handlers like (Add Repo) retain access
         
         hub.on("CONTEXT_CHANGED", (payload) => {
