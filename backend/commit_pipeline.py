@@ -35,7 +35,7 @@ from backend.services.pipeline.pipeline_config import (
 from backend.services.architecture.metrics import compute_generation_summaries
 from backend.services.pipeline.prep_scoring import extract_commit_sha
 from backend.utils.logger import DualLogger
-from backend.services.pipeline.pipeline_presentation import render_bootstrap_banner, print_debug_boundary_table
+from backend.services.pipeline.pipeline_presentation import render_bootstrap_banner, print_debug_boundary_table, print_oracle_initialization
 
 def get_db_connection(db_path: str):
     import sqlite3
@@ -44,37 +44,7 @@ def get_db_connection(db_path: str):
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
-def _sqlite_is_macro(tag):
-    if not tag: return 0
-    t = str(tag).lower()
-    if t in ('leaf-only', 'leaf_only', 'major:head', 'head'): return 0
-    try:
-        from backend.services.architecture.taxonomy import normalize_cause_tag, get_boundary_magnitude
-        return 1 if get_boundary_magnitude(normalize_cause_tag(t)) == 'major' else 0
-    except Exception:
-        return 0
 
-def print_architecture_event(state, repo_label=None, db_path=None):
-    if not getattr(state, 'available', True):
-        print('─' * 71, flush=True)
-        print('🏗️  Architecture unavailable', flush=True)
-        return
-
-    if not (getattr(state, 'established', False) or getattr(state, 'advanced', False)):
-        return
-
-    from backend.services.architecture.taxonomy import get_shape_metadata
-    raw_shape = getattr(state, 'change_shape', '')
-    meta = get_shape_metadata(raw_shape)
-    cause = meta.get('label', raw_shape or 'unknown')
-    icon = meta.get('icon', '🕰️')
-    title = '📍 Current Architecture Head' if not getattr(state, 'advanced', False) else f'{icon}  Architecture Boundary (Gen {getattr(state, "gen", "?")})'
-    
-    print('\n' + '─' * 71, flush=True)
-    print(title, flush=True)
-    print(f'    Cause      │ {cause}', flush=True)
-    print(f'    Mode       │ {getattr(state, "mode", "programmatic")}', flush=True)
-    print('─' * 71 + '\n', flush=True)
 
 def main():
     start_time = time.time()
@@ -96,7 +66,7 @@ def main():
         repo_label = "commit-matrix"
 
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
-    log_dir = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/pipeline_runs" if os.path.exists("/app") else f"data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/pipeline_runs"
+    log_dir = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/pipeline_runs" if os.path.exists("/.dockerenv") else f"data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/pipeline_runs"
     log_filename = f"run_{timestamp}_UTC.log"
     full_log_path = os.path.join(log_dir, log_filename)
 
@@ -105,14 +75,55 @@ def main():
         sys.stdout = logger_instance
         sys.stderr = logger_instance
         
+        # --- Universal Container Heartbeat ---
+        import sqlite3, atexit, socket
+        _clear_heartbeat = lambda: None
+        r_db = "/app/data/registry.db" if os.path.exists("/.dockerenv") else "data/registry.db"
+        try:
+            container_id = socket.gethostname()
+            def _heartbeat_conn():
+                conn = sqlite3.connect(r_db)
+                conn.execute("CREATE TABLE IF NOT EXISTS repositories (repo_name TEXT PRIMARY KEY, owner TEXT, remote_url TEXT, target_branch TEXT, repo_path TEXT, root_commit TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                cols = {row[1] for row in conn.execute("PRAGMA table_info(repositories)").fetchall()}
+                if "active_container_id" not in cols:
+                    conn.execute("ALTER TABLE repositories ADD COLUMN active_container_id TEXT")
+                return conn
+
+            def _register_heartbeat():
+                try:
+                    with _heartbeat_conn() as conn:
+                        conn.execute("INSERT OR IGNORE INTO repositories (repo_name) VALUES (?)", (repo_label,))
+                        conn.execute("UPDATE repositories SET active_container_id=? WHERE repo_name=?", (container_id, repo_label))
+                    print(f"💓 Heartbeat registered → Container {container_id} linked to {repo_label}", flush=True)
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except Exception as e:
+                    print(f"⚠️ Heartbeat registration failed: {e}", flush=True)
+
+            def _clear_heartbeat():
+                try:
+                    with _heartbeat_conn() as conn:
+                        conn.execute("UPDATE repositories SET active_container_id=NULL WHERE repo_name=?", (repo_label,))
+                except Exception: pass
+
+            _register_heartbeat()
+            atexit.register(_clear_heartbeat)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            print(f"⚠️ Telemetry setup failed: {e}", flush=True)
+        
         def handle_termination(signum, frame):
+            _clear_heartbeat()
             print(f"\n🛑 Pipeline interrupted by signal ({signum}). Flushing buffers and closing logs.", flush=True)
             logger_instance.close()
-            sys.exit(128 + signum)
+            os._exit(128 + signum)
             
         import signal
         signal.signal(signal.SIGINT, handle_termination)
         signal.signal(signal.SIGTERM, handle_termination)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         logger_instance = None
         print(f"⚠️ Logger initialization failed: {e}. Defaulting to standard stdout.", flush=True)
@@ -142,8 +153,8 @@ def main():
 
     import sqlite3 as _boot_sq
     
-    from backend.services.pipeline.repo_bootstrap import bootstrap_repo_metadata
-    bootstrap_repo_metadata(db_path, repo_path)
+    from backend.services.pipeline.repo_bootstrap import sync_central_registry
+    sync_central_registry(db_path, repo_path)
 
     if is_genuine_warm_start:
         try:
@@ -340,40 +351,16 @@ def main():
             from backend.services.db.writer import update_scan_range
             _rubric = os.environ.get("RUBRIC_NAME", "unknown")
             update_scan_range(repo_label, head_topo, tail_topo)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
 
     error_count = flush_state["error_count"]
     success_count = flush_state["success_count"]
 
-    try:
-        from backend.services.db.reader import read_scan_range, read_vacuums
-        scan = read_scan_range(repo_label)
-        vacuums = read_vacuums(repo_label)
-
-        print('─' * 71, flush=True)
-        run_head = commits_with_ids[0][0] if commits_with_ids else 0
-        run_tail = commits_with_ids[-1][0] if commits_with_ids else 0
-        
-        import sqlite3
-        with get_db_connection(db_path) as _c:
-            _t_exists = _c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
-            _rubric = os.environ.get("RUBRIC_NAME", "unknown")
-            _r_row = _c.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _t_exists else None
-            _run_id = _r_row[0] if _r_row else -1
-            b_count = _c.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _t_exists else 0
-            
-        print(f"    Commits       │ processed (#{run_head} to #{run_tail})", flush=True)
-        print(f"    Boundaries    │ {b_count} structural era triggers", flush=True)
-        if vacuums:
-            total_vac = sum(v.get("commit_count", 0) for v in vacuums)
-            print(f"    Vacuums       │ {total_vac} unscanned", flush=True)
-        print('─' * 71 + '\n', flush=True)
-    except Exception:
-        pass
-
     from backend.services.pipeline.pipeline_presentation import print_final_pipeline_summary_report
-    print_final_pipeline_summary_report(repo_label, db_path)
+    print_final_pipeline_summary_report(repo_label, db_path, commits_with_ids)
 
     if error_count > 0:
         print(f"⚠️ PROCESS_COMPLETE_WITH_ERRORS: {error_count} failed, {success_count} succeeded.\n", flush=True)

@@ -296,6 +296,8 @@ def print_final_pipeline_summary_report(repo_label: str, db_path: str, commits_w
                         print(f"[arch-tree] ⚖️  Validation check: {_ACTUAL_WARNINGS} printed warnings == {expected} expected shifts (from {expected + 1} total DB triggers)\n", flush=True)
                     else:
                         print(f"\n[arch-tree] ❌ Validation failure: {_ACTUAL_WARNINGS} printed warnings != {expected} expected shifts!\n", flush=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
 

@@ -7,13 +7,22 @@ import subprocess
 def is_container_running(repo: str = "commit-matrix", rubric: str = None, owner: str = None) -> bool:
     c_name = get_container_name(repo, rubric, owner)
     try:
-        res = subprocess.check_output(f"docker ps -q -f name=^{c_name}$", shell=True).strip()
-        return bool(res)
+        res = subprocess.check_output(f"docker inspect -f '{{{{.State.Running}}}}' {c_name}", shell=True, stderr=subprocess.DEVNULL).strip()
+        return res == b"true"
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         return False
 
 
 def get_container_name(repo: str = "commit-matrix", rubric: str = None, owner: str = None) -> str:
+    import os, sqlite3
+    registry_db = "/app/data/registry.db" if os.path.exists("/.dockerenv") else "data/registry.db"
+    try:
+        with sqlite3.connect(registry_db) as conn:
+            row = conn.execute("SELECT active_container_id FROM repositories WHERE repo_name=?", (repo,)).fetchone()
+            if row and row[0]: return row[0]
+    except Exception: pass
     owner = owner or "unknown"
     return f"matrix-analyzer-{owner}-{repo}-{rubric}"
 
@@ -59,25 +68,31 @@ def build_scan_docker_cmd(repo: str, rubric: str, owner: str = None, container_n
     def resolve_target_volume(repo_name: str) -> str:
         if repo_name == "commit-matrix":
             return "/root/commit-matrix"
-        candidates = glob.glob(f"data/*/{repo_name}/db/{repo_name}.db") + [f"data/local/{repo_name}/db/{repo_name}.db"]
-        found_db = next((p for p in candidates if os.path.exists(p)), None)
-        if found_db:
+        
+        registry_db = "/app/data/registry.db" if os.path.exists("/app/data") else "data/registry.db"
+        print(f"🐳 [Docker Runtime] Resolved registry path: {registry_db}", flush=True)
+        
+        if os.path.exists(registry_db):
             try:
                 import sqlite3
-                with sqlite3.connect(found_db) as conn:
-                    row = conn.execute("SELECT value FROM repo_metadata WHERE key='repo_path'").fetchone()
+                with sqlite3.connect(registry_db) as conn:
+                    row = conn.execute("SELECT repo_path FROM repositories WHERE repo_name=?", (repo_name,)).fetchone()
                     if row and row[0] and os.path.isdir(row[0]):
                         return row[0]
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception:
                 pass
+                
         fallback = f"/root/commit-matrix/data/{repo_name}/src"
         if os.path.isdir(fallback):
             return fallback
+            
         raise RuntimeError(
             f"Cannot resolve source checkout path for repo='{repo_name}': "
-            f"repo_metadata is missing (db not found at any of {candidates}) "
+            f"repository not found in registry (data/registry.db) "
             f"and default path '{fallback}' does not exist on host. "
-            f"Re-register this repo (host CLI: python3 backend/scripts/register_repo.py --repo {repo_name} --path <checkout>) "
+            f"Re-register this repo (host CLI: matrixctl register --repo {repo_name} --path <checkout>) "
             f"before scanning."
         )
 

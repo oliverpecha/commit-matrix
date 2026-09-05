@@ -6,9 +6,9 @@ def run_cmd(cmd, cwd=None):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd)
     return result.stdout.strip()
 
-def get_commits(repo_path):
-    """Get all commits with full details."""
-    cmd = 'git log --all --pretty=format:"%H|%ad|%an|%s" --date=format:"%b %d, \'%y" --numstat'
+def get_commits(repo_path, target_branch="HEAD"):
+    """Get commits strictly from the DB-locked branch."""
+    cmd = f'git log {target_branch} --pretty=format:"%H|%ad|%an|%s" --date=format:"%b %d, \'%y" --numstat'
     return run_cmd(cmd, cwd=repo_path)
 
 def get_commit_diff(commit_hash, repo_path):

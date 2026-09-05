@@ -1,12 +1,40 @@
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 import os
 from backend.utils.git_ops import get_commits, get_commit_diff, extract_owner_from_remote_url
 
 QUEUE_ORDER = os.environ.get("MATRIX_QUEUE_ORDER", "retrospective").strip().lower()
 
+def get_locked_branch(repo_path, repo_name):
+    import sqlite3, subprocess, os
+    registry_db = "/app/data/registry.db" if os.path.exists("/.dockerenv") else "data/registry.db" 
+    try:
+        with sqlite3.connect(registry_db) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS repositories (repo_name TEXT PRIMARY KEY, owner TEXT, remote_url TEXT, target_branch TEXT, repo_path TEXT, root_commit TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            row = conn.execute("SELECT target_branch FROM repositories WHERE repo_name=?", (repo_name,)).fetchone()
+            if row and row[0]:
+                return row[0]
+            
+            if subprocess.run("git show-ref --verify refs/heads/main", shell=True, cwd=repo_path, capture_output=True).returncode == 0:
+                branch = "main"
+            elif subprocess.run("git show-ref --verify refs/heads/master", shell=True, cwd=repo_path, capture_output=True).returncode == 0:
+                branch = "master"
+            else:
+                branch = subprocess.run("git rev-parse --abbrev-ref HEAD", shell=True, cwd=repo_path, capture_output=True, text=True).stdout.strip() or "HEAD"
+            
+            conn.execute("INSERT OR IGNORE INTO repositories (repo_name) VALUES (?)", (repo_name,))
+            conn.execute("UPDATE repositories SET target_branch=? WHERE repo_name=?", (branch, repo_name))
+            return branch
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:
+        print(f"⚠️ Registry branch resolution failed: {e}", flush=True)
+    return "HEAD"
+
 def build_topo_index(repo_path):
     topo = {}
-    log_output = get_commits(repo_path)
+    repo_name = os.environ.get("HOST_REPO_NAME", os.path.basename(repo_path))
+    locked_branch = get_locked_branch(repo_path, repo_name)
+    log_output = get_commits(repo_path, locked_branch)
     lines = [line for line in log_output.strip().split('\n') if '|' in line]
     lines.reverse()
     for idx, line in enumerate(lines, start=1):
@@ -15,7 +43,9 @@ def build_topo_index(repo_path):
     return topo
 
 def discover_unscanned_commits(repo_path, existing_hashes):
-    log_output = get_commits(repo_path)
+    repo_name = os.environ.get("HOST_REPO_NAME", os.path.basename(repo_path))
+    locked_branch = get_locked_branch(repo_path, repo_name)
+    log_output = get_commits(repo_path, locked_branch)
     lines = log_output.strip().split('\n')
 
     commits = []
@@ -68,6 +98,8 @@ def build_commit_queue(repo_path, existing_hashes):
         scan_range = read_scan_range(_repo_label)
         if scan_range:
             previous_tail = scan_range.get("scan_tail_topo")
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
 
@@ -94,29 +126,35 @@ def build_commit_queue(repo_path, existing_hashes):
         "previous_tail_topo": previous_tail,
     }
 
-def bootstrap_repo_metadata(db_path: str, repo_path: str):
-    """Extracts directory-agnostic metadata (like namespace/org) and syncs to DB."""
-    import sqlite3
-    import re
-    
+def sync_central_registry(db_path: str, repo_path: str):
+    """Extracts repository identity and syncs it to the Central Registry."""
+    import sqlite3, re, subprocess, os
     try:
-        with sqlite3.connect(db_path) as meta_conn:
-            meta_conn.execute(
-                "CREATE TABLE IF NOT EXISTS repo_metadata (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        repo_name = os.environ.get("HOST_REPO_NAME", os.path.basename(repo_path))
+        registry_db = "/app/data/registry.db" if os.path.exists("/.dockerenv") else "data/registry.db" 
+        owner_name, raw_url = "Unknown", "Unknown"
+        
+        conf_path = os.path.join(repo_path, ".git", "config")
+        if os.path.exists(conf_path):
+            with open(conf_path, "r", errors="ignore") as f:
+                m = re.search(r'url\s*=\s*(.+)', f.read())
+                if m:
+                    raw_url = m.group(1).strip()
+                    owner_name = extract_owner_from_remote_url(raw_url)
+
+        actual_host_path = os.environ.get("HOST_REPO_PATH", str(os.path.abspath(repo_path)))
+        root_commit = subprocess.run("git rev-list --max-parents=0 HEAD", shell=True, cwd=repo_path, capture_output=True, text=True).stdout.strip().split('\n')[0]
+        
+        with sqlite3.connect(registry_db) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS repositories (repo_name TEXT PRIMARY KEY, owner TEXT, remote_url TEXT, target_branch TEXT, repo_path TEXT, root_commit TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            conn.execute("INSERT OR IGNORE INTO repositories (repo_name) VALUES (?)", (repo_name,))
+            conn.execute(
+                "UPDATE repositories SET owner=?, remote_url=?, repo_path=?, root_commit=?, updated_at=CURRENT_TIMESTAMP WHERE repo_name=?",
+                (owner_name, raw_url, actual_host_path, root_commit, repo_name)
             )
-            owner_name = "Unknown"
-            conf_path = os.path.join(repo_path, ".git", "config")
-
-            if os.path.exists(conf_path):
-                with open(conf_path, "r", errors="ignore") as f:
-                    m = re.search(r'url\s*=\s*(.+)', f.read())
-                    if m:
-                        owner_name = extract_owner_from_remote_url(m.group(1).strip())
-
-            meta_conn.execute("INSERT OR IGNORE INTO repo_metadata (key, value) VALUES ('org_name', ?)", (owner_name,))
-            if owner_name != "Unknown":
-                meta_conn.execute("UPDATE repo_metadata SET value = ? WHERE key = 'org_name'", (owner_name,))
-            actual_host_path = os.environ.get("HOST_REPO_PATH", str(os.path.abspath(repo_path)))
-            meta_conn.execute("INSERT OR REPLACE INTO repo_metadata (key, value) VALUES ('repo_path', ?)", (actual_host_path,))
+            
+        get_locked_branch(repo_path, repo_name)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
-        print(f"⚠️ Metadata extraction failed: {e}", flush=True)
+        print(f"⚠️ Registry sync failed: {e}", flush=True)
