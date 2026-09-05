@@ -93,6 +93,8 @@ def report_sensor_mutation(commit_sha: str, from_sig: str, to_sig: str, raw_shap
                             if sig and sig.startswith(commit_sha[:7]):
                                 current_count = idx + 1
                                 break
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
             
@@ -130,6 +132,8 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
     db = Path(db_path) if db_path else Path((glob.glob(f"data/*/{repo_label}") + [f"data/local/{repo_label}"])[0]) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
     if not db.exists(): return
@@ -183,18 +187,97 @@ def print_debug_boundary_table(repo_label: str, db_path: str) -> None:
                 
                 print(f" {era:<7} │ {icon} {full_snap} │ {commit_display:<17} │ {date_str}")
             print("", flush=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
 
-def print_final_pipeline_summary_report(repo_label: str, db_path: str) -> None:
+def print_oracle_initialization(repo_label: str, db_path: str, is_genuine_warm_start: bool) -> None:
+    import sqlite3
+    try:
+        db = Path(db_path)
+        if not db.exists(): return
+        with sqlite3.connect(str(db)) as _conn_b:
+            _run_id = -1
+            if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_runs'").fetchone():
+                _r_row = _conn_b.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone()
+                if _r_row: _run_id = _r_row[0]
+            
+            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone() else 0
+            _b_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone() else 0
+            _c_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_commits WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_commits'").fetchone() else 0
+
+        boot_type = "Ledger Linked (Warm Boot)" if is_genuine_warm_start else "Cold Boot"
+
+        print('\n' + '─' * 71, flush=True)
+        print('🏛️  Architecture Oracle Initialized', flush=True)
+        print(f'    Boot Mode     │ {boot_type}', flush=True)
+        print(f'    Snapshots     │ {_s_count}', flush=True)
+        print(f'    Eras          │ {_b_count} Structural Eras', flush=True)
+        print(f'    Commits       │ {_c_count}', flush=True)
+        print(f'    Ledger Sync   │ SQLite WAL active ({db_path})', flush=True)
+        print('─' * 71 + '\n', flush=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception:
+        pass
+
+def print_architecture_event(state, repo_label=None, db_path=None):
+    if not getattr(state, 'available', True):
+        print('─' * 71, flush=True)
+        print('🏗️  Architecture unavailable', flush=True)
+        return
+    if not (getattr(state, 'established', False) or getattr(state, 'advanced', False)): return
+    
+    raw_shape = getattr(state, 'change_shape', '')
+    meta = get_shape_metadata(raw_shape)
+    cause = meta.get('label', raw_shape or 'unknown')
+    icon = meta.get('icon', '🕰️')
+    title = '📍 Current Architecture Head' if not getattr(state, 'advanced', False) else f'{icon}  Architecture Boundary (Gen {getattr(state, "gen", "?")})'
+    
+    print('\n' + '─' * 71, flush=True)
+    print(title, flush=True)
+    print(f'    Cause      │ {cause}', flush=True)
+    print(f'    Mode       │ {getattr(state, "mode", "programmatic")}', flush=True)
+    print('─' * 71 + '\n', flush=True)
+
+def print_final_pipeline_summary_report(repo_label: str, db_path: str, commits_with_ids: list = None) -> None:
     global _ACTUAL_WARNINGS
     import sqlite3
     db = Path(db_path) if db_path else Path((glob.glob(f"data/*/{repo_label}") + [f"data/local/{repo_label}"])[0]) / "db" / f"{repo_label}.db"
     try:
         db.parent.mkdir(parents=True, exist_ok=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
     if not db.exists(): return
+
+    try:
+        from backend.services.db.reader import read_scan_range, read_vacuums
+        scan = read_scan_range(repo_label)
+        vacuums = read_vacuums(repo_label)
+        
+        print('─' * 71, flush=True)
+        run_head = commits_with_ids[0][0] if commits_with_ids and len(commits_with_ids) > 0 else 0
+        run_tail = commits_with_ids[-1][0] if commits_with_ids and len(commits_with_ids) > 0 else 0
+        
+        with sqlite3.connect(str(db)) as _c:
+            _t_exists = _c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone()
+            _r_row = _c.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _t_exists else None
+            _run_id = _r_row[0] if _r_row else -1
+            b_count = _c.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _t_exists else 0
+            
+        print(f"    Commits       │ processed (#{run_head} to #{run_tail})", flush=True)
+        print(f"    Boundaries    │ {b_count} structural era triggers", flush=True)
+        if vacuums:
+            total_vac = sum(v.get("commit_count", 0) for v in vacuums)
+            print(f"    Vacuums       │ {total_vac} unscanned", flush=True)
+        print('─' * 71 + '\n', flush=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception:
+        pass
 
     try:
         with sqlite3.connect(str(db)) as conn:

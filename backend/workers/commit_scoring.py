@@ -79,6 +79,8 @@ def process_commit_scoring(work_item, rate_limits, aimd):
                 "success": True
             }
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             err_str = str(e)
             aimd.release(success=False)

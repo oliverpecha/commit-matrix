@@ -84,6 +84,8 @@ def derive_repo_display(repo_path: Path, repo_label: str) -> str:
             )
             if match:
                 return f"{match.group(1)}/{match.group(2)}"
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
     return f"local/{repo_label}"
@@ -94,6 +96,8 @@ def _load_snapshot_meta(snap: Path) -> dict:
     if sidecar.exists():
         try:
             return json.loads(sidecar.read_text(encoding="utf-8"))
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
     return {}
@@ -238,6 +242,8 @@ def _load_used_by_map(repo_label: str) -> tuple[dict[str, list[dict]], dict[str,
                 }
                 ledger_rows.append(row_data)
                 used_by.setdefault(sig, []).append(row_data)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         return {}, {}, []
 
@@ -336,6 +342,8 @@ def build_history_report(repo_label: str | None = None, debug: bool | None = Non
             raw = meta_path.read_text(encoding="utf-8").strip()
             if raw:
                 current_meta = json.loads(raw)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             current_meta = {}
 

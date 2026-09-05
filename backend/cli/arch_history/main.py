@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 import subprocess
 try:
     subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', '*'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except (KeyboardInterrupt, SystemExit):
+    raise
 except Exception:
     pass
 

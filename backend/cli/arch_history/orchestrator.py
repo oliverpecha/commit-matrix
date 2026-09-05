@@ -205,6 +205,8 @@ def _load_snapshot_sidecar(snapshot_sig: str) -> dict:
         all_meta = load_all_snapshot_meta(HOST_REPO_NAME)
         prefix = snapshot_sig[:16]
         return all_meta.get(prefix, {})
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         return {}
 
@@ -501,6 +503,8 @@ def load_history_report_from_db(repo_path: str, db_path: str | None = None):
                 _matches = glob.glob(f"data/*/blueprints/*{sig[:7]}*.json")
                 if _matches:
                     _size = _pl.Path(_matches[0]).stat().st_size
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception:
                 pass
 

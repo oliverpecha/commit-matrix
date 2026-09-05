@@ -152,6 +152,8 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
                         yield "💥 CONTAINER EXITED IMMEDIATELY. NO LOGS FOUND.\n"
                     yield failure_eof("EARLY_CRASH")
                     return
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception as ex:
                 yield stream_exception_message(ex)
                 return
@@ -175,6 +177,8 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
 
                 if inspect_returncode != 0 or "No such object" in exit_code:
                     yield cleanup_race_success_eof()
+                elif str(exit_code) in ("130", "137", "143"):
+                    yield "\n🛑 Scan gracefully halted by user.\n[__MATRIX_EOF_FAIL__]"
                 elif exit_code == "0":
                     from backend.services.ledger_reader import _CACHE
                     cache_key = f"{repo}_{rubric}"
@@ -184,6 +188,8 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
                 else:
                     yield failure_eof(exit_code)
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as ex:
             yield stream_exception_message(ex)
         finally:

@@ -1,4 +1,5 @@
 #!/bin/bash
+trap 'echo ""; echo "🛑 CommitMatrix engine gracefully halted."; exit 130' INT
 set -e
 if [ ! -f .env ]; then echo "❌ Error: .env file missing."; exit 1; fi
 
@@ -106,7 +107,14 @@ if [ $? -eq 0 ]; then
     echo "   Server: http://$SERVER_IP:8000/?repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
     echo "==========================================================================="
 else
-    echo "❌ Error: The CommitMatrix engine failed to parse the commit."
+    _CMD_EXIT=${EXIT_CODE:-$?}
+    if [ "$_CMD_EXIT" = "130" ] || [ "$_CMD_EXIT" = "137" ] || [ "$_CMD_EXIT" = "143" ]; then
+        echo "🛑 CommitMatrix engine gracefully halted."
+    elif [ "$_CMD_EXIT" = "1" ]; then
+        echo "🛑 CommitMatrix engine halted (Interrupted by Dashboard UI)."
+    else
+        echo "❌ Error: The CommitMatrix engine failed unexpectedly. (Exit Code: $_CMD_EXIT)"
+    fi
     exit 1
 fi
 WRAPPER

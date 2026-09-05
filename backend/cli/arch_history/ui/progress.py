@@ -38,6 +38,8 @@ def _fmt_date_short(iso_date):
         from datetime import datetime
         dt = datetime.strptime(iso_date[:10], "%Y-%m-%d")
         return dt.strftime("%b %d")
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         return ""
 

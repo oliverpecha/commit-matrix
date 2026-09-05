@@ -72,12 +72,16 @@ def _resolve_shape(sig: str, current_shape: str | None) -> str:
                 meta = get_shape_metadata(res[1] or res[0] or "")
                 if meta and meta.get("icon") and meta.get("icon") != "•":
                     return f"{meta.get('icon')} {meta.get('label', shape_label)}"
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception:
                 pass
             return shape_label
             
     except sqlite3.OperationalError as e:
         logger.warning(f"[Telemetry Congestion Warning] Shape lookup dropped due to lock: {e}")
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         logger.error(f"[Telemetry Exception] Unexpected error resolving shape: {e}")
         
@@ -286,6 +290,8 @@ def process_commit(
             )
             return topo_id, (headers, row, hash_short, ui_block)
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             err_str = str(e)
             aimd.release(success=False)

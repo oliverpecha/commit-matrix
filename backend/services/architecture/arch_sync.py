@@ -37,6 +37,8 @@ def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
                         print(f"\n🔄 Incremental sync needed: DB head is #{max_db_topo}, Git head is #{max_git_topo}. Processing delta...", flush=True)
             else:
                 conn.close()
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
             
@@ -133,6 +135,8 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
                 print("─" * 71 + "\n", flush=True)
                 
         _ORACLE_READY_EVENT.set()
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         _ORACLE_READY_EVENT.set()
         print(f"❌ FATAL [arch_sync]: Oracle bootstrap failed: {e}", file=sys.stderr)

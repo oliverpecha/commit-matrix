@@ -5,7 +5,7 @@ import { contextKey } from "../core/state.js?v=0.7.75";
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
 
-hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
+hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
     if (window.CM_SCAN_IN_FLIGHT) return;
     window.CM_SCAN_IN_FLIGHT = true;
     if (window.setTableStreamMode) {
@@ -19,13 +19,15 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
 
     const myContext = contextKey(repoName, rubricName);
     window.CM_SCAN_CONTEXT = myContext;
+    window.CM_SCAN_MODE = mode || "docker";
 
     const abortCtrl = new AbortController();
     window.CM_SCAN_ABORT = abortCtrl;
     window.CM_ENGINE_CONTROLLABLE = false;
 
     try {
-        const response = await fetch(`/api/scan?owner=${encodeURIComponent(ownerName)}&repo=${encodeURIComponent(repoName)}&rubric=${encodeURIComponent(rubricName)}&token=${encodeURIComponent(authToken)}`, {
+        const endpoint = mode === "native" ? "/api/engine/tail" : "/api/scan";
+        const response = await fetch(`${endpoint}?owner=${encodeURIComponent(ownerName)}&repo=${encodeURIComponent(repoName)}&rubric=${encodeURIComponent(rubricName)}&token=${encodeURIComponent(authToken)}`, {
             method: "POST",
             signal: abortCtrl.signal
         });
@@ -77,17 +79,30 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token } = {}) => {
                 hub.emit("DATA:FIRST_CHUNK_RECEIVED");
             }
 
-            if (!window.CM_ENGINE_CONTROLLABLE && (chunk.includes("🐳 ENGINE INITIALIZED CONTAINER") || chunk.includes("🐳 ACTIVE CONTAINER DETECTED"))) {
-                window.CM_ENGINE_CONTROLLABLE = true;
-                
-                // Directly target the action buttons regardless of wrapper structure
+            window.cmSyncEngineUI = function() {
+                if (!window.CM_ENGINE_CONTROLLABLE) return;
                 const pauseBtn = document.getElementById('cm-btn-pause');
-                if (pauseBtn) {
-                    pauseBtn.style.display = 'block';
-                    pauseBtn.style.opacity = '1';
-                    pauseBtn.style.pointerEvents = 'auto';
+                const playBtn = document.getElementById('cm-btn-play');
+                const stat = document.getElementById('cm-terminal-status');
+                const isPaused = stat && stat.innerText.includes("PAUSED");
+                
+                if (window.CM_SCAN_MODE !== 'native') {
+                    if (!isPaused) {
+                        if (pauseBtn) { pauseBtn.style.display = 'block'; pauseBtn.style.opacity = '1'; pauseBtn.style.pointerEvents = 'auto'; }
+                        if (playBtn) playBtn.style.display = 'none';
+                    }
+                } else {
+                    if (pauseBtn) pauseBtn.style.display = 'none';
+                    if (playBtn) playBtn.style.display = 'none';
                 }
+            };
+
+            const isEngineStart = chunk.includes("🐳 ENGINE INITIALIZED") || chunk.includes("🐳 ACTIVE CONTAINER") || chunk.includes("PIPELINE ENGINE INITIALIZED");
+            if (!window.CM_ENGINE_CONTROLLABLE && isEngineStart) {
+                window.CM_ENGINE_CONTROLLABLE = true;
+                window.cmSyncEngineUI();
             }
+
 
             if (chunk.includes("Queued for ledger flush")) {
                 if (window.triggerSilentRefresh) {
@@ -179,3 +194,7 @@ window.cmToggleEngine = async function(action) {
         return null;
     }
 };
+
+hub.on("DATA:LEDGER_UPDATED", () => {
+    if (window.cmSyncEngineUI) setTimeout(window.cmSyncEngineUI, 100);
+});

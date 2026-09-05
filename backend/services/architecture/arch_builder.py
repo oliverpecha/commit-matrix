@@ -106,6 +106,8 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
                     "mode": "stub-valid"
                 }
             }
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
 
@@ -134,6 +136,8 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
                 repo_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_path, stderr=subprocess.DEVNULL).decode().strip()
                 commit_full = subprocess.check_output(["git", "rev-parse", commit_sha], cwd=repo_path, stderr=subprocess.DEVNULL).decode().strip()
                 is_true_head = (repo_head == commit_full)
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception:
                 pass
 
@@ -149,12 +153,16 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
         try:
             from backend.services.architecture.taxonomy import get_boundary_cause_label, normalize_cause_tag
             meta["change_summary"]["change_shape_label"] = get_boundary_cause_label(normalize_cause_tag(shape))
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
             
         try:
             import json as _json
             meta_path.write_text(_json.dumps(meta, indent=2), encoding="utf-8")
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
 
@@ -164,8 +172,12 @@ def generate_architecture_blueprint(repo_path: str, tree_sig: str, commit_sha: s
         try:
             from backend.services.db.writer import write_snapshot_meta
             write_snapshot_meta(repo_path, tree_sig, meta)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
 
@@ -206,6 +218,8 @@ def build_arch_gen_trail(versions_dir: Path, current_gen: int | None, max_entrie
                 gen_ver = m.get("generator_version", "")
                 mode = (m.get("change_summary") or {}).get("mode", "")
                 gen_at = (m.get("generated_at") or "")[:10]
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception:
                 pass
 

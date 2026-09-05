@@ -84,6 +84,8 @@ def save_blueprint_and_meta(
             snapshot_path = versions_dir / f"arch_snapshot-{sig_prefix}.md"
             if not snapshot_path.exists():
                 snapshot_path.write_text(content, encoding="utf-8")
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         import os
         if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):

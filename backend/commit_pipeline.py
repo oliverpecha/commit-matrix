@@ -87,6 +87,8 @@ def main():
     if not repo_label:
         try:
             repo_label = os.path.basename(repo_path.rstrip("/"))
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             repo_label = "commit-matrix"
 
@@ -120,6 +122,8 @@ def main():
     db_path = f"data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{repo_label}/db/{repo_label}.db"
     try:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
     
@@ -152,33 +156,13 @@ def main():
                     _b_count = _b_conn.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 else 0
                     if _b_count > 0:
                         print("\n[arch-oracle] ♨️  Warm start detected. Linking to existing ledger...", flush=True)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
 
-    # Un-gated: Display Architecture Boundary Map during standard execution
-    import sqlite3 as _summary_sq
-    try:
-        with get_db_connection(db_path) as _conn_b:
-            _rubric = os.environ.get("RUBRIC_NAME", "unknown")
-            _r_row = _conn_b.execute("SELECT run_id FROM architecture_runs WHERE repo_label = ?", (repo_label,)).fetchone() if _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_runs'").fetchone() else None
-            _run_id = _r_row[0] if _r_row else -1
-            
-            _s_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_snapshots WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_snapshots'").fetchone() else 0
-            _b_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_boundaries WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_boundaries'").fetchone() else 0
-            _c_count = _conn_b.execute("SELECT COUNT(*) FROM architecture_commits WHERE run_id = ?", (_run_id,)).fetchone()[0] if _run_id != -1 and _conn_b.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='architecture_commits'").fetchone() else 0
-
-        boot_type = "Ledger Linked (Warm Boot)" if is_genuine_warm_start else "Cold Boot"
-
-        print('\n' + '─' * 71, flush=True)
-        print('🏛️  Architecture Oracle Initialized', flush=True)
-        print(f'    Boot Mode     │ {boot_type}', flush=True)
-        print(f'    Snapshots     │ {_s_count}', flush=True)
-        print(f'    Eras          │ {_b_count} Structural Eras', flush=True)
-        print(f'    Commits       │ {_c_count}', flush=True)
-        print(f'    Ledger Sync   │ SQLite WAL active ({db_path})', flush=True)
-        print('─' * 71 + '\n', flush=True)
-    except Exception:
-        pass
+    # Display Architecture Boundary Map during standard execution
+    print_oracle_initialization(repo_label, db_path, is_genuine_warm_start)
 
     print(flush=True)
     print_debug_boundary_table(repo_label, db_path)
@@ -255,6 +239,8 @@ def main():
         try:
             from backend.services.db.reader import get_structural_boundaries_for_stream
             boundary_schedule = get_structural_boundaries_for_stream(repo_label, db_path)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             boundary_schedule = {}
 
@@ -333,10 +319,14 @@ def main():
                                 banner = render_boundary_banner(boundary_schedule[res_topo], curr_sig or "pending")
                                 if banner:
                                     print("\n" + banner, end="", flush=True)
+                            except (KeyboardInterrupt, SystemExit):
+                                raise
                             except Exception:
                                 pass
 
                         _conn.close()
+                    except (KeyboardInterrupt, SystemExit):
+                        raise
                     except Exception:
                         pass
                 

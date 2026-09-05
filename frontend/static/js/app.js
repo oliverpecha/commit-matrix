@@ -1,4 +1,4 @@
-// v0.1.15
+// v0.1.17
 import { hub } from "./core/eventHub.js?v=0.7.75";
 import "./core/appStateCtrl.js?v=0.7.75";
 import "./engine/repoManager.js?v=0.7.75";
@@ -171,14 +171,15 @@ window.addEventListener('load', async () => {
 
     attemptRender();
     if (repo) {
-        let url = `/api/engine/status?owner=${typeof owner !== "undefined" ? owner : (window.MATRIX_OWNER || "local")}&repo=${repo}`;
+        const currentOwner = new URLSearchParams(window.location.search).get('owner') || (typeof owner !== "undefined" ? owner : window.MATRIX_OWNER || "local");
+        let url = `/api/engine/status?owner=${currentOwner}&repo=${repo}`;
         if (urlParams.get('rubric')) url += `&rubric=${urlParams.get('rubric')}`;
         try {
             const res = await fetch(url);
             const data = await res.json();
             if (data.running && window.hub) {
-                console.log("Found running scan, auto-attaching...");
-                window.hub.emit("ENGINE:SCAN_REQUESTED", { repo: repo, rubric: urlParams.get("rubric") });
+                console.log(`[Auto-Attach] Found active ${data.mode || "docker"} run for ${currentOwner}/${repo}. Attaching...`);
+                window.hub.emit("ENGINE:SCAN_REQUESTED", { repo: repo, rubric: urlParams.get("rubric"), owner: currentOwner, mode: data.mode });
             }
         } catch (e) {}
     }

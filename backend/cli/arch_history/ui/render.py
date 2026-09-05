@@ -41,6 +41,8 @@ def render_summary(report: HistoryReport) -> None:
             _v_total = sum(v["commit_count"] for v in _vacs)
             _v_ranges = ", ".join(f"#{v['vacuum_start_topo']}-#{v['vacuum_end_topo']}" for v in _vacs)
             print(f"   ⚠️  Vacuums       {len(_vacs):<3}  ({_v_total} commits: {_v_ranges})")
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
     print()

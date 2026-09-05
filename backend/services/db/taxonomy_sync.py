@@ -21,6 +21,8 @@ def sync_taxonomy(conn) -> None:
                 "VALUES (?, ?, ?, ?)",
                 (canon_key, label, magnitude, family),
             )
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         # Force a loud exit on stderr since background futures swallow exceptions natively
         print(f"\n[arch-oracle] ❌ FATAL ERROR in sync_taxonomy: {e}", file=sys.stderr, flush=True)

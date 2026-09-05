@@ -6,6 +6,8 @@ def resolve_future_result(future, commit_i, timeout=120):
     try:
         result_i, result = future.result(timeout=timeout)
         log_msg = None
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         log_msg = f"⚠️ Worker failed on commit {commit_i}: {e}"
         result_i, result = commit_i, None

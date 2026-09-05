@@ -119,6 +119,8 @@ def select_files_for_blueprint(repo_path: str) -> list[str]:
     try:
         from backend.services.pipeline.pipeline_config import MATRIX_ARCH_MAX_FILES  # type: ignore
         max_files = max(1, int(MATRIX_ARCH_MAX_FILES))
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         max_files = 8
     selected = candidates[:max_files]
@@ -177,6 +179,8 @@ def select_files_for_blueprint_at_commit(repo_path: str, commit_sha: str) -> lis
     try:
         from backend.services.pipeline.pipeline_config import MATRIX_ARCH_MAX_FILES  # type: ignore
         max_files = max(1, int(MATRIX_ARCH_MAX_FILES))
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         max_files = 8
     return selected[:max_files]
@@ -244,6 +248,8 @@ def git_most_changed_files(repo_path: str, top_n: int = 10) -> list[tuple[int, s
         preferred = {p: c for p, c in filtered.items() if Path(p).suffix.lower() in code_exts}
         source = preferred if preferred else filtered
         return [(count, path) for path, count in sorted(source.items(), key=lambda x: x[1], reverse=True)[:top_n]]
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         return []
 def call_model_with_retry_stub(context: dict) -> tuple[str, int]:
@@ -284,6 +290,8 @@ def call_model_with_retry_stub(context: dict) -> tuple[str, int]:
                 if p.is_file() and not any(part.startswith(".") for part in p.parts):
                     ext = p.suffix.lower() or "[no ext]"
                     ext_counts[ext] = ext_counts.get(ext, 0) + 1
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
     lines.append("## Language / File Type Breakdown")

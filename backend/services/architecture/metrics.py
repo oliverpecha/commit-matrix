@@ -283,5 +283,7 @@ def compute_generation_summaries(repo_label: str, db_path: str):
         
         conn.close()
         return summaries
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         return []  # Graceful degradation

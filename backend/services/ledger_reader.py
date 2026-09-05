@@ -39,6 +39,8 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
                 def s_int(k, d=0):
                     try:
                         return int(str(r.get(k, d)).replace("+", "").replace("-", "").strip())
+                    except (KeyboardInterrupt, SystemExit):
+                        raise
                     except Exception:
                         return d
                 n_val = r.get("#") or r.get("n")
@@ -61,6 +63,8 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
                     "lines_deleted": s_int("Deletions", 0),
                     "h": r.get("Hash", "")
                 })
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         print(f"LEDGER FETCH ERROR: {e}", flush=True)
     return out

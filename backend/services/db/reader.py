@@ -200,6 +200,8 @@ def get_structural_boundaries_for_stream(repo_label: str, db_path: str = None) -
         db_path = str(Path((glob.glob(f"data/*/{repo_label}") )[0]) / "db" / f"{repo_label}.db")
         try:
             __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception:
             pass
         
@@ -229,6 +231,8 @@ def get_structural_boundaries_for_stream(repo_label: str, db_path: str = None) -
                     "gen_id": gen_id
                 }
                 gen_id += 1
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         import os
         if str(os.environ.get("MATRIX_DEBUG", "false")).lower() in ("1", "true", "yes"):

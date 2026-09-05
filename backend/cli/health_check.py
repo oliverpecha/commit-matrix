@@ -18,6 +18,8 @@ def run_health_check(repo_label: str) -> int:
     db_path = f"data/{(os.environ.get(\'HOST_REPO_OWNER\') or \'local\')}/{repo_label}/db/{repo_label}.db"
     try:
         __import__("os").makedirs(__import__("os").path.dirname(db_path), exist_ok=True)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception:
         pass
 
@@ -45,6 +47,8 @@ def run_health_check(repo_label: str) -> int:
     try:
         update_scan_range(repo_label, scan_head, scan_tail)
         detect_and_record_vacuums(repo_label, scan_head, scan_tail)
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except Exception as e:
         print(f"[health_check] coverage persistence failed: {e}", file=sys.stderr)
         return 1
