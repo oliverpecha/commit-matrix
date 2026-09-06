@@ -199,11 +199,11 @@ async def stream_scan(request: Request, repo: str = "commit-matrix", rubric: str
                 import asyncio, os
                 await asyncio.sleep(0.5)
                 if not is_container_running(repo, rubric, owner):
-                    crash_log_path = f"data/{repo}_last_crash.log"
-                    if os.path.exists(crash_log_path):
-                        with open(crash_log_path, "r") as crash_file:
-                            yield f"💥 CONTAINER CRASHED BEFORE ATTACH. LAST LOGS:\n{crash_file.read()}\n"
-                    else:
+                    try:
+                        import subprocess
+                        crash_logs = subprocess.check_output(['docker', 'logs', container_id], stderr=subprocess.STDOUT, timeout=3).decode(errors='ignore')
+                        yield f"💥 CONTAINER CRASHED BEFORE ATTACH. LAST LOGS:\n{crash_logs}\n"
+                    except Exception:
                         yield "💥 CONTAINER EXITED IMMEDIATELY. NO LOGS FOUND.\n"
                     yield failure_eof("EARLY_CRASH")
                     return

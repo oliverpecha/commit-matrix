@@ -128,7 +128,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, owner: str = None, container_n
         "-e", f"RUBRIC_NAME={rubric}",
         "-e", f"HOST_REPO_PATH={target_volume}",
         "commit-matrix-core:latest",
-        "sh", "-c", f"timeout 3600 python -u /app/backend/commit_pipeline.py --repo /target_repo 2>&1 | tee /app/data/{repo}_last_crash.log"
+        "sh", "-c", "timeout 3600 python -u /app/backend/commit_pipeline.py --repo /target_repo"
     ]
 
 
