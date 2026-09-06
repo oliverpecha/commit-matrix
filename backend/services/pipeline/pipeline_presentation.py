@@ -1,5 +1,5 @@
 from __future__ import annotations
-__version__ = '0.1.9'
+__version__ = '0.1.28'
 
 _ACTUAL_WARNINGS = 0
 import os
@@ -42,8 +42,9 @@ def print_throttled_progress(current: int, total: int, last_pct: int, prefix: st
         width = 40
         filled = int((width * current) / total)
         bar = "█" * filled + "░" * (width - filled)
-        if last_pct == -1: sys.stdout.write("\n")
-        sys.stdout.write(f"\033[1A\r{prefix} [{bar}] {pct}% ({current}/{total} commits)\033[K\n")
+        sys.stdout.write(f"\r{prefix} [{bar}] {pct}% ({current}/{total} commits)\033[K")
+        if current >= total:
+            sys.stdout.write("\n")
         sys.stdout.flush()
         return pct
     return last_pct
@@ -335,6 +336,9 @@ def render_bootstrap_banner(repo_path, repo_label, log_path=None):
     # Check both potential environment keys used across local layouts
     model_name = os.environ.get("MATRIX_MODEL", os.environ.get("MATRIX_MODEL_NAME", "gemini/gemini-2.5-flash-lite"))
     
+    if is_random:
+        model_name = "🔀 N/A (Bypassed)"
+    git_workspace = "Ephemeral Cloud Clone (Native UID)" if is_browser else "Local Mount (safe.directory enforced)"
     is_debug = str(os.environ.get("MATRIX_DEBUG", "false")).strip().lower() in ("1", "true", "yes", "on")
     debug_status = "🐞 ACTIVE (VERBOSE)" if is_debug else "⚪ DISABLED"
     
@@ -344,17 +348,22 @@ def render_bootstrap_banner(repo_path, repo_label, log_path=None):
     try: container_id = socket.gethostname()
     except: container_id = "unknown"
 
+    owner = os.environ.get("HOST_REPO_OWNER", "local")
+    rubric = os.environ.get("RUBRIC_NAME", "unknown")
     banner = [
         "═" * 71,
         "🚀 COMMIT-MATRIX PIPELINE ENGINE INITIALIZED",
-        f"   Target Repository │ {repo_label}",
+        "─" * 71,
+        f"   Git Workspace     │ {git_workspace}",
         f"   Trigger Context   │ {context_str}",
         f"   Execution Mode    │ {mode_str}",
         f"   Primary Model     │ {model_name}",
         f"   Debug Telemetry   │ {debug_status}",
         f"   Stress Test Mode  │ {stress_status}",
         f"   Max Worker Units  │ {workers}",
-        f"   Container         │ '{container_id}'"
+        f"   Container         │ '{container_id}'",
+        f"   Target Repository │ {owner}/{repo_label}",
+        f"   Rubric            │ {rubric}"
     ]
     if log_path:
         banner.append(f"   Persistent Log    │ {log_path}")

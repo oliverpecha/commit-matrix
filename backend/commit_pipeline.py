@@ -260,6 +260,7 @@ def main():
         work_item_iter_ref = iter(_prepped_items)
         active_futures = {}
 
+        print("\n📈 Asynchronous scoring engine starting up [████████████████████████████████████████] 100%\n", flush=True)
         active_futures, processed_count = seed_initial_batch(
             executor, work_item_iter_ref, MAX_WORKERS, total_unscanned, processed_count,
             "", MODEL_NAME, RUBRIC_PATH, rate_limits, aimd, arch_tree_signature=None, arch_gen=None,
@@ -306,7 +307,7 @@ def main():
                     _m = re.search(r'Scored ([a-f0-9]{7,40})', log_msg)
                     if _m: _sha = _m.group(1)[:7]
                     
-                print(f"⚙️  Commit #{topo_id} - {_sha} scored asynchronously -> Queued for ledger flush...", flush=True)
+                print(f"⚙️  Commit #{topo_id} - {_sha} scored -> Queued for ledger flush...", flush=True)
                 replenish_one(executor, work_item_iter_ref, active_futures, rate_limits, aimd)
 
             file_exists, ready_outputs = flush_ready_results(
