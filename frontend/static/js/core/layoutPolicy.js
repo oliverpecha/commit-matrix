@@ -1,4 +1,4 @@
-import { APP_STATES, LAYOUTS } from "./state.js?v=0.1.30";
+import { APP_STATES, LAYOUTS } from "./state.js?v=0.1.57";
 
 export function getLedgerCount() {
     return Array.isArray(window.MATRIX_CHART_PAYLOAD) ? window.MATRIX_CHART_PAYLOAD.length : (Array.isArray(window.MATRIX_PAYLOAD) ? window.MATRIX_PAYLOAD.length : 0);

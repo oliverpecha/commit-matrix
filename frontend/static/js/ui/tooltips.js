@@ -1,4 +1,4 @@
-import { BEO_EXPLANATIONS } from '../core/constants.js?v=0.1.30';
+import { BEO_EXPLANATIONS } from '../core/constants.js?v=0.1.57';
 
 export function initGlobalTooltips() {
     const infoTtEl = document.getElementById('info-tt');

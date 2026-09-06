@@ -1,5 +1,5 @@
 #!/bin/bash
-trap 'echo ""; echo "🛑 CommitMatrix engine gracefully halted."; exit 130' INT
+trap 'printf "[r"; echo ""; echo "🛑 CommitMatrix engine gracefully halted."; exit 130' EXIT INT TERM
 set -e
 if [ ! -f .env ]; then echo "❌ Error: .env file missing."; exit 1; fi
 
@@ -7,13 +7,14 @@ source .env
 APP_VERSION=$(cat /root/commit-matrix/VERSION 2>/dev/null || echo "0.1.20")
 
 echo "🐳 Building Docker environment..."
-docker compose build --quiet && docker compose down || true
+docker compose build --no-cache --quiet --no-cache && docker compose down || true
 docker compose up -d
 
 # --- 1. ENGINE COMMAND ---
 cat << 'WRAPPER' > /tmp/commit-matrix
 #!/bin/bash
 set -o pipefail
+
 TARGET_REPO=$(cd "${1:-.}" && pwd)
 
 if [[ "$1" == "--help" || "$1" == "-h" ]]; then
@@ -82,12 +83,25 @@ HOST_REPO_NAME=$(basename "$TARGET_REPO")
 HOST_REPO_OWNER=$(cd "$TARGET_REPO" && git config --get remote.origin.url 2>/dev/null | python3 -c 'import sys,re; u=sys.stdin.read().strip(); u=re.sub(r"\.git$","",u); u=re.sub(r"^.*?://","",u); u=re.sub(r"^.*?@","",u); p=re.split(r"[:/]",u); print(p[-2] if len(p)>=2 and not p[-2].isdigit() else (p[-3] if len(p)>=3 else "local"))' 2>/dev/null)
 [ -z "$HOST_REPO_OWNER" ] && HOST_REPO_OWNER="local"
 
-echo "==========================================================================="
-echo " 🧬 MATRIX ENGINE: Analyzing [$HOST_REPO_NAME]"
-echo "==========================================================================="
+SERVER_IP=$(hostname -I | awk '{print $1}')
+if [ -z "$SERVER_IP" ]; then SERVER_IP="localhost"; fi
+source /root/commit-matrix/.env 2>/dev/null || true
 
+# --- FIXED HEADER MAGIC ---
+
+# --------------------------
 mkdir -p "/root/commit-matrix/data/$HOST_REPO_OWNER/$HOST_REPO_NAME/pipeline_runs"
-docker run --rm \
+LOG_DIR="/root/commit-matrix/data/$HOST_REPO_OWNER/$HOST_REPO_NAME/pipeline_runs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/run_$(date -u +%Y%m%d_%H%M%S)_UTC.log"
+
+S_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [ -z "$S_IP" ]; then S_IP="localhost"; fi
+export SERVER_IP=$S_IP
+
+C_NAME="commit-matrix-core-$$-$RANDOM"
+
+docker run --rm --name "$C_NAME" \
   -v "$TARGET_REPO:/$HOST_REPO_NAME" \
   -v "/root/commit-matrix/data:/app/data" \
   -v "/root/commit-matrix/rubrics:/app/rubrics" \
@@ -96,71 +110,57 @@ docker run --rm \
   -e HOST_REPO_OWNER="$HOST_REPO_OWNER" \
   -e EXEC_MODE="native" \
   commit-matrix-core:latest \
-  python -u -m backend.commit_pipeline --repo "/$HOST_REPO_NAME" 2>&1 | tee "/root/commit-matrix/data/$HOST_REPO_OWNER/$HOST_REPO_NAME/pipeline_runs/run_$(date -u +\%Y%m%d_\%H%M%S)_UTC.log" 
+  python -u -m backend.commit_pipeline --repo "/$HOST_REPO_NAME" 2>&1 \
+  | python3 /root/commit-matrix/backend/services/pipeline/stream_filter.py "$LOG_FILE" &
+FILTER_PID=$!
 
-if [ $? -eq 0 ]; then
-    SERVER_IP=$(hostname -I | awk '{print $1}')
-    if [ -z "$SERVER_IP" ]; then SERVER_IP="localhost"; fi
-
-    echo "🤝 Telemetry synchronized."
-    echo "📊 View Dashboard:"
-    echo "   Local:  http://localhost:8000/?repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
-    echo "   Server: http://$SERVER_IP:8000/?repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
-    echo "==========================================================================="
-else
-    _CMD_EXIT=${EXIT_CODE:-$?}
-    if [ "$_CMD_EXIT" = "130" ] || [ "$_CMD_EXIT" = "137" ] || [ "$_CMD_EXIT" = "143" ]; then
-        echo "🛑 CommitMatrix engine gracefully halted."
-    elif [ "$_CMD_EXIT" = "1" ]; then
-        echo "🛑 CommitMatrix engine halted (Interrupted by Dashboard UI)."
-    else
-        echo "❌ Error: The CommitMatrix engine failed unexpectedly. (Exit Code: $_CMD_EXIT)"
-    fi
-    exit 1
+if [ -t 0 ]; then
+    while kill -0 "$FILTER_PID" 2>/dev/null; do
+        if read -r -t 1 -n 1 key; then
+            case "$key" in
+                "")
+                    kill -USR1 "$FILTER_PID" 2>/dev/null
+                    wait "$FILTER_PID" 2>/dev/null
+                    break
+                    ;;
+                q|Q)
+                    echo -e "\n🛑 Stopping engine at your request...\n"
+                    # Gracefully stop the docker container so analysis halts immediately
+                    docker stop -t 2 "$C_NAME" >/dev/null 2>&1 || docker kill "$C_NAME" >/dev/null 2>&1
+                    kill -INT "$FILTER_PID" 2>/dev/null
+                    wait "$FILTER_PID" 2>/dev/null
+                    
+                    SCORED_COUNT=$(grep -c "scored -> Queued" "$LOG_FILE" 2>/dev/null || echo 0)
+                    
+                    # Ensure .env is loaded to resolve dashboard tokens in the bash context
+                    [ -f "/root/commit-matrix/.env" ] && source "/root/commit-matrix/.env"
+                    
+                    echo "⏸️  Stopped early. $SCORED_COUNT commit(s) were already scored and saved"
+                    echo -e "   to the ledger — nothing is lost.\n"
+                    echo "Visit the dashboard to see progress:"
+                    echo " 🏠 Local:  http://localhost:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
+                    echo " ☁️  Server: http://$SERVER_IP:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
+                    exit 130
+                    ;;
+            esac
+        fi
+    done
 fi
-WRAPPER
 
-# --- 2. CALIBRATION COMMAND ---
-cat << 'CALIBRATE_WRAPPER' > /tmp/calibrate-matrix
-#!/bin/bash
-cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matrix"; exit 1; }
+wait "$FILTER_PID" 2>/dev/null
+_CMD_EXIT=$?
 
-docker run --rm \
-  -v "$(pwd)/calibration:/app/calibration" \
-  -v "$(pwd)/rubrics:/app/rubrics" \
-  --env-file .env \
-  -e LITELLM_LOG=ERROR \
-  -e SUPPRESS_LITELLM_WARNINGS=True \
-  commit-matrix-core:latest \
-  python -u /app/calibration/calibrate.py "$@"
-CALIBRATE_WRAPPER
-
-# --- 3. ARCH HISTORY COMMAND ---
-cat << 'ARCH_WRAPPER' > /tmp/arch-history
-#!/bin/bash
-cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matrix"; exit 1; }
-PYTHONPATH=. python3 backend/cli/arch_history/main.py "$@"
-ARCH_WRAPPER
-
-
-# --- 4. HEALTH CHECK COMMAND ---
-cat << 'HEALTH_WRAPPER' > /tmp/matrix-health
-#!/bin/bash
-cd /root/commit-matrix || { echo "❌ Error: Could not locate /root/commit-matrix"; exit 1; }
-PYTHONPATH=. python3 backend/cli/health_check.py "$@"
-HEALTH_WRAPPER
-sed -i "s/\$MATRIX_TOKEN/$MATRIX_TOKEN/g" /tmp/commit-matrix
-sed -i "s/\$APP_VERSION/$APP_VERSION/g" /tmp/commit-matrix
-
-sudo mv /tmp/commit-matrix /usr/local/bin/commit-matrix
-sudo chmod +x /usr/local/bin/commit-matrix
-
-sudo mv /tmp/calibrate-matrix /usr/local/bin/calibrate-matrix
-sudo chmod +x /usr/local/bin/calibrate-matrix
-
-sudo mv /tmp/arch-history /usr/local/bin/arch-history
-sudo mv /tmp/matrix-health /usr/local/bin/matrix-health
-sudo chmod +x /usr/local/bin/matrix-health
-sudo chmod +x /usr/local/bin/arch-history
-
-echo "✅ Installation Complete! v$APP_VERSION is now active."
+if [ $_CMD_EXIT -eq 0 ]; then
+    echo -e "\n🤝 Telemetry synchronized. Pipeline finished."
+elif [ "$_CMD_EXIT" = "130" ] || [ "$_CMD_EXIT" = "137" ] || [ "$_CMD_EXIT" = "143" ]; then
+    echo -e "\n🛑 CommitMatrix engine gracefully halted."
+    SCORED_COUNT=$(grep -c "scored -> Queued" "$LOG_FILE" 2>/dev/null || echo 0)
+    [ -f "/root/commit-matrix/.env" ] && source "/root/commit-matrix/.env"
+    echo "⏸️  $SCORED_COUNT commit(s) were successfully scored and saved to the ledger."
+    echo "   Visit the dashboard to review the progress:"
+    echo " 🏠 Local:  http://localhost:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
+    echo " ☁️  Server: http://$SERVER_IP:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN
+elif [ "$_CMD_EXIT" != "0" ]; then
+    echo -e "\n❌ Error: The CommitMatrix engine failed unexpectedly. (Exit Code: $_CMD_EXIT)"
+fi
+exit $_CMD_EXIT
