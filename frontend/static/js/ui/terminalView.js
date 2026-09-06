@@ -1,6 +1,11 @@
 // v0.1.11
-import { hub } from "../core/eventHub.js?v=0.1.57";
-import { APP_STATES } from "../core/state.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { hub } from "../core/eventHub.js?v=0.1.59";
+import { APP_STATES } from "../core/state.js?v=0.1.59";
+=======
+import { hub } from "../core/eventHub.js?v=0.1.59";
+import { APP_STATES } from "../core/state.js?v=0.1.59";
+>>>>>>> Stashed changes
 import {
     getAppState,
     setAppState,
@@ -8,7 +13,11 @@ import {
     hasSeenLedger,
     initAppStateFromLedger,
 } from "../core/appStateCtrl.js";
-import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.59";
+=======
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.59";
+>>>>>>> Stashed changes
 import {
     renderShell,
     appendTerminalChunk,

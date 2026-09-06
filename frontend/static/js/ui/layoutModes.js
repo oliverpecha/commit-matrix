@@ -1,6 +1,12 @@
-import { LAYOUTS } from "../core/state.js?v=0.1.57";
-import { ensureSideLayoutSlots, getWrap } from "./layoutSlots.js?v=0.1.57";
-import { showZeroState, hideZeroState, showDashboard, hideDashboard } from "./layoutVisibility.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { LAYOUTS } from "../core/state.js?v=0.1.59";
+import { ensureSideLayoutSlots, getWrap } from "./layoutSlots.js?v=0.1.59";
+import { showZeroState, hideZeroState, showDashboard, hideDashboard } from "./layoutVisibility.js?v=0.1.59";
+=======
+import { LAYOUTS } from "../core/state.js?v=0.1.59";
+import { ensureSideLayoutSlots, getWrap } from "./layoutSlots.js?v=0.1.59";
+import { showZeroState, hideZeroState, showDashboard, hideDashboard } from "./layoutVisibility.js?v=0.1.59";
+>>>>>>> Stashed changes
 
 export function applyLayoutMode(layout) {
     const wrap = getWrap();

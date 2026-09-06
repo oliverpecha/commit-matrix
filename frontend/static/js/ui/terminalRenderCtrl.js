@@ -1,4 +1,8 @@
-import { renderTerminalShell } from "./terminalShell.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { renderTerminalShell } from "./terminalShell.js?v=0.1.59";
+=======
+import { renderTerminalShell } from "./terminalShell.js?v=0.1.59";
+>>>>>>> Stashed changes
 
 export function captureShellSnapshot() {
     return {

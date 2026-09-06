@@ -11,7 +11,6 @@ def wait_for_oracle_sync(*args, **kwargs):
     if not timeout and args:
         timeout = args[0]
     return _ORACLE_READY_EVENT.wait(timeout)
-    return _ORACLE_READY_EVENT.wait(timeout)
 
 def ensure_architecture_oracle(repo_path: str, db_path: str) -> None:
     db = Path(db_path)
@@ -76,13 +75,13 @@ def _build_oracle_sync(repo_path: str, db_path: str) -> None:
             else:
                 _conn.executescript(SCHEMA_SQL)
                 
-        commits_with_ids = [(t, c) for t, c in all_commits if int(t) > max_db_topo]
+        commits_with_ids = [(t, c) for t, c in all_commits if int(t) >= max_db_topo]
 
         if commits_with_ids:
             with sqlite3.connect(db_path) as _conn:
                 _conn.execute("PRAGMA journal_mode=WAL")
                 _conn.execute("UPDATE architecture_snapshots SET shape = 'leaf-only', shape_label = 'Stable Implementation Refinement' WHERE shape = 'head'")
-                _conn.execute("DELETE FROM architecture_boundaries WHERE cause_tag IN ('head', 'major:head', 'current architecture head', 'Stable Implementation Refinement', 'leaf-only') OR boundary_commit_topo_id = ?", (max_db_topo,))
+                _conn.execute("DELETE FROM architecture_boundaries WHERE cause_tag IN ('head', 'major:head', 'current architecture head', 'Stable Implementation Refinement', 'leaf-only')")
                 _conn.execute("UPDATE architecture_commits SET role = 'successive' WHERE topo_id = ?", (max_db_topo,))
                 _conn.commit()
 

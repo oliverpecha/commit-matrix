@@ -1,16 +1,31 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.57";
-import "./core/appStateCtrl.js?v=0.1.57";
-import "./engine/repoManager.js?v=0.1.57";
-import "./engine/telemetryStream.js?v=0.1.57";
-import "./engine/engineControl.js?v=0.1.57";
-import "./ui/terminalView.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { hub } from "./core/eventHub.js?v=0.1.59";
+import "./core/appStateCtrl.js?v=0.1.59";
+import "./engine/repoManager.js?v=0.1.59";
+import "./engine/telemetryStream.js?v=0.1.59";
+import "./engine/engineControl.js?v=0.1.59";
+import "./ui/terminalView.js?v=0.1.59";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.57';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.57';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.57';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.57';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.57';
+import { processCommits } from './core/dataEngine.js?v=0.1.59';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.59';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.59';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.59';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.59';
+=======
+import { hub } from "./core/eventHub.js?v=0.1.59";
+import "./core/appStateCtrl.js?v=0.1.59";
+import "./engine/repoManager.js?v=0.1.59";
+import "./engine/telemetryStream.js?v=0.1.59";
+import "./engine/engineControl.js?v=0.1.59";
+import "./ui/terminalView.js?v=0.1.59";
+
+import { processCommits } from './core/dataEngine.js?v=0.1.59';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.59';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.59';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.59';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.59';
+>>>>>>> Stashed changes
 
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");

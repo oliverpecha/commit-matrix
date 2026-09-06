@@ -1,4 +1,8 @@
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.59";
+=======
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.59";
+>>>>>>> Stashed changes
 document.addEventListener("DOMContentLoaded", function() {
     if (window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC || window.MATRIX_SYSTEM_EMPTY) {
         console.log("🤖 Auto-initialization halted: system empty or invalid repo/rubric.");

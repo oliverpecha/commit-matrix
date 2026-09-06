@@ -1,6 +1,12 @@
-import { APP_STATES } from "./state.js?v=0.1.57";
-import { applyLayout } from "../ui/layoutCtrl.js?v=0.1.57";
-import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.1.57";
+<<<<<<< Updated upstream
+import { APP_STATES } from "./state.js?v=0.1.59";
+import { applyLayout } from "../ui/layoutCtrl.js?v=0.1.59";
+import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.1.59";
+=======
+import { APP_STATES } from "./state.js?v=0.1.59";
+import { applyLayout } from "../ui/layoutCtrl.js?v=0.1.59";
+import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.1.59";
+>>>>>>> Stashed changes
 
 window.CM_APP_STATE = window.CM_APP_STATE || APP_STATES.ZERO;
 
