@@ -45,13 +45,27 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
                         return d
                 n_val = r.get("#") or r.get("n")
                 date_str = r.get("Date", "")
+                
+                s_val = r.get("Subject") or r.get("subject", "")
+                type_val = r.get("Type") or r.get("type")
+                scope_val = r.get("Scope") or r.get("scope", "")
+                
+                if type_val in (None, "", "commit"):
+                    import re
+                    m = re.match(r"^([a-zA-Z]+)(?:\(([^)]+)\))?:", s_val)
+                    if m:
+                        type_val = m.group(1).lower()
+                        scope_val = m.group(2) or scope_val
+                    else:
+                        type_val = "commit"
+
                 out.append({
                     "n": int(n_val) if n_val and str(n_val).isdigit() else idx + 1,
                     "ts": parse_date_to_timestamp(date_str),
                     "date": date_str,
-                    "type": r.get("Type", "commit"),
-                    "scope": r.get("Scope", ""),
-                    "s": r.get("Subject", ""),
+                    "type": type_val,
+                    "scope": scope_val,
+                    "s": s_val,
                     "tier": str(r.get("Tier", "Routine")).capitalize(),
                     "C": s_int("C", 1),
                     "I": s_int("I", 1),
@@ -61,7 +75,16 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
                     "tot": s_int("Total", 5),
                     "lines_added": s_int("Additions", 0),
                     "lines_deleted": s_int("Deletions", 0),
-                    "h": r.get("Hash", "")
+                    "h": r.get("Hash") or r.get("hash", ""),
+                    "t_metrics": str(r.get("touches_metrics", "")).lower() == "true",
+                    "t_preflight": str(r.get("touches_preflight", "")).lower() == "true",
+                    "t_tests": str(r.get("touches_tests", "")).lower() == "true",
+                    "t_docs": str(r.get("touches_docs", "")).lower() == "true",
+                    "t_dashboard": str(r.get("touches_dashboard", "")).lower() == "true",
+                    "t_config": str(r.get("touches_config", "")).lower() == "true",
+                    "t_scripts": str(r.get("touches_scripts", "")).lower() == "true",
+                    "t_proxy": str(r.get("touches_proxy", "")).lower() == "true",
+                    "t_core": str(r.get("touches_core", "")).lower() == "true"
                 })
     except (KeyboardInterrupt, SystemExit):
         raise

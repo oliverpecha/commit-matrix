@@ -214,7 +214,7 @@ def process_commit(
                 scope_tags.append("critical")
             scope_str = ", ".join(scope_tags) if scope_tags else "None"
 
-            commit_type = "commit"
+            commit_type = ""
             commit_scope = ""
             if subject.startswith("feat"):
                 commit_type = "feat"
@@ -230,42 +230,26 @@ def process_commit(
             deletions = diff.count("\n-") - diff.count("\n---")
 
             headers = [
-                "#",
-                "Date",
-                "Type",
-                "Scope",
-                "Subject",
-                "Tier",
-                "C",
-                "I",
-                "R",
-                "S",
-                "D",
-                "Total",
-                "Additions",
-                "Deletions",
-                "Hash",
-                "TreeSig",
-                "ArchGen",
+                "#", "Date", "Type", "Scope", "Subject", "Tier",
+                "C", "I", "R", "S", "D", "Total",
+                "Additions", "Deletions", "Hash", "TreeSig", "ArchGen",
+                "touches_metrics", "touches_preflight", "touches_tests",
+                "touches_docs", "touches_dashboard", "touches_config",
+                "touches_scripts", "touches_proxy", "touches_core"
             ]
             row = [
-                topo_id,
-                date_str,
-                commit_type,
-                commit_scope,
-                subject,
-                tier_label.split()[1],
-                criticality,
-                infrastructure,
-                ripple,
-                scope,
-                documentation,
-                total_score,
-                f"+{additions}",
-                f"-{deletions}",
-                hash_short,
-                arch_tree_signature or "",
-                arch_gen if arch_gen is not None else "",
+                topo_id, date_str, commit_type, commit_scope, subject, tier_label.split()[1],
+                criticality, infrastructure, ripple, scope, documentation, total_score,
+                f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else "",
+                "true" if "metrics" in diff_lower else "false",
+                "true" if "preflight" in diff_lower else "false",
+                "true" if "test" in diff_lower else "false",
+                "true" if any(x in diff_lower for x in ("readme", ".md", "docs")) else "false",
+                "true" if any(x in diff_lower for x in ("dashboard", "index.html", "ui")) else "false",
+                "true" if any(x in diff_lower for x in (".json", "config")) else "false",
+                "true" if any(x in diff_lower for x in ("backend/parser.py", "backend/main.py", "dockerfile", "script")) else "false",
+                "true" if "proxy" in diff_lower else "false",
+                "true" if total_score >= 12 or "core" in diff_lower else "false",
             ]
 
             safe_total = max(1, total_unscanned)

@@ -1,5 +1,72 @@
-export function extractDynamicAxes(commits) { if (!commits || !commits.length) return []; const ex = ['hash_long', 'hash_short', 'subject', 'author_date', 'lines_added', 'lines_deleted', 'n', 'h', 's', 'ts', 'tot', 'tier']; return Object.keys(commits[0]).filter(k => !ex.includes(k) && !k.startsWith('touches_') && typeof commits[0][k] === 'number'); }
-export function processCommits(r) { return r.map(c=>{ const m=(c.s||"").match(/^([a-zA-Z_-]+)(?:\(([^)]+)\))?:\s*(.*)$/); if(m){c.t=m[1].toLowerCase();c.scope=m[2]||'global';c.clean_s=m[3];}else{c.t='chore';c.scope='global';c.clean_s=c.s;} return c; }); }
+export function extractDynamicAxes(commits) { if (!commits || !commits.length) return []; const ex = ['hash_long', 'hash_short', 'subject', 'author_date', 'lines_added', 'lines_deleted', 'n', 'h', 's', 'ts', 'tot', 'tier']; return Object.keys(commits[0]).filter(k => !ex.includes(k) && typeof commits[0][k] === 'number'); }
+export function processCommits(r) {
+    console.log('🔥 DEBUG - Payload Type:', Array.isArray(r) ? 'Array' : typeof r);
+    if(r && r.length > 0) console.log('🔥 DEBUG - Raw Top 10 Items:', r.slice(0, 10));
+    if (!r || !r.length) return [];
+    
+    return r.map((c, i) => {
+        const lc = {};
+        for (let k in c) {
+            // SHIELD: Prevent s/S and C/I/R/S/D collisions by preserving 1-char keys
+            if (k.trim().length === 1) {
+                lc[k.trim()] = c[k];
+            } else {
+                lc[k.trim().toLowerCase()] = c[k];
+            }
+        }
+
+        const subj = c.s || c.subject || lc.subject || lc.clean_s || lc.message || "";
+        const m = subj.match(/^([a-zA-Z_-]+)(?:\(([^)]+)\))?:\s*(.*)$/);
+        
+        if(m) { 
+            c.t = m[1].toLowerCase(); 
+            c.scope = m[2] || lc.scope || 'global'; 
+            c.clean_s = m[3]; 
+        } else { 
+            c.t = lc.type || c.type || 'chore'; 
+            c.scope = lc.scope || c.scope || 'global'; 
+            c.clean_s = subj || 'chore: unknown'; 
+        }
+        c.s = subj;
+
+        const toB = (v) => v === true || String(v).toLowerCase() === "true" || v === 1 || v === "1";
+        c.t_metrics = toB(c.t_metrics ?? lc.metrics);
+        c.t_preflight = toB(c.t_preflight ?? lc.preflight);
+        c.t_tests = toB(c.t_tests ?? lc.tests);
+        c.t_docs = toB(c.t_docs ?? lc.docs);
+        c.t_dashboard = toB(c.t_dashboard ?? lc.dashboard);
+        c.t_config = toB(c.t_config ?? lc.config);
+        c.t_scripts = toB(c.t_scripts ?? lc.scripts);
+        c.t_proxy = toB(c.t_proxy ?? lc.proxy);
+        c.t_core = toB(c.t_core ?? lc.critical ?? lc.core);
+
+        c.tot = Number(c.tot ?? lc.total) || 0;
+        c.C = Number(c.C ?? lc.c) || 0;
+        c.I = Number(c.I ?? lc.i) || 0;
+        c.R = Number(c.R ?? lc.r) || 0;
+        c.S = Number(c.S ?? lc.s) || 0; 
+        c.D = Number(c.D ?? lc.d) || 0;
+        
+        if (c.ts) {
+            c.ts = Number(c.ts);
+        } else if (lc.date) {
+            c.ts = Math.floor(new Date(lc.date.replace("'", "20")).getTime() / 1000) || 0;
+        } else {
+            c.ts = 0;
+        }
+
+        c.n = Number(c.n ?? lc['#']) || (i + 1);
+        c.lines_added = Number(c.lines_added ?? lc.additions) || 0;
+        c.lines_deleted = Number(c.lines_deleted ?? lc.deletions) || 0;
+        c.h = c.h || lc.hash || "";
+        
+        const rawTier = c.tier || lc.tier || "Routine";
+        c.tier = rawTier.charAt(0).toUpperCase() + rawTier.slice(1).toLowerCase();
+        
+        if(i===0) console.log('🔥 DEBUG - Processed First Item:', c);
+        return c;
+    });
+}
 export function fmtCD(ts){ const d=new Date(ts*1000); const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${m[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}`; }
 export function fmtTableDate(ts){ const d=new Date(ts*1000); const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${m[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}, '${String(d.getFullYear()).slice(-2)}`; }
 export function fmtStr(ts){ const d=new Date(ts*1000); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
