@@ -1,9 +1,4 @@
-<<<<<<< Updated upstream
-import { BEO_EXPLANATIONS } from '../core/constants.js?v=0.1.59';
-=======
-import { BEO_EXPLANATIONS } from '../core/constants.js?v=0.1.59';
->>>>>>> Stashed changes
-
+import { BEO_EXPLANATIONS } from '../core/constants.js?v=0.1.113';
 export function initGlobalTooltips() {
     const infoTtEl = document.getElementById('info-tt');
     if (!infoTtEl) return;

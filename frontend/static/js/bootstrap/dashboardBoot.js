@@ -1,9 +1,4 @@
-<<<<<<< Updated upstream
-import { hub } from "../core/eventHub.js?v=0.1.59";
-=======
-import { hub } from "../core/eventHub.js?v=0.1.59";
->>>>>>> Stashed changes
-
+import { hub } from "../core/eventHub.js?v=0.1.113";
 const UI_THEME = window.UI_THEME;
 
 const showScrollableModal = (title, contentText, color = "#a38b4f") => {

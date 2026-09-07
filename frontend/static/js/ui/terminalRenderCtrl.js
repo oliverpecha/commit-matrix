@@ -1,9 +1,4 @@
-<<<<<<< Updated upstream
-import { renderTerminalShell } from "./terminalShell.js?v=0.1.59";
-=======
-import { renderTerminalShell } from "./terminalShell.js?v=0.1.59";
->>>>>>> Stashed changes
-
+import { renderTerminalShell } from "./terminalShell.js?v=0.1.113";
 export function captureShellSnapshot() {
     return {
         bodyHtml: document.getElementById("cm-terminal-body")?.innerHTML || "",

@@ -1,9 +1,4 @@
-<<<<<<< Updated upstream
-import { APP_STATES, LAYOUTS } from "./state.js?v=0.1.59";
-=======
-import { APP_STATES, LAYOUTS } from "./state.js?v=0.1.59";
->>>>>>> Stashed changes
-
+import { APP_STATES, LAYOUTS } from "./state.js?v=0.1.113";
 export function getLedgerCount() {
     return Array.isArray(window.MATRIX_CHART_PAYLOAD) ? window.MATRIX_CHART_PAYLOAD.length : (Array.isArray(window.MATRIX_PAYLOAD) ? window.MATRIX_PAYLOAD.length : 0);
 }

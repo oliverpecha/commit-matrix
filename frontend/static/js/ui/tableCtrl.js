@@ -1,11 +1,5 @@
-<<<<<<< Updated upstream
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.59";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.1.59";
-=======
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.59";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.1.59";
->>>>>>> Stashed changes
-
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.113";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.1.113";
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");
     const tbody = document.getElementById("cm-tbody");
@@ -45,11 +39,16 @@ export function renderTable(commits) {
         // Force clear the table body on render to prevent the massive attached DOM leak
     tbody.innerHTML = '';
     
+    // Discard stale SSR payload that lacks subjects so the API can backfill perfectly
+    if (commits && commits.length > 0 && !commits[0].s && !commits[0].subject) {
+        commits = [];
+        if (window.MATRIX_PAYLOAD) window.MATRIX_PAYLOAD = [];
+    }
     const displayData = sortDisplayData(normalizeCommits(commits), currentSort);
     renderTableRowsBatched(displayData, "cm-tbody", 100, true);
     
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
-    initInfiniteScroll(repo, 100);
+    initInfiniteScroll(repo, commits.length);
 }
 
 window.setTableStreamMode = function(isActive, opts = {}) {

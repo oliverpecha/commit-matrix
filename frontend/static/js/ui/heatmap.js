@@ -1,16 +1,10 @@
-<<<<<<< Updated upstream
-import { SC_COLORS } from '../core/constants.js?v=0.1.59';
-import { UI_STATE } from '../core/state.js?v=0.1.59';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.59';
-=======
-import { SC_COLORS } from '../core/constants.js?v=0.1.59';
-import { UI_STATE } from '../core/state.js?v=0.1.59';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.59';
->>>>>>> Stashed changes
+import { SCOPE_COLORS } from '../core/constants.js?v=0.1.113';
+import { UI_STATE } from '../core/state.js?v=0.1.113';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.113';
 
 // FIX: Aligned perfectly with your CSV headers
 const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];
-const SVC_KEYS = ['touches_metrics','touches_preflight','touches_tests','touches_docs','touches_dashboard','touches_config','touches_scripts','touches_proxy','touches_critical'];
+const SVC_KEYS = ['t_metrics','t_preflight','t_tests','t_docs','t_dashboard','t_config','t_scripts','t_proxy','t_core'];
 
 export function renderHeatmap(commits) {
     const svgEl = document.getElementById('cm-heat-svg');
@@ -65,7 +59,7 @@ export function renderHeatmap(commits) {
 
     commits.forEach((c, col) => {
         SVCS.forEach((svc, row) => {
-            const hit = c[SVC_KEYS[row]] === true || c[SVC_KEYS[row]] === "True";
+            const hit = c[SVC_KEYS[row]] === true;
             
             // OPTIMIZATION: Only generate DOM nodes for actual data hits
             if (!hit) return; 
@@ -76,7 +70,7 @@ export function renderHeatmap(commits) {
             rect.setAttribute('width', colW); 
             rect.setAttribute('height', rowH - 2); 
             rect.setAttribute('rx', 2);
-            rect.setAttribute('fill', SC_COLORS[SVC_KEYS[row]] || '#4f98a3'); 
+            rect.setAttribute('fill', SCOPE_COLORS[String(SVC_KEYS[row]).replace(/^t_/, '').toLowerCase()] || '#4f98a3'); 
             rect.setAttribute('opacity', '0.85');
             fragment.appendChild(rect);
         });

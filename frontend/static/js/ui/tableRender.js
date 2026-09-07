@@ -1,3 +1,5 @@
+import { TYPE_COLORS, SCOPE_COLORS } from '../core/constants.js?v=0.1.113';
+
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
     const d = new Date(ts * 1000);
@@ -10,14 +12,14 @@ const parseCommit = (subject) => {
     return { type: "commit", scope: "", desc: subject };
 };
 
-const getTypeColor = (type) => {
-    const map = { feat: "#5c91e0", fix: "#ff4b4b", style: "#e0d05c", refactor: "#8ed068", chore: "#aaa", docs: "#ffa726" };
-    return map[type] || "#888";
-};
+const getTypeColor = (type) => TYPE_COLORS?.[String(type).toLowerCase()] || "#888888";
+const getScopeColor = (scope) => SCOPE_COLORS?.[String(scope).toLowerCase()] || "#aaaaaa";
 
-const getScopeColor = (scope) => {
-    const map = { scripts: "#e0d05c", proxy: "#68d08e", dashboard: "#c99ef0", core: "#e0d05c" };
-    return map[scope] || "#aaa";
+
+const TIER_ICONS = {
+    'Critical': `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>`,
+    'Significant': `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`,
+    'Routine': `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>`
 };
 
 export function getTableColumns() {
@@ -33,7 +35,7 @@ export function getTableColumns() {
         { label: "R", key: "R", align: "center" },
         { label: "S", key: "S", align: "center" },
         { label: "D", key: "D", align: "center" },
-        { label: "TOTAL", key: "tot", align: "center" },
+        { label: "SCORE", key: "tot", align: "center" },
         { label: "+", key: "lines_added", align: "center" },
         { label: "-", key: "lines_deleted", align: "center" },
         { label: "HASH", key: "h", align: "left" }
@@ -55,9 +57,9 @@ export function normalizeCommits(commits) {
             tot: Number(c.tot) || 0,
             lines_added: Number(c.lines_added) || 0,
             lines_deleted: Number(c.lines_deleted) || 0,
-            p_type: p.type,
-            p_scope: p.scope,
-            p_desc: p.desc
+            p_type: c.p_type || c.t || c.type || p.type,
+            p_scope: c.p_scope || c.scope || p.scope,
+            p_desc: c.p_desc || p.desc || c.s || c.subject || ""
         };
     });
 }
@@ -89,11 +91,27 @@ export function sortDisplayData(displayData, currentSort) {
 
 export function renderTableRows(displayData) {
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
+    
+    if (displayData && displayData.length > 0 && !window._DEBUG_COLOR_LOGGED) {
+        window._DEBUG_COLOR_LOGGED = true;
+        console.log("🎨 Table Color Mapping Debug:");
+        console.table(displayData.slice(0, 10).map(c => ({
+            Row: c.n,
+            Type: c.p_type,
+            TypeColor: getTypeColor(c.p_type),
+            Scope: c.p_scope,
+            ScopeColor: getScopeColor(c.p_scope)
+        })));
+    }
 
     return displayData.map((c) => {
         const tc = getTypeColor(c.p_type);
         const sc = getScopeColor(c.p_scope);
-        const trC = c.tier === "Critical" ? "#ff4b4b" : c.tier === "Significant" ? "#ffb84d" : "#8ed068";
+        const trC = c.tier === "Critical" ? "#F4B32A" : c.tier === "Significant" ? "#4E9FE3" : "#6F8197";
+        
+        
+        const tStyle = tc === "#888888" ? `color:${tc}; font-size:11px; font-weight:700;` : `color:${tc}; border:1px solid ${tc}66; background:${tc}1A; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; display:inline-block; line-height:1.2;`;
+        const sStyle = sc === "#aaaaaa" ? `color:${sc}; font-size:11px; font-weight:700;` : `color:${sc}; border:1px solid ${sc}66; background:${sc}1A; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; display:inline-block; line-height:1.2;`;
 
         return `
         <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
@@ -101,24 +119,21 @@ export function renderTableRows(displayData) {
             <td style="padding:12px 8px; color:#aaa; font-size:12px; white-space:nowrap;">
                 <a target="_blank" rel="noopener noreferrer" href="https://github.com/oliverpecha/${repo}/commit/${c.h || c.hash_short}" style="color:inherit; text-decoration:none;" title="View Commit">${formatTableDate(c.ts)}</a>
             </td>
-            <td style="padding:12px 8px;"><span style="color:${tc}; background:${tc}22; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700;">${c.p_type}</span></td>
-            <td style="padding:12px 8px;">${c.p_scope ? `<span style="color:${sc}; background:${sc}22; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700;">${c.p_scope}</span>` : ""}</td>
+            <td style="padding:12px 8px;"><span style="${tStyle}">${c.p_type}</span></td>
+            <td style="padding:12px 8px;">${c.p_scope ? `<span style="${sStyle}">${c.p_scope}</span>` : ""}</td>
             <td style="padding:12px 8px; color:#ddd; font-size:13px; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${c.p_desc}">
                 <a target="_blank" rel="noopener noreferrer" href="https://github.com/oliverpecha/${repo}/commit/${c.h || c.hash_short}" style="color:inherit; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis;" title="View Commit">${c.p_desc}</a>
             </td>
             <td style="padding:12px 8px;">
-                <div style="display:inline-flex; align-items:center; gap:6px; border:1px solid ${trC}44; border-radius:12px; padding:3px 10px; background:${trC}11;">
-                    <div style="width:8px; height:8px; border-radius:50%; background:${trC}; box-shadow:0 0 6px ${trC};"></div>
-                    <span style="color:${trC}; font-weight:700; font-size:11px;">${c.tier || "N/A"}</span>
-                </div>
+                <span style="color:${trC}; border:1px solid ${trC}; background:${trC}1A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;">${TIER_ICONS[c.tier] || ''}${c.tier || "N/A"}</span>
             </td>
             <td style="padding:12px 8px; text-align:center; color:#5c91e0; font-weight:700; font-size:12px;">${c.C}</td>
             <td style="padding:12px 8px; text-align:center; color:#c99ef0; font-weight:700; font-size:12px;">${c.I}</td>
             <td style="padding:12px 8px; text-align:center; color:#ffb84d; font-weight:700; font-size:12px;">${c.R}</td>
             <td style="padding:12px 8px; text-align:center; color:#8ed068; font-weight:700; font-size:12px;">${c.S}</td>
             <td style="padding:12px 8px; text-align:center; color:#ff4b4b; font-weight:700; font-size:12px;">${c.D}</td>
-            <td style="padding:12px 8px; text-align:center; font-weight:800; color:#fff; font-size:13px;">${c.tot}</td>
-            <td style="padding:12px 8px; text-align:center; color:#8ed068; font-size:12px;">+${c.lines_added}</td>
+            <td style="padding:12px 8px; text-align:center; font-weight:400; color:#fff; font-size:13px;">${c.tot}</td>
+            <td style="padding:12px 8px; text-align:center; color:#7a7874; font-size:12px;">+${c.lines_added}</td>
             <td style="padding:12px 8px; text-align:center; color:#7a7874; font-size:12px;">-${c.lines_deleted}</td>
             <td style="padding:12px 8px;">
                 <a class="bp-hash" target="_blank" rel="noopener noreferrer" href="https://github.com/oliverpecha/${repo}/commit/${c.h || c.hash_short}" title="View Commit">${(c.h || c.hash_short || "").toString().substring(0, 7)}</a>

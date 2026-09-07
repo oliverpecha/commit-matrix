@@ -1,15 +1,7 @@
-<<<<<<< Updated upstream
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS } from '../core/constants.js?v=0.1.59';
-import { calcMAvg, getTop25 } from '../core/dataEngine.js?v=0.1.59';
-import { UI_STATE } from '../core/state.js?v=0.1.59';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.59';
-=======
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS } from '../core/constants.js?v=0.1.59';
-import { calcMAvg, getTop25 } from '../core/dataEngine.js?v=0.1.59';
-import { UI_STATE } from '../core/state.js?v=0.1.59';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.59';
->>>>>>> Stashed changes
-
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../core/constants.js?v=0.1.113';
+import { calcMAvg, getTop25 } from '../core/dataEngine.js?v=0.1.113';
+import { UI_STATE } from '../core/state.js?v=0.1.113';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.113';
 let charts = {};
 
 // THE FIX: Ensure Chart.js never divides by zero on a 1-commit timeline
@@ -23,9 +15,50 @@ const ensureRange = (c) => {
 const def = (c) => ({ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false,external:customTooltip(c)}}, scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7874',font:{family:'Satoshi',size:10}}}} });
 
 export function renderTypesChart(c) {
-    if(charts.types) charts.types.destroy(); const tc={}; c.forEach(x=>tc[x.t]=(tc[x.t]||0)+1); const types=Object.keys(tc).sort((a,b)=>tc[b]-tc[a]);
-    const clr={feat:'#5c91e0',fix:'#ff4b4b',perf:'#c99ef0',refactor:'#8ed068',chore:'#aaa',docs:'#ffa726',test:'#00bcd4'};
-    charts.types = new Chart('cm-c-types',{type:'bar',data:{labels:types,datasets:[{data:types.map(t=>tc[t]),backgroundColor:types.map(t=>clr[t]||'#888'),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'}},y:{grid:{color:'rgba(255,255,255,.04)'}}}}});
+    const canvasId = 'cm-c-types';
+    let canvasEl = document.getElementById(canvasId);
+    
+    // Annihilate old context and capture direct reference to new node
+    if (canvasEl) {
+        const newCanvas = document.createElement('canvas');
+        newCanvas.id = canvasId;
+        canvasEl.parentNode.replaceChild(newCanvas, canvasEl);
+        canvasEl = newCanvas; 
+    }
+    
+    if (charts.types) { delete charts.types; }
+
+    const tc = {};
+    c.forEach(x => {
+        let type = String(x.p_type || x.t || x.type || "unknown").trim().toLowerCase();
+        if (!TYPE_COLORS[type]) {
+            const m = type.match(/^([a-z_-]+)/);
+            if (m && TYPE_COLORS[m[1]]) type = m[1];
+        }
+        tc[type] = (tc[type] || 0) + 1;
+    });
+
+    const types = Object.keys(tc).sort((a, b) => tc[b] - tc[a]);
+    const bgColors = types.map(t => TYPE_COLORS[t] || '#888888');
+
+    // Pass the actual DOM element (canvasEl) rather than string ID to bypass Chart.js DOM caches
+    charts.types = new Chart(canvasEl, {
+        type: 'bar',
+        data: {
+            labels: types,
+            datasets: [{
+                data: types.map(t => tc[t]),
+                backgroundColor: bgColors,
+                borderWidth: 0,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            scales: { x: { grid: { color: 'rgba(255,255,255,.04)' } }, y: { grid: { color: 'rgba(255,255,255,.04)' } } }
+        }
+    });
 }
 export function renderStackChart(rawC) {
     if(charts.stack) charts.stack.destroy(); const lin=UI_STATE.stack; const c = lin ? ensureRange(rawC) : rawC; 
@@ -69,6 +102,6 @@ export function renderTierChart(c) {
                 hoverOffset: 4
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#7a7874', boxWidth: 10 } }, tooltip: { enabled: true } } }
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: true } } }
     });
 }

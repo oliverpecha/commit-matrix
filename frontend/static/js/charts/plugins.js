@@ -1,11 +1,5 @@
-<<<<<<< Updated upstream
-import { fmtCD } from '../core/dataEngine.js?v=0.1.59';
-import { CM_COLORS, BP_AX, BP_AXC, SC_COLORS } from '../core/constants.js?v=0.1.59';
-=======
-import { fmtCD } from '../core/dataEngine.js?v=0.1.59';
-import { CM_COLORS, BP_AX, BP_AXC, SC_COLORS } from '../core/constants.js?v=0.1.59';
->>>>>>> Stashed changes
-export const MD_TOP = 18;
+import { fmtCD } from '../core/dataEngine.js?v=0.1.113';
+import { CM_COLORS, BP_AX, BP_AXC, SC_COLORS } from '../core/constants.js?v=0.1.113';export const MD_TOP = 18;
 export const monthDiv = (commits) => ({
     id: 'monthDiv',
     afterDraw(chart) {

@@ -1,10 +1,5 @@
 // v0.1.12
-<<<<<<< Updated upstream
-import { hub } from "../core/eventHub.js?v=0.1.59";
-=======
-import { hub } from "../core/eventHub.js?v=0.1.59";
->>>>>>> Stashed changes
-
+import { hub } from "../core/eventHub.js?v=0.1.113";
 async function postEngineControl(action) {
     const urlParams = new URLSearchParams(window.location.search);
     const repo = urlParams.get("repo") || "";
