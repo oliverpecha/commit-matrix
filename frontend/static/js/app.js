@@ -1,16 +1,17 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.113";
+import { hub } from "./core/eventHub.js?v=0.1.157";
 import "./core/appStateCtrl.js?v=0.1.98";
 import "./engine/repoManager.js?v=0.1.98";
 import "./engine/telemetryStream.js?v=0.1.98";
 import "./engine/engineControl.js?v=0.1.98";
 import "./ui/terminalView.js?v=0.1.98";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.113';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.113';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.113';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.113';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.113';
+import { processCommits } from './core/dataEngine.js?v=0.1.157';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.157';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.157';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.157';
+import { CM_COLORS } from './constants/colors.js?v=0.1.157';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.157';
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
 window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
@@ -22,21 +23,41 @@ function computeKPIs(p) {
     let tot = 0, crit = 0, sig = 0, rout = 0;
     for (const c of p) {
         tot += c.tot;
-        if (c.tier === 'Critical') crit++;
-        else if (c.tier === 'Significant') sig++;
-        else if (c.tier === 'Routine') rout++;
+        if (c.tier === 'Pivotal') crit++;
+        else if (c.tier === 'Core') sig++;
+        else if (c.tier === 'Minor') rout++;
     }
     return { count: p.length, avg: (tot / p.length).toFixed(1), crit, sig, rout };
 }
 
 function paintKPIs(k) {
     const kp = document.getElementById('cm-kp');
-    if (!kp) return; // Prevent crash if dashboard UI is hidden due to invalid state
+    if (!kp) return;
     kp.textContent = k.count;
     document.getElementById('cm-ka').textContent = k.avg;
-    document.getElementById('cm-kc').textContent = k.crit;
-    document.getElementById('cm-ks').textContent = k.sig;
-    document.getElementById('cm-kr').textContent = k.rout;
+    const kc = document.getElementById('cm-kc'); if(kc) { kc.textContent = k.crit; kc.style.color = CM_COLORS.Pivotal; }
+    const ks = document.getElementById('cm-ks'); if(ks) { ks.textContent = k.sig; ks.style.color = CM_COLORS.Core; }
+    const kr = document.getElementById('cm-kr'); if(kr) { kr.textContent = k.rout; kr.style.color = CM_COLORS.Minor; }
+    
+    // Inject exact counts into the Tier Distribution legend spans
+    const tPiv = document.getElementById('cm-tier-val-pivotal');
+    const tCor = document.getElementById('cm-tier-val-core');
+    const tMin = document.getElementById('cm-tier-val-minor');
+    if (tPiv) tPiv.textContent = k.crit;
+    if (tCor) tCor.textContent = k.sig;
+    if (tMin) tMin.textContent = k.rout;
+
+    const applyBadge = (id, color) => {
+        const el = document.getElementById(id);
+        if (el && color) {
+            el.style.color = color;
+            el.style.borderColor = color;
+            el.style.background = color + '1A'; // 10% opacity hex
+        }
+    };
+    applyBadge('tier-badge-pivotal', CM_COLORS.Pivotal);
+    applyBadge('tier-badge-core', CM_COLORS.Core);
+    applyBadge('tier-badge-minor', CM_COLORS.Minor);
 }
 
 function buildRenderSteps(p) {
@@ -280,3 +301,5 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
     if (payload.gen && payload.gen !== window.CM_RENDER_GEN) return;
     if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });
+import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.157';
+initGlobalTooltips();

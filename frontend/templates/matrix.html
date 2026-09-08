@@ -3,9 +3,9 @@
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.113"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.113">
-<div class="cm-top-bar" style="position:relative; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.157"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.157">
+<div class="cm-top-bar" style="position:sticky; top:0; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
     
     
@@ -67,9 +67,11 @@
 </div>
 
   <div id="cm-repo-controls" class="cm-action-group" style="display:{% if invalid_repo or system_empty %}none{% else %}flex{% endif %}; gap:12px; align-items:center;">
-    <button onclick="toggleDashboardLayout()" class="cm-fbtn" style="padding:6px 14px;">🔲 Toggle View</button>
-    <button class="cm-fbtn" style="padding:6px 14px;">📅 Filter Dates</button>
-        <button id="cm-sync-btn" class="cm-fbtn" style="background:rgba(79,152,163,0.15); border:1px solid rgba(79,152,163,0.4); padding:6px 14px; font-weight:bold; color:#4f98a3;"></button>
+    <button class="cm-fbtn">📅 Filter Dates</button>
+        <button  id="cm-sync-btn" class="cm-fbtn">Sync</button>
+    <button id="cm-global-chron-btn" data-action="toggleGlobalChron" class="cm-fbtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> Index
+    </button>
   </div>
 </div>
 
@@ -78,37 +80,37 @@
 <div class="cm-wrap" id="main-dashboard-wrap">
   <div class="cm-kpi-row">
     <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_tot">Total Commits</div><div class="cm-kpi-val" id="cm-kp">—</div></div>
-    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_crit">Critical</div><div class="cm-kpi-val cm-kv-crit" id="cm-kc">—</div></div>
-    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_sig">Significant</div><div class="cm-kpi-val cm-kv-sig" id="cm-ks">—</div></div>
-    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_rout">Routine</div><div class="cm-kpi-val cm-kv-rout" id="cm-kr">—</div></div>
-    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg Score</div><div class="cm-kpi-val cm-kv-pri" id="cm-ka">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_crit">Pivotal</div><div class="cm-kpi-val" style="color: #7a7874;" id="cm-kc">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_sig">Core</div><div class="cm-kpi-val" style="color: #7a7874;" id="cm-ks">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_rout">Minor</div><div class="cm-kpi-val" style="color: #7a7874;" id="cm-kr">—</div></div>
+    <div class="cm-kpi"><div class="cm-kpi-lbl info-hover" data-key="kpi_avg">Avg Score</div><div class="cm-kpi-val" style="color: #7a7874;" id="cm-ka">—</div></div>
   </div>
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);height:240px;">
     <div class="cm-card">
-      <div class="cm-card-hd"><div class="cm-card-title">Tier Distribution</div></div>
+      <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="tierDist">Tier Distribution</div></div>
       <div class="cm-chart-body" style="display:flex; flex-direction:column;">
         <div style="flex:1; position:relative; min-height:0;"><canvas id="cm-c-tier"></canvas></div>
         <div style="display:flex; justify-content:center; gap:12px; padding-top:10px;">
-          <span style="color:#F4B32A; border:1px solid #F4B32A; background:#F4B32A1A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>Critical</span>
-          <span style="color:#4E9FE3; border:1px solid #4E9FE3; background:#4E9FE31A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Significant</span>
-          <span style="color:#6F8197; border:1px solid #6F8197; background:#6F81971A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>Routine</span>
+          <span id="tier-badge-pivotal" style="color:#D43BC6; border:1px solid #D43BC6; background:#D43BC61A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M11.13 2.76a1 1 0 011.74 0l9.26 16.05a1 1 0 01-.87 1.5H2.74a1 1 0 01-.87-1.5l9.26-16.05z"/></svg>Pivotal <span id="cm-tier-val-pivotal" style="margin-left:4px;opacity:0.8;">0</span></span>
+          <span id="tier-badge-core" style="color:#36B8D8; border:1px solid #36B8D8; background:#36B8D81A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>Core <span id="cm-tier-val-core" style="margin-left:4px;opacity:0.8;">0</span></span>
+          <span id="tier-badge-minor" style="color:#6F8197; border:1px solid #6F8197; background:#6F81971A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><rect x="4" y="10" width="16" height="4" rx="2"/></svg>Minor <span id="cm-tier-val-minor" style="margin-left:4px;opacity:0.8;">0</span></span>
         </div>
       </div>
     </div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Axis Breakdown</div><button class="cm-fbtn" data-action="toggleChron" data-target="stack">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
-    <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title">Commit Types</div></div><div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="cirsdAxis">Axis Breakdown</div></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="commitTypes">Commit Types</div></div><div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div></div>
   </div>
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:260px;">
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Score Trend</div><div style="display:flex;gap:8px;"><button class="cm-fbtn active" data-action="cycleAvg" data-target="trend">📊 Avg: Daily Peak</button><button class="cm-fbtn" data-action="toggleChron" data-target="trend">📅 Temporal</button></div></div><div class="cm-chart-body"><canvas id="cm-c-trend"></canvas></div></div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Service Heatmap</div><button class="cm-fbtn" data-action="toggleChron" data-target="heat">📅 Temporal</button></div><div id="cm-heat-body" style="flex:1;position:relative;overflow:hidden;"><svg id="cm-heat-svg" style="position:absolute;width:100%;height:100%;"></svg></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="scoreTrend">Score Trend</div><div style="display:flex;gap:8px;"><button class="cm-fbtn active" data-action="cycleAvg" data-target="trend">📊 Avg: Daily Peak</button></div></div><div class="cm-chart-body"><canvas id="cm-c-trend"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="heatmap">Service Heatmap</div></div><div id="cm-heat-body" style="flex:1;position:relative;overflow:hidden;"><svg id="cm-heat-svg" style="position:absolute;width:100%;height:100%;"></svg></div></div>
   </div>
   <div class="cm-row" style="grid-template-columns:repeat(4, minmax(0,1fr));height:240px;">
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Fragility Index</div><button class="cm-fbtn" data-action="toggleChron" data-target="frag">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-frag"></canvas></div></div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Churn Rate</div><button class="cm-fbtn" data-action="toggleChron" data-target="churn">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-churn"></canvas></div></div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Blast Radius</div><button class="cm-fbtn" data-action="toggleChron" data-target="blast">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-blast"></canvas></div></div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;"><div class="cm-card-title">Risk Convergence</div><button class="cm-fbtn" data-action="toggleChron" data-target="conv">📅 Temporal</button></div><div class="cm-chart-body"><canvas id="cm-c-conv"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="fragility">Fragility Index</div></div><div class="cm-chart-body"><canvas id="cm-c-frag"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="churn">Churn Rate</div></div><div class="cm-chart-body"><canvas id="cm-c-churn"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="blast">Blast Radius</div></div><div class="cm-chart-body"><canvas id="cm-c-blast"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="nexus">Risk Convergence</div></div><div class="cm-chart-body"><canvas id="cm-c-conv"></canvas></div></div>
   </div>
-  <div class="cm-card" id="cm-ledger-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table>
+  <div class="cm-card" id="cm-ledger-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="table_all">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table>
     <div id="cm-table-sentinel" style="height: 1px; width: 100%;"></div>
   </div></div>
 </div>
@@ -179,10 +181,10 @@ window.UI_THEME = {
 };
 </script>
 <script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data|default([]), 'table_data': table_data|default([]), 'time_autoclose': time_autoclose|default(12), 'system_empty': system_empty|default(false), 'invalid_owner': invalid_owner|default(false), 'invalid_repo': invalid_repo|default(false), 'invalid_rubric': invalid_rubric|default(false), 'default_rubric': default_rubric|default('unknown')} | tojson | safe }}</script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.113"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.113"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.113"></script>
-<script type="module" src="/static/js/app.js?v=0.1.113"></script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.157"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.157"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.157"></script>
+<script type="module" src="/static/js/app.js?v=0.1.157"></script>
 
 {% endblock %}
 

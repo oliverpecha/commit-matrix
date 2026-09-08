@@ -1,17 +1,24 @@
-import { BEO_EXPLANATIONS } from '../core/constants.js?v=0.1.113';
+import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.157';
+
 export function initGlobalTooltips() {
     const infoTtEl = document.getElementById('info-tt');
     if (!infoTtEl) return;
 
-    document.querySelectorAll('.info-hover').forEach(el => {
-        el.addEventListener('mouseenter', () => {
-            const key = el.getAttribute('data-key');
-            infoTtEl.textContent = BEO_EXPLANATIONS[key] || 'Explanation missing';
-            const rect = el.getBoundingClientRect();
-            infoTtEl.style.left = (rect.left + rect.width / 2) + 'px';
-            infoTtEl.style.top = (rect.top - 8) + 'px';
-            infoTtEl.classList.add('visible');
-        });
-        el.addEventListener('mouseleave', () => infoTtEl.classList.remove('visible'));
+    document.body.addEventListener('mouseover', (e) => {
+        const el = e.target.closest('.info-hover');
+        if (!el) return;
+        const key = el.getAttribute('data-key');
+        infoTtEl.textContent = CM_EXPLANATIONS[key] || 'Explanation missing';
+        
+        const rect = el.getBoundingClientRect();
+        infoTtEl.style.left = (rect.left + rect.width / 2) + 'px';
+        infoTtEl.style.top = (rect.top - 8) + 'px';
+        infoTtEl.classList.add('visible');
+    });
+
+    document.body.addEventListener('mouseout', (e) => {
+        const el = e.target.closest('.info-hover');
+        if (!el) return;
+        infoTtEl.classList.remove('visible');
     });
 }

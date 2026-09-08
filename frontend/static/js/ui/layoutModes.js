@@ -1,6 +1,6 @@
-import { LAYOUTS } from "../core/state.js?v=0.1.113";
-import { ensureSideLayoutSlots, getWrap } from "./layoutSlots.js?v=0.1.113";
-import { showZeroState, hideZeroState, showDashboard, hideDashboard } from "./layoutVisibility.js?v=0.1.113";
+import { LAYOUTS } from "../core/state.js?v=0.1.157";
+import { ensureSideLayoutSlots, getWrap } from "./layoutSlots.js?v=0.1.157";
+import { showZeroState, hideZeroState, showDashboard, hideDashboard } from "./layoutVisibility.js?v=0.1.157";
 export function applyLayoutMode(layout) {
     const wrap = getWrap();
     if (!wrap) return null;

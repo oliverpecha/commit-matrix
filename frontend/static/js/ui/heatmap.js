@@ -1,12 +1,15 @@
-import { SCOPE_COLORS } from '../core/constants.js?v=0.1.113';
-import { UI_STATE } from '../core/state.js?v=0.1.113';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.113';
+import { SCOPE_COLORS } from '../constants/colors.js?v=0.1.157';
+import { UI_STATE } from '../core/state.js?v=0.1.157';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.157';
 
 // FIX: Aligned perfectly with your CSV headers
 const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];
 const SVC_KEYS = ['t_metrics','t_preflight','t_tests','t_docs','t_dashboard','t_config','t_scripts','t_proxy','t_core'];
 
+let lastCommits = [];
+if(!window._hmSync){ window._hmSync=true; window.addEventListener('cm-sync-heat', ()=>lastCommits.length&&renderHeatmap(lastCommits)); }
 export function renderHeatmap(commits) {
+    lastCommits = commits;
     const svgEl = document.getElementById('cm-heat-svg');
     const container = document.getElementById('cm-heat-body');
     if (!svgEl || !container || !commits.length) return;
@@ -16,21 +19,28 @@ export function renderHeatmap(commits) {
     if (W === 0) return;
     
     const isLin = UI_STATE.heat;
-    const PAD_L = 62, PAD_R = 20, PAD_T = isLin ? MD_TOP : 0, PAD_B = 16;
-    const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B, rowH = plotH / SVCS.length;
+    const PAD_L = (window.CM_CHART_AREA && window.CM_CHART_AREA.left) || 62;
+    const PAD_R = 12;
+    const rightEdge = W - PAD_R;
+    const PAD_T = isLin ? MD_TOP : 6;
+    const PAD_B = 16;
+    const plotW = rightEdge - PAD_L, plotH = H - PAD_T - PAD_B, rowH = plotH / SVCS.length;
+
+    const colW = isLin ? 6 : Math.min(8, Math.max(2, (plotW / commits.length) - 1.5));
 
     let xPos = [];
     if (isLin) {
-        const t0 = commits[0].ts, tN = commits[commits.length-1].ts;
-        const pad = (tN === t0) ? 86400 : (tN - t0) * 0.05; 
+        const t0 = Math.min(...commits.map(c => c.ts));
+        const tN = Math.max(...commits.map(c => c.ts));
+        const pad = (tN === t0) ? 86400 : (tN - t0) * 0.05;
         xPos = commits.map(c => PAD_L + ((c.ts - (t0 - pad)) / ((tN + pad) - (t0 - pad))) * plotW);
     } else {
-        const step = plotW / commits.length; xPos = commits.map((_, i) => PAD_L + (i * step) + (step / 2));
+        const innerW = plotW - colW;
+        const step = commits.length > 1 ? innerW / (commits.length - 1) : 0;
+        xPos = commits.map((_, i) => PAD_L + (colW / 2) + (i * step));
     }
-
-    const colW = isLin ? 6 : Math.max(2, (plotW / commits.length) - 1.5);
     const ns = 'http://www.w3.org/2000/svg';
-    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`); svgEl.setAttribute('preserveAspectRatio', 'none');
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`); svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const fragment = document.createDocumentFragment();
 
@@ -41,7 +51,7 @@ export function renderHeatmap(commits) {
         t.setAttribute('y', PAD_T + row * rowH + rowH / 2 + 3.5);
         t.setAttribute('text-anchor', 'end'); 
         t.setAttribute('font-family', 'Satoshi, sans-serif'); 
-        t.setAttribute('font-size', '9.5'); 
+        t.setAttribute('font-size', '10'); 
         t.setAttribute('fill', '#7a7874'); 
         t.textContent = lbl;
         fragment.appendChild(t);
@@ -58,6 +68,8 @@ export function renderHeatmap(commits) {
     });
 
     commits.forEach((c, col) => {
+        let rx = xPos[col] - (colW / 2);
+        rx = Math.max(PAD_L, Math.min(rx, rightEdge - colW));
         SVCS.forEach((svc, row) => {
             const hit = c[SVC_KEYS[row]] === true;
             
@@ -65,7 +77,7 @@ export function renderHeatmap(commits) {
             if (!hit) return; 
 
             const rect = document.createElementNS(ns, 'rect');
-            rect.setAttribute('x', xPos[col] - (colW / 2)); 
+            rect.setAttribute('x', rx); 
             rect.setAttribute('y', PAD_T + row * rowH + 1);
             rect.setAttribute('width', colW); 
             rect.setAttribute('height', rowH - 2); 
