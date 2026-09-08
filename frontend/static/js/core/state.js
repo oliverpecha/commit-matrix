@@ -1,4 +1,5 @@
 export const UI_STATE = {
+    globalChron: false,
     stack: false,
     trend: false,
     heat: false,
@@ -42,7 +43,7 @@ const ICON_SYNC = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
 const ICON_SPINNER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px; margin-right:6px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M12 2a10 10 0 0 1 10 10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>`;
 
 export const UI_LABELS = {
-    SYNC_BTN_ACTIVE: `${ICON_SYNC}Sync Data`,
+    SYNC_BTN_ACTIVE: `${ICON_SYNC}Sync`,
     SYNC_BTN_LOADING: `${ICON_SPINNER}Initializing...`
 };
 
