@@ -1,17 +1,17 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.157";
+import { hub } from "./core/eventHub.js?v=0.1.165";
 import "./core/appStateCtrl.js?v=0.1.98";
 import "./engine/repoManager.js?v=0.1.98";
 import "./engine/telemetryStream.js?v=0.1.98";
 import "./engine/engineControl.js?v=0.1.98";
 import "./ui/terminalView.js?v=0.1.98";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.157';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.157';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.157';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.157';
-import { CM_COLORS } from './constants/colors.js?v=0.1.157';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.157';
+import { processCommits } from './core/dataEngine.js?v=0.1.165';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.165';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.165';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.165';
+import { CM_COLORS } from './constants/colors.js?v=0.1.165';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.165';
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
 window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
@@ -301,5 +301,5 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
     if (payload.gen && payload.gen !== window.CM_RENDER_GEN) return;
     if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });
-import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.157';
+import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.165';
 initGlobalTooltips();

@@ -379,6 +379,13 @@ def main():
     success_count = flush_state["success_count"]
 
     from backend.services.pipeline.pipeline_presentation import print_final_pipeline_summary_report
+    try:
+        if is_genuine_warm_start and success_count > 0:
+            from backend.utils.csv_writer import compact_csv_merge
+            compact_csv_merge(CSV_PATH, headers=headers)
+    except Exception as e:
+        print(f"⚠️ Ledger compaction warning: {e}", flush=True)
+
     print_final_pipeline_summary_report(repo_label, db_path, commits_with_ids)
 
     if error_count > 0:

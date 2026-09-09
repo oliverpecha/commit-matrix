@@ -93,14 +93,35 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
     return out
 
 def fetch_ledger(repo, rubric=None, owner=None, force=False):
-    rubric = rubric or __import__("os").environ.get("RUBRIC_NAME", "unknown")
+    import glob, os, time
+    rubric = rubric or os.environ.get("RUBRIC_NAME", "unknown")
     cache_key = f"{repo}_{rubric}"
     now = time.time()
-    if not force and cache_key in _CACHE and now - _CACHE[cache_key].get('ts', 0) < CACHE_TTL:
-        return _CACHE[cache_key]['data']
+    
+    cached = _CACHE.get(cache_key, {})
+    cached_path = cached.get('path')
+    
+    # 1. Fast-path mtime check if we already know the exact file path
+    if cached_path and os.path.exists(cached_path):
+        current_mtime = os.path.getmtime(cached_path)
+        if not force and (now - cached.get('ts', 0) < CACHE_TTL) and (cached.get('mtime', 0) == current_mtime):
+            return cached['data']
+            
+    # 2. Slow-path: path discovery (only runs on pure cache miss or file deletion)
+    candidates = []
+    if owner and owner != "local":
+        candidates.extend([f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv", f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv"])
+    candidates.extend(glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv") + glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv"))
+    
+    p = next((c for c in candidates if os.path.exists(c)), None)
+    if not p:
+        return []
+        
+    current_mtime = os.path.getmtime(p)
     data = fetch_ledger_raw(repo, rubric, owner)
     if data:
-        _CACHE[cache_key] = {'ts': now, 'data': data}
+        _CACHE[cache_key] = {'ts': now, 'mtime': current_mtime, 'path': p, 'data': data}
     elif cache_key in _CACHE:
         del _CACHE[cache_key]
     return data
+

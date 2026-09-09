@@ -1,4 +1,4 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.157';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.165';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -178,6 +178,7 @@ export function renderTableRowsBatched(displayData, tbodyId = "cm-tbody", batchS
 
 export function initInfiniteScroll(repo, initialOffset = 100) {
     if (window.CM_SCROLL_ABORT) window.CM_SCROLL_ABORT.abort();
+    if (window.CM_TABLE_OBSERVER) window.CM_TABLE_OBSERVER.disconnect();
     window.CM_SCROLL_ABORT = new AbortController();
 
     let offset = initialOffset;
@@ -199,6 +200,29 @@ export function initInfiniteScroll(repo, initialOffset = 100) {
                     if (window.MATRIX_PAYLOAD) {
                         window.MATRIX_PAYLOAD = window.MATRIX_PAYLOAD.concat(data);
                     }
+                    // --- AUTOMATED SORT VALIDATION ---
+                    let _fractures = 0;
+                    let _lastVal = Infinity;
+                    let _payload = window.MATRIX_PAYLOAD || [];
+                    for (let i = 0; i < _payload.length; i++) {
+                        let _currentVal = parseInt(_payload[i]['#']);
+                        if (!isNaN(_currentVal)) {
+                            if (_currentVal > _lastVal) {
+                                if (_fractures < 5) console.warn(`⚠️ UI Fracture at index ${i}: #${_currentVal} came after #${_lastVal}`);
+                                _fractures++;
+                            } else if (_lastVal !== Infinity && _lastVal - _currentVal > 1) {
+                                if (_fractures < 5) console.warn(`⚠️ UI Gap at index ${i}: skipped from #${_lastVal} to #${_currentVal}`);
+                                _fractures++;
+                            }
+                            _lastVal = _currentVal;
+                        }
+                    }
+                    if (_fractures === 0) {
+                        console.log(`✅ SUCCESS: Frontend payload (${_payload.length} rows) is in perfect descending order!`);
+                    } else {
+                        console.error(`❌ FAILED: Found ${_fractures} sorting anomalies in the frontend payload.`);
+                    }
+                    // ---------------------------------
                     const normalized = normalizeCommits(data);
                     renderTableRowsBatched(normalized, "cm-tbody", 100, false);
                     offset += data.length;
