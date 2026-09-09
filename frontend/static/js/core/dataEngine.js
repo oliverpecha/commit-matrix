@@ -8,14 +8,11 @@ export function processCommits(r) {
         return obj;
     }) : r;
 
-    return list.map((c, i) => {
+    const processed = list.map((c, i) => {
         const lc = {};
         for (let k in c) {
-            if (k.trim().length === 1) {
-                lc[k.trim()] = c[k];
-            } else {
-                lc[k.trim().toLowerCase()] = c[k];
-            }
+            if (k.trim().length === 1) lc[k.trim()] = c[k];
+            else lc[k.trim().toLowerCase()] = c[k];
         }
 
         const subj = c.s || c.subject || lc.subject || lc.clean_s || lc.message || "";
@@ -71,6 +68,7 @@ export function processCommits(r) {
           
         return c;
     });
+    return processed; 	
 }
 export function fmtCD(ts){ const d=new Date(ts*1000); const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${m[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}`; }
 export function fmtTableDate(ts){ const d=new Date(ts*1000); const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${m[d.getMonth()]} ${String(d.getDate()).padStart(2,'0')}, '${String(d.getFullYear()).slice(-2)}`; }

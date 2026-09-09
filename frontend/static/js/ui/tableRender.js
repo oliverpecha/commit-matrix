@@ -207,7 +207,7 @@ export function initInfiniteScroll(repo, initialOffset = 100) {
                     for (let i = 0; i < _payload.length; i++) {
                         let _currentVal = parseInt(_payload[i]['#']);
                         if (!isNaN(_currentVal)) {
-                            if (_currentVal > _lastVal) {
+                            if (_currentVal === _lastVal) { console.error(`❌ DUPLICATE DETECTED: #${_currentVal} loaded multiple times.`); _fractures++; } else if (_currentVal > _lastVal) {
                                 if (_fractures < 5) console.warn(`⚠️ UI Fracture at index ${i}: #${_currentVal} came after #${_lastVal}`);
                                 _fractures++;
                             } else if (_lastVal !== Infinity && _lastVal - _currentVal > 1) {
