@@ -1,6 +1,5 @@
 from backend.workers.commit_processor import process_commit
 
-
 def submit_work_item(executor, work_item, rate_limits, aimd):
     future = executor.submit(
         process_commit,
@@ -13,31 +12,21 @@ def submit_work_item(executor, work_item, rate_limits, aimd):
         work_item.rubric_path,
         rate_limits,
         aimd,
-        work_item.arch_tree_signature,
-        work_item.arch_gen,
-        None,
+        arch_tree_signature=getattr(work_item, 'arch_tree_signature', None),
+        arch_meta=getattr(work_item, 'arch_meta', {}),
+        arch_change_shape=getattr(work_item, 'arch_change_shape', 'unknown'),
+        arch_gen=getattr(work_item, 'arch_gen', None),
+        arch_gen_trail=None,
     )
     return future
 
-
 def seed_initial_batch(
-    executor,
-    work_item_iterator,
-    max_workers,
-    total_unscanned,
-    processed_count,
-    arch_context,
-    model_name,
-    rubric_path,
-    rate_limits,
-    aimd,
-    arch_tree_signature=None,
-    arch_gen=None,
+    executor, work_item_iterator, max_workers, total_unscanned,
+    processed_count, arch_context, model_name, rubric_path,
+    rate_limits, aimd, arch_tree_signature=None, arch_gen=None,
 ):
     active_futures = {}
-
     processed_count = int(processed_count)
-
     for _ in range(max_workers):
         try:
             work_item = next(work_item_iterator)
@@ -46,9 +35,7 @@ def seed_initial_batch(
             processed_count += 1
         except StopIteration:
             break
-
     return active_futures, processed_count
-
 
 def replenish_one(executor, work_item_iterator, active_futures, rate_limits, aimd):
     try:
