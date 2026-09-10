@@ -79,8 +79,9 @@ fi
 
 if [ ! -d "$TARGET_REPO/.git" ]; then echo "❌ Error: $TARGET_REPO is not a valid Git repository."; exit 1; fi
 
-HOST_REPO_NAME=$(basename "$TARGET_REPO")
-HOST_REPO_OWNER=$(cd "$TARGET_REPO" && git config --get remote.origin.url 2>/dev/null | python3 -c 'import sys,re; u=sys.stdin.read().strip(); u=re.sub(r"\.git$","",u); u=re.sub(r"^.*?://","",u); u=re.sub(r"^.*?@","",u); p=re.split(r"[:/]",u); print(p[-2] if len(p)>=2 and not p[-2].isdigit() else (p[-3] if len(p)>=3 else "local"))' 2>/dev/null)
+export HOST_REPO_NAME=$(basename "$TARGET_REPO")
+export MATRIX_TOKEN
+export HOST_REPO_OWNER=$(cd "$TARGET_REPO" && git config --get remote.origin.url 2>/dev/null | python3 -c 'import sys,re; u=sys.stdin.read().strip(); u=re.sub(r"\.git$","",u); u=re.sub(r"^.*?://","",u); u=re.sub(r"^.*?@","",u); p=re.split(r"[:/]",u); print(p[-2] if len(p)>=2 and not p[-2].isdigit() else (p[-3] if len(p)>=3 else "local"))' 2>/dev/null)
 [ -z "$HOST_REPO_OWNER" ] && HOST_REPO_OWNER="local"
 
 SERVER_IP=$(hostname -I | awk '{print $1}')

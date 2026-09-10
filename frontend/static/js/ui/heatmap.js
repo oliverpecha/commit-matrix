@@ -1,13 +1,10 @@
-import { SCOPE_COLORS } from '../constants/colors.js?v=0.1.165';
-import { UI_STATE } from '../core/state.js?v=0.1.165';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.165';
-
-// FIX: Aligned perfectly with your CSV headers
-const SVCS = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];
-const SVC_KEYS = ['t_metrics','t_preflight','t_tests','t_docs','t_dashboard','t_config','t_scripts','t_proxy','t_core'];
+import { SCOPE_COLORS } from '../constants/colors.js?v=0.1.171';
+import { UI_STATE } from '../core/state.js?v=0.1.171';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.171';
 
 let lastCommits = [];
 if(!window._hmSync){ window._hmSync=true; window.addEventListener('cm-sync-heat', ()=>lastCommits.length&&renderHeatmap(lastCommits)); }
+
 export function renderHeatmap(commits) {
     lastCommits = commits;
     const svgEl = document.getElementById('cm-heat-svg');
@@ -17,6 +14,14 @@ export function renderHeatmap(commits) {
     
     const W = container.clientWidth || 600, H = container.clientHeight || 200;
     if (W === 0) return;
+    
+    // Dynamically generate axes based on present touches_* keys
+    const keysSet = new Set();
+    commits.forEach(c => Object.keys(c).forEach(k => { if (k.startsWith('touches_')) keysSet.add(k); }));
+    const SVC_KEYS = Array.from(keysSet).sort();
+    if (!SVC_KEYS.length) return;
+    
+    const SVCS = SVC_KEYS.map(k => k.replace('touches_', '').charAt(0).toUpperCase() + k.replace('touches_', '').slice(1));
     
     const isLin = UI_STATE.heat;
     const PAD_L = (window.CM_CHART_AREA && window.CM_CHART_AREA.left) || 62;
@@ -39,13 +44,14 @@ export function renderHeatmap(commits) {
         const step = commits.length > 1 ? innerW / (commits.length - 1) : 0;
         xPos = commits.map((_, i) => PAD_L + (colW / 2) + (i * step));
     }
+    
     const ns = 'http://www.w3.org/2000/svg';
-    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`); svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`); 
+    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const fragment = document.createDocumentFragment();
 
     SVCS.forEach((lbl, row) => {
-        // 1. Text Label
         const t = document.createElementNS(ns, 'text');
         t.setAttribute('x', PAD_L - 6); 
         t.setAttribute('y', PAD_T + row * rowH + rowH / 2 + 3.5);
@@ -56,7 +62,6 @@ export function renderHeatmap(commits) {
         t.textContent = lbl;
         fragment.appendChild(t);
 
-        // 2. Full-width faint background row (Replaces thousands of empty rects)
         const bgRect = document.createElementNS(ns, 'rect');
         bgRect.setAttribute('x', PAD_L); 
         bgRect.setAttribute('y', PAD_T + row * rowH + 1);
@@ -71,19 +76,21 @@ export function renderHeatmap(commits) {
         let rx = xPos[col] - (colW / 2);
         rx = Math.max(PAD_L, Math.min(rx, rightEdge - colW));
         SVCS.forEach((svc, row) => {
-            const hit = c[SVC_KEYS[row]] === true;
-            
-            // OPTIMIZATION: Only generate DOM nodes for actual data hits
-            if (!hit) return; 
+            const intensity = Number(c[SVC_KEYS[row]]) || 0;
+            if (intensity <= 0) return; 
 
+            // Scale opacity by intensity integer (1, 2, 3, or 4)
+            const opacities = [0, 0.25, 0.50, 0.75, 1.0];
+            const op = opacities[Math.min(4, intensity)] || 1.0;
+            
             const rect = document.createElementNS(ns, 'rect');
             rect.setAttribute('x', rx); 
             rect.setAttribute('y', PAD_T + row * rowH + 1);
             rect.setAttribute('width', colW); 
             rect.setAttribute('height', rowH - 2); 
             rect.setAttribute('rx', 2);
-            rect.setAttribute('fill', SCOPE_COLORS[String(SVC_KEYS[row]).replace(/^t_/, '').toLowerCase()] || '#4f98a3'); 
-            rect.setAttribute('opacity', '0.85');
+            rect.setAttribute('fill', SCOPE_COLORS[String(SVC_KEYS[row]).replace('touches_', '').toLowerCase()] || '#4f98a3'); 
+            rect.setAttribute('opacity', op.toString());
             fragment.appendChild(rect);
         });
     });

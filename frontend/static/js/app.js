@@ -1,17 +1,17 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.165";
+import { hub } from "./core/eventHub.js?v=0.1.171";
 import "./core/appStateCtrl.js?v=0.1.98";
 import "./engine/repoManager.js?v=0.1.98";
 import "./engine/telemetryStream.js?v=0.1.98";
 import "./engine/engineControl.js?v=0.1.98";
 import "./ui/terminalView.js?v=0.1.98";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.165';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.165';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.165';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.165';
-import { CM_COLORS } from './constants/colors.js?v=0.1.165';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.165';
+import { processCommits } from './core/dataEngine.js?v=0.1.171';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.171';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.171';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.171';
+import { CM_COLORS } from './constants/colors.js?v=0.1.171';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.171';
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
 window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
@@ -186,7 +186,7 @@ window.addEventListener('load', async () => {
     
     const isInvalid = window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC;
     if (repo && rubric && !isInvalid && (window.MATRIX_PAYLOAD || window.MATRIX_CHART_PAYLOAD)) {
-        console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv (Force: ${typeof isForce !== 'undefined' ? isForce : false})`);
+        console.log(`[Data Engine] Loading SQLite ledger via API: /api/data?owner=${owner}&repo=${repo}&rubric=${rubric} (Force: ${typeof isForce !== 'undefined' ? isForce : false})`);
     }
 
     attemptRender();
@@ -301,5 +301,5 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
     if (payload.gen && payload.gen !== window.CM_RENDER_GEN) return;
     if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });
-import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.165';
+import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.171';
 initGlobalTooltips();
