@@ -1,107 +1,12 @@
 """Commit processing worker function."""
-import json
 import os
 import sys
-import sqlite3
-import glob
 import logging
-import threading
 
-# Thread-local storage to cache database connections per worker thread
-_thread_locals = threading.local()
 logger = logging.getLogger(__name__)
 
 if "GEMINI_API_KEY" in os.environ:
     os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
-
-from litellm import completion
-
-
-def _resolve_db_path() -> str | None:
-    """
-    Robust path resolution supporting local testing, target repositories, 
-    and remote MochiClaw mount targets.
-    """
-    target_repo = os.environ.get("TARGET_REPO")
-    if target_repo:
-        possible_path = os.path.join(target_repo, "data/{HOST_REPO_NAME}.db")
-        if os.path.exists(possible_path):
-            return possible_path
-
-    db_paths = glob.glob('data/**/{HOST_REPO_NAME}.db', recursive=True)
-    if db_paths:
-        return db_paths[0]
-        
-    fallback = 'data/{HOST_REPO_NAME}.db'
-    if os.path.exists(fallback):
-        return fallback
-        
-    return None
-
-
-def _resolve_shape(sig: str, current_shape: str | None) -> str:
-    if current_shape and current_shape != 'unknown':
-        return current_shape
-    if not sig:
-        return 'unknown'
-
-    db_path = _resolve_db_path()
-    if not db_path:
-        return 'unknown'
-
-    try:
-        if not hasattr(_thread_locals, "conn"):
-            _thread_locals.conn = sqlite3.connect(
-                db_path, 
-                timeout=5.0, 
-                check_same_thread=False
-            )
-            _thread_locals.conn.execute('PRAGMA journal_mode=WAL;')
-
-        cursor = _thread_locals.conn.cursor()
-        cursor.execute(
-            'SELECT shape_label, shape FROM architecture_snapshots WHERE snapshot_sig LIKE ? OR snapshot_sig = ? LIMIT 1', 
-            (f'{sig[:12]}%', sig)
-        )
-        res = cursor.fetchone()
-        
-        if res:
-            shape_label = res[0] or res[1] or 'unknown'
-            try:
-                from backend.services.architecture.taxonomy import get_shape_metadata
-                meta = get_shape_metadata(res[1] or res[0] or "")
-                if meta and meta.get("icon") and meta.get("icon") != "•":
-                    return f"{meta.get('icon')} {meta.get('label', shape_label)}"
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except Exception:
-                pass
-            return shape_label
-            
-    except sqlite3.OperationalError as e:
-        logger.warning(f"[Telemetry Congestion Warning] Shape lookup dropped due to lock: {e}")
-    except (KeyboardInterrupt, SystemExit):
-        raise
-    except Exception as e:
-        logger.error(f"[Telemetry Exception] Unexpected error resolving shape: {e}")
-        
-    return 'unknown'
-
-import json
-import os
-import sys
-
-if "GEMINI_API_KEY" in os.environ:
-    os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
-
-from litellm import completion
-
-
-def _axis_bar(value: int, max_val: int = 3, width: int = 5) -> str:
-    value = max(0, int(value or 0))
-    filled = min(int(width * value / max_val), width)
-    return chr(9608) * filled + chr(9617) * (width - filled)
-
 
 def process_commit(
     topo_id,
