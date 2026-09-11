@@ -8,6 +8,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - HOST_REPO_OWNER=${HOST_REPO_OWNER:-local}
+      - MOCK_SCORE=${MOCK_SCORE:-false}
     ports:
       - "8000:8000"
     volumes:

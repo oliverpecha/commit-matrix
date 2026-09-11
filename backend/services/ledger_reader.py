@@ -23,11 +23,15 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
     if owner and owner != "local":
         candidates.extend([
             f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv",
-            f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv"
+            f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv",
+            f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}_mock.csv",
+            f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}_mock.csv"
         ])
         
     candidates.extend(glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv"))
     candidates.extend(glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv"))
+    candidates.extend(glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}_mock.csv"))
+    candidates.extend(glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}_mock.csv"))
 
     p = next((candidate for candidate in candidates if os.path.exists(candidate)), None)
     if not p:
@@ -110,8 +114,18 @@ def fetch_ledger(repo, rubric=None, owner=None, force=False):
     # 2. Slow-path: path discovery (only runs on pure cache miss or file deletion)
     candidates = []
     if owner and owner != "local":
-        candidates.extend([f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv", f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv"])
-    candidates.extend(glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv") + glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv"))
+        candidates.extend([
+            f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv", 
+            f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}.csv",
+            f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}_mock.csv", 
+            f"data/{owner}/{repo}/db/{repo}_ledger_{rubric}_mock.csv"
+        ])
+    candidates.extend(
+        glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv") + 
+        glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv") +
+        glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}_mock.csv") + 
+        glob.glob(f"data/*/{repo}/db/{repo}_ledger_{rubric}_mock.csv")
+    )
     
     p = next((c for c in candidates if os.path.exists(c)), None)
     if not p:

@@ -6,14 +6,19 @@ TARGET_RPM = float(os.environ.get('MATRIX_RPM_LIMIT', os.environ.get('TARGET_RPM
 MAX_WORKERS = int(os.environ.get('MATRIX_MAX_WORKERS', os.environ.get('MAX_WORKERS', '6')))
 HOST_REPO_NAME = os.environ.get('HOST_REPO_NAME', 'commit-matrix')
 RUBRIC_NAME = os.environ.get('RUBRIC_NAME', 'unknown')
-CSV_PATH = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}.csv"
+is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+mock_suffix = "_mock" if is_mock else ""
+CSV_PATH = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}{mock_suffix}.csv"
 RUBRIC_PATH = f'/app/rubrics/{RUBRIC_NAME}.md'
 
 
 def get_csv_path(repo_name: str | None = None, rubric_name: str | None = None) -> str:
     repo = repo_name or os.environ.get('HOST_REPO_NAME', 'commit-matrix')
     rubric = rubric_name or os.environ.get('RUBRIC_NAME', 'unknown')
-    return (glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}.csv") + [f"/app/data/local/{repo}/db/{repo}_ledger_{rubric}.csv"])[0]
+    is_m = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    ms = "_mock" if is_m else ""
+    owner = os.environ.get("HOST_REPO_OWNER") or "local"
+    return (glob.glob(f"/app/data/*/{repo}/db/{repo}_ledger_{rubric}{ms}.csv") + [f"/app/data/{owner}/{repo}/db/{repo}_ledger_{rubric}{ms}.csv"])[0]
 
 
 def get_rubric_path(rubric_name: str | None = None) -> str:

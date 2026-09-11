@@ -263,7 +263,9 @@ def write_architecture_run(db_path: str, payload: dict, rubric_name: str = None)
             last_sig = snapshot_sig
 
     # Unmapped commits from ledger
-    ledger_path = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}_ledger_{rubric_name}.csv"
+    is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    mock_suffix = "_mock" if is_mock else ""
+    ledger_path = (Path("data") / (os.environ.get("HOST_REPO_OWNER") or "local") / repo_label) / "db" / f"{repo_label}_ledger_{rubric_name}{mock_suffix}.csv"
     unmapped_count = 0
     if ledger_path.exists():
         print(

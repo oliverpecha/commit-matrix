@@ -158,10 +158,14 @@ def main():
     
     _csv_owner = os.environ.get('HOST_REPO_OWNER') or 'local'
     _csv_rubric = os.environ.get('RUBRIC_NAME', 'unknown')
-    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}.csv"
+    _is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    _mock_suffix = "_mock" if _is_mock else ""
+    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}{_mock_suffix}.csv"
     _csv_owner = os.environ.get('HOST_REPO_OWNER') or 'local'
     _csv_rubric = os.environ.get('RUBRIC_NAME', 'unknown')
-    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}.csv"
+    _is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    _mock_suffix = "_mock" if _is_mock else ""
+    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}{_mock_suffix}.csv"
     _csv_path = Path(CSV_PATH)
     is_genuine_warm_start = _csv_path.exists() and _csv_path.stat().st_size > 50
 
