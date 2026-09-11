@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: FLUX Scoring Engine
 # Profile: Data / ML / ETL Pipeline
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: ETL pipelines, ML training scripts, feature engineering, data transformation, model serving, analytics backends, dbt models, Airflow DAGs
 
 Data and ML repositories have a uniquely silent failure mode: a filter condition changed by one character can corrupt a training dataset or produce wrong model outputs, and the defect may not surface until downstream consumers notice incorrect results days or weeks later. The blast radius is every system that consumes the pipeline's output. The critical documentation failure is the data contract and transformation logic — what invariants does this transformation depend on? What are the valid input ranges? Debt accumulates as hardcoded thresholds, magic constants in feature engineering, and pipelines with no data validation step.
@@ -53,20 +53,20 @@ Many downstream consumers depending on a pipeline whose output fidelity is unver
 ---
 
 ## Tier
-Calculate `tot` as F + L + U + X. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as F + L + U + X. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
@@ -75,14 +75,24 @@ Calculate `tot` as F + L + U + X. Calculate `score_pct` as `round(tot / 12 * 100
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "F": 1, "L": 2, "U": 3, "X": 1,
-  "tot": 7, "score_pct": 58.3, "tier": "Significant",
-  "danger_flag": true, "debt_direction": "increases",
-  "touches_transformation": true, "touches_validation": false,
-  "touches_models": true, "touches_schema": false,
-  "touches_config": false, "touches_tests": false,
-  "touches_critical": true
+  "F": 1,
+  "L": 2,
+  "U": 3,
+  "X": 1,
+  "tot": 7,
+  "score_pct": 58.3,
+  "tier": "Core",
+  "danger_flag": true,
+  "debt_direction": "increases",
+  "touches_transformation": 3,
+  "touches_validation": 0,
+  "touches_models": 3,
+  "touches_schema": 0,
+  "touches_config": 0,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```

@@ -19,7 +19,7 @@ from pathlib import Path
 # ── Config ────────────────────────────────────────────────────────────────────
 LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "http://localhost:4000")
 LITELLM_API_KEY  = os.getenv("LITELLM_API_KEY",  "sk-1234")
-RUBRICS_DIR      = Path(os.getenv("RUBRICS_DIR",  "./backend/rubrics"))
+RUBRICS_DIR      = Path(os.getenv("RUBRICS_DIR",  "./rubrics"))
 FIXTURES_DIR     = Path(os.getenv("FIXTURES_DIR", "./calibration/fixtures"))
 REPORTS_DIR      = Path(os.getenv("REPORTS_DIR",  "./calibration/reports"))
 
@@ -71,7 +71,7 @@ class Spinner:
 
 # ── JSON contract validator ───────────────────────────────────────────────────
 REQUIRED_FIELDS = {"tot", "score_pct", "tier", "danger_flag", "debt_direction"}
-VALID_TIERS     = {"Critical", "Significant", "Routine", "Trivial"}
+VALID_TIERS     = {"Pivotal", "Core", "Minor", "Trivial"}
 VALID_DEBT_DIRS = {"increases", "neutral", "reduces"}
 
 DEBT_AXIS_CONSISTENCY = {
@@ -107,7 +107,7 @@ def validate_contract(payload: dict, rubric_name: str = "") -> list:
             violations.append(f"tot={payload['tot']} but sum of axes = {expected_tot}")
 
     if "tot" in payload and "score_pct" in payload and axis_keys:
-        max_score = len(axis_keys) * 3
+        max_score = len(axis_keys) * 4
         expected_pct = round(payload["tot"] / max_score * 100, 1)
         if abs(payload["score_pct"] - expected_pct) > 0.2:
             violations.append(f"score_pct={payload['score_pct']} but expected {expected_pct}")
@@ -459,7 +459,7 @@ def build_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--rubric", default="all", metavar="NAME")
-    parser.add_argument("--model", default="gemini/gemini-3.1-pro-preview", metavar="PROVIDER/MODEL")
+    parser.add_argument("--model", default=os.environ.get("MATRIX_MODEL", "gemini/gemini-3.1-pro-preview"), metavar="PROVIDER/MODEL")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--no-report", action="store_true")
     parser.add_argument("--threshold", type=float, default=PASS_THRESHOLD, metavar="FLOAT")
@@ -491,7 +491,7 @@ def main():
     print(f"  🎯  Threshold : {PASS_THRESHOLD:.0%} pass rate required")
     print(f"  🔗  LiteLLM   : {LITELLM_BASE_URL}")
     print(f"  🔬  Fixtures  : floor · typical · adversarial  (3 per rubric)")
-    print(f"  📊  Total     : {len(rubrics_to_run) * 3} fixture runs\n")
+    print(f"  📊  Total     : {len(rubrics_to_run) * 4} fixture runs\n")
     print("  ℹ   Verbose mode is " + ("ON" if args.verbose else "OFF"))
     print()
     

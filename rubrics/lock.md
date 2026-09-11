@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: LOCK Scoring Engine
 # Profile: Security / Auth / Cryptography
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: Authentication services, authorization middleware, OAuth, secrets management, cryptographic libraries, JWT handling, API key systems
 
 Security repositories operate under a uniquely asymmetric failure mode: vulnerabilities are often silent until exploited, and the damage is frequently irreversible — leaked credentials, compromised sessions, exposed user data. The blast radius is every user who authenticates through this system. The critical documentation failure is the threat model: why was this cipher chosen, what attack does this rate limit address? Security commits without threat context leave reviewers unable to verify correctness. Debt accumulates as shortcuts taken under deadline pressure: hardcoded secrets, disabled checks, overly permissive scopes, and TODO comments that become permanent.
@@ -53,20 +53,20 @@ A change that weakens security posture on a foundational primitive — loosening
 ---
 
 ## Tier
-Calculate `tot` as L + O + C + K. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as L + O + C + K. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
@@ -75,14 +75,24 @@ Calculate `tot` as L + O + C + K. Calculate `score_pct` as `round(tot / 12 * 100
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "L": 1, "O": 2, "C": 1, "K": 3,
-  "tot": 7, "score_pct": 58.3, "tier": "Significant",
-  "danger_flag": true, "debt_direction": "increases",
-  "touches_auth": true, "touches_crypto": false,
-  "touches_tokens": true, "touches_secrets": false,
-  "touches_middleware": true, "touches_tests": false,
-  "touches_critical": true
+  "L": 1,
+  "O": 2,
+  "C": 1,
+  "K": 3,
+  "tot": 7,
+  "score_pct": 58.3,
+  "tier": "Core",
+  "danger_flag": true,
+  "debt_direction": "increases",
+  "touches_auth": 3,
+  "touches_crypto": 0,
+  "touches_tokens": 3,
+  "touches_secrets": 0,
+  "touches_middleware": 3,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```

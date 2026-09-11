@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: PLAN Scoring Engine
 # Profile: Backend / API
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: REST/GraphQL APIs, microservices, LLM backends, FastAPI, Express, Django, gRPC services
 
 Backend and API repositories carry implicit contracts with every caller. A silent contract break multiplies by the number of consumers — and those consumers may not discover the breakage until they hit production. The primary documentation failure is the reason a contract changed: was a field renamed due to a bug, a redesign, or a deprecation? The debt pattern is undocumented implicit contracts — endpoints that work but have no schema, no validation spec, and no error contract. Every undocumented assumption is future liability.
@@ -53,20 +53,20 @@ A breaking contract change with no protective hardening — callers break, nothi
 ---
 
 ## Tier
-Calculate `tot` as P + L + A + N. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as P + L + A + N. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
@@ -75,14 +75,24 @@ Calculate `tot` as P + L + A + N. Calculate `score_pct` as `round(tot / 12 * 100
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "P": 1, "L": 3, "A": 2, "N": 2,
-  "tot": 8, "score_pct": 66.7, "tier": "Significant",
-  "danger_flag": true, "debt_direction": "increases",
-  "touches_routes": true, "touches_models": false,
-  "touches_middleware": false, "touches_auth": false,
-  "touches_database": false, "touches_tests": false,
-  "touches_critical": true
+  "P": 1,
+  "L": 3,
+  "A": 2,
+  "N": 2,
+  "tot": 8,
+  "score_pct": 66.7,
+  "tier": "Core",
+  "danger_flag": true,
+  "debt_direction": "increases",
+  "touches_routes": 3,
+  "touches_models": 0,
+  "touches_middleware": 0,
+  "touches_auth": 0,
+  "touches_database": 0,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```

@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: GRID Scoring Engine
 # Profile: Infrastructure / DevOps
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: Docker, Terraform, CI/CD pipelines, proxy configs, shell scripts, VPS ops, LiteLLM, Kubernetes
 
 Infrastructure repositories are the substrate everything else runs on. When they break, every service above them breaks simultaneously. The primary blast radius is service-level — a defect cascades through every dependent. The critical documentation failure is the operational reason behind a config change: the diff shows what changed, never why. Debt accumulates as hardcoded values, undocumented workarounds, and copy-pasted config blocks that compound until the system becomes unmaintainable.
@@ -57,20 +57,20 @@ Evaluate the **net maintainability direction** of the entire commit holistically
 ---
 
 ## Tier
-Calculate `tot` as G + R + I + D. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as G + R + I + D. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
@@ -79,14 +79,24 @@ Calculate `tot` as G + R + I + D. Calculate `score_pct` as `round(tot / 12 * 100
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "G": 2, "R": 3, "I": 1, "D": 2,
-  "tot": 8, "score_pct": 66.7, "tier": "Significant",
-  "danger_flag": false, "debt_direction": "neutral",
-  "touches_proxy": false, "touches_scripts": true,
-  "touches_config": true, "touches_dashboard": false,
-  "touches_docs": false, "touches_tests": false,
-  "touches_critical": true
+  "G": 2,
+  "R": 3,
+  "I": 1,
+  "D": 2,
+  "tot": 8,
+  "score_pct": 66.7,
+  "tier": "Core",
+  "danger_flag": false,
+  "debt_direction": "neutral",
+  "touches_proxy": 0,
+  "touches_scripts": 3,
+  "touches_config": 3,
+  "touches_dashboard": 0,
+  "touches_docs": 0,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```

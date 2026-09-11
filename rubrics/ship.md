@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: SHIP Scoring Engine
 # Profile: Mobile / Native App
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: iOS (Swift/ObjC), Android (Kotlin/Java), React Native, Flutter, Expo, Capacitor, desktop Electron apps
 
 Mobile repositories operate under a uniquely constrained deployment model — you cannot hot-patch a shipped binary. A defect in a published version reaches every user who has not updated, and app store review adds a 1–3 day lag before any fix reaches users. The blast radius multiplies by both affected users and time-until-patch. The critical documentation failure is platform-specific behavioral constraints: why does this permission request appear here, why is this API call guarded by an OS version check? Debt accumulates as minimum OS version creep, undocumented platform workarounds, and feature flags that were never cleaned up.
@@ -53,20 +53,20 @@ An app store compliance risk that cannot be patched without a full release cycle
 ---
 
 ## Tier
-Calculate `tot` as S + H + I + P. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as S + H + I + P. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
@@ -75,14 +75,24 @@ Calculate `tot` as S + H + I + P. Calculate `score_pct` as `round(tot / 12 * 100
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "S": 3, "H": 2, "I": 1, "P": 1,
-  "tot": 7, "score_pct": 58.3, "tier": "Significant",
-  "danger_flag": true, "debt_direction": "increases",
-  "touches_permissions": true, "touches_native_modules": false,
-  "touches_ui": true, "touches_platform_config": true,
-  "touches_feature_flags": false, "touches_tests": false,
-  "touches_critical": true
+  "S": 3,
+  "H": 2,
+  "I": 1,
+  "P": 1,
+  "tot": 7,
+  "score_pct": 58.3,
+  "tier": "Core",
+  "danger_flag": true,
+  "debt_direction": "increases",
+  "touches_permissions": 3,
+  "touches_native_modules": 0,
+  "touches_ui": 3,
+  "touches_platform_config": 3,
+  "touches_feature_flags": 0,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```

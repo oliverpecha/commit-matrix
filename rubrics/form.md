@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: FORM Scoring Engine
 # Profile: Library / SDK / CLI Tool
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: npm/pip packages, developer tools, CLI utilities, shared modules, language bindings, open-source libraries
 
 Library repositories make promises to every project that imports them. A breaking change multiplies by the number of consumers — and those consumers may not update immediately, causing version conflicts and silent behavior changes across an entire ecosystem. The primary documentation failure is the behavioral contract of public symbols: what does this function guarantee, what does it accept, what does it return on error. Debt accumulates as untested public API surface that becomes an implicit contract — every undocumented behavior is something a consumer will rely on and that you'll be afraid to change.
@@ -53,20 +53,20 @@ A breaking API change whose output is unreliable — consumers are forced to upg
 ---
 
 ## Tier
-Calculate `tot` as F + O + R + M. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as F + O + R + M. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
@@ -75,14 +75,24 @@ Calculate `tot` as F + O + R + M. Calculate `score_pct` as `round(tot / 12 * 100
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "F": 3, "O": 1, "R": 2, "M": 1,
-  "tot": 7, "score_pct": 58.3, "tier": "Significant",
-  "danger_flag": true, "debt_direction": "increases",
-  "touches_public_api": true, "touches_cli": false,
-  "touches_types": true, "touches_tests": false,
-  "touches_docs": false, "touches_changelog": false,
-  "touches_critical": true
+  "F": 3,
+  "O": 1,
+  "R": 2,
+  "M": 1,
+  "tot": 7,
+  "score_pct": 58.3,
+  "tier": "Core",
+  "danger_flag": true,
+  "debt_direction": "increases",
+  "touches_public_api": 3,
+  "touches_cli": 0,
+  "touches_types": 3,
+  "touches_docs": 0,
+  "touches_changelog": 0,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```

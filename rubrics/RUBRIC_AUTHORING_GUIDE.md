@@ -19,10 +19,10 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 
 | Field | Type | Constraint |
 |---|---|---|
-| One key per axis | integer | Value must be 1, 2, or 3 — no floats, no 0, no 4 |
+| One key per axis | integer | Value must be 1, 2, 3, or 4 — no floats, no 0, no 5 |
 | `tot` | integer | Must equal the exact sum of all axis scores |
 | `score_pct` | float | Must equal `round(tot / max_score * 100, 1)` where `max_score = axes × 3` |
-| `tier` | string | Must be `"Critical"` / `"Significant"` / `"Routine"` / `"Trivial"` |
+| `tier` | string | Must be `"Pivotal"` / `"Core"` / `"Minor"` / `"Trivial"` |
 | `danger_flag` | boolean | Derived from rubric-specific axis combination logic |
 | `debt_direction` | string | Must be `"increases"` / `"neutral"` / `"reduces"` |
 | At least one `touches_*` | boolean | Domain-specific; rubric defines which domains to track |
@@ -33,22 +33,22 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 
 ### Tier Thresholds
 
-**4-axis rubric (max_score = 12):**
+**4-axis rubric (max_score = 16):**
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 **5-axis rubric (max_score = 15):**
 
 | tot | score_pct | tier |
 |---|---|---|
-| 13–15 | 87–100 | `"Critical"` |
-| 9–12 | 60–80 | `"Significant"` |
-| 5–8 | 33–53 | `"Routine"` |
+| 13–15 | 87–100 | `"Pivotal"` |
+| 9–12 | 60–80 | `"Core"` |
+| 5–8 | 33–53 | `"Minor"` |
 | 3–4 | 20–27 | `"Trivial"` |
 
 ### Axis Count
@@ -111,7 +111,7 @@ Before any naming, define the catastrophic combination. It must satisfy all thre
 
 1. **Plausible:** The combination can realistically occur in a real commit in this project type
 2. **Distinctive:** More dangerous than a commit that merely scores high on `tot`
-3. **Non-redundant:** Fires on commits the tier system alone would not catch — a `danger_flag: true` commit must be possible with a Routine or Significant tier score
+3. **Non-redundant:** Fires on commits the tier system alone would not catch — a `danger_flag: true` commit must be possible with a Routine or Core tier score
 
 ---
 
@@ -169,9 +169,9 @@ Target distribution for a healthy, active repo:
 
 | Tier | Target % |
 |---|---|
-| Critical | 15–25% |
-| Significant | 35–45% |
-| Routine | 25–35% |
+| Pivotal | 15–25% |
+| Core | 35–45% |
+| Minor | 25–35% |
 | Trivial | 5–15% |
 
 If your axis definitions do not seem likely to produce this distribution, revisit the 1/2/3 thresholds before proceeding.
@@ -190,7 +190,7 @@ Write exactly three fixture scenarios. Each is a bundle of:
 
 **Fixture 1 — Floor:** Most trivial commit possible. Must produce `tot: 3` or `tot: 4`. If it scores higher, axis floor definitions are too strict.
 
-**Fixture 2 — Typical:** Representative mid-complexity commit. Should score in the Significant tier. Expected output should feel unsurprising.
+**Fixture 2 — Typical:** Representative mid-complexity commit. Should score in the Core tier. Expected output should feel unsurprising.
 
 **Fixture 3 — Adversarial:** A commit designed to look safe — small diff, conventional message, passes CI — but concealing a failure mode from Step 2. Must trigger `danger_flag: true`. If it does not, the danger flag logic is insufficient.
 

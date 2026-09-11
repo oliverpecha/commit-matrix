@@ -66,10 +66,10 @@ A rubric **passes** for a given model if:
 
 ## Contract Checks Run on Every Response
 
-1. All axis scores are integers 1, 2, or 3 — no floats, no 0, no 4
+1. All axis scores are integers 1, 2, 3, or 4 — no floats, no 0, no 5
 2. `tot` equals exact sum of axis scores
 3. `score_pct` equals `round(tot / max_score * 100, 1)` where `max_score = axes × 3`
-4. `tier` is one of: `Critical` / `Significant` / `Routine` / `Trivial`
+4. `tier` is one of: `Pivotal` / `Core` / `Minor` / `Trivial`
 5. `danger_flag` is a boolean
 6. `debt_direction` is one of: `increases` / `neutral` / `reduces`
 7. At least one `touches_*` boolean is present

@@ -1,6 +1,6 @@
 # CommitMatrix Telemetry: CORD Scoring Engine
 # Profile: Full-Stack / Mixed / Monorepo
-# Acronym: true | Axes: 4 | max_score: 12
+# Acronym: true | Axes: 4 | max_score: 16
 # Best for: Full-stack apps, monorepos, projects where frontend, backend, database, and infra coexist
 
 Full-stack repositories carry failure surfaces at every layer seam. A commit that touches the database schema, the API contract, and the frontend simultaneously has three independent failure points — any one can break in isolation. The primary documentation failure is the business decision behind the change: full-stack commits encode the most consequential product decisions and are the least documented. Debt accumulates as tight cross-layer coupling with no abstraction — API calls hardcoded in components, business logic in view files, database queries in route handlers.
@@ -53,36 +53,46 @@ A multi-layer change that is irreversible — the commit touches everything and 
 ---
 
 ## Tier
-Calculate `tot` as C + O + R + D. Calculate `score_pct` as `round(tot / 12 * 100, 1)`.
+Calculate `tot` as C + O + R + D. Calculate `score_pct` as `round(tot / 16 * 100, 1)`.
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Critical"` |
-| 7–9 | 58–75 | `"Significant"` |
-| 4–6 | 33–50 | `"Routine"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–43 | `"Minor"` |
 | 3 | 25 | `"Trivial"` |
 
 ## Scoring Contract
 
-- All axes score integer **1, 2, or 3** — no floats, no 0, no 4
+- All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
 - `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 12`
+- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
-- At least one `touches_*` boolean must be present
+- At least one `touches_*` key must be present, scoring a 1-4 integer intensity
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 
 ## Sample Output
+<!-- Universal Contract: danger_flag, debt_direction, 1-4 intensity touches -->
 ```json
 {
-  "C": 3, "O": 1, "R": 2, "D": 2,
-  "tot": 8, "score_pct": 66.7, "tier": "Significant",
-  "danger_flag": true, "debt_direction": "neutral",
-  "touches_frontend": true, "touches_backend": true,
-  "touches_database": true, "touches_infrastructure": false,
-  "touches_auth": false, "touches_tests": false,
-  "touches_critical": true
+  "C": 3,
+  "O": 1,
+  "R": 2,
+  "D": 2,
+  "tot": 8,
+  "score_pct": 66.7,
+  "tier": "Core",
+  "danger_flag": true,
+  "debt_direction": "neutral",
+  "touches_frontend": 3,
+  "touches_backend": 3,
+  "touches_database": 3,
+  "touches_infrastructure": 0,
+  "touches_auth": 0,
+  "touches_tests": 0,
+  "touches_critical": 3
 }
 ```
