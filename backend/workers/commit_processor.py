@@ -24,191 +24,132 @@ def process_commit(
     arch_gen=None,
     arch_gen_trail=None,
 ):
-    MAX_RETRIES = 6
-    retries = MAX_RETRIES
-
     hash_full, date_str, author, subject = parts[:4]
     diff = parts[4] if len(parts) > 4 else ""
     hash_short = hash_full[:7]
 
-    while retries > 0:
-        try:
-            aimd.acquire()
+    try:
+        from backend.services.inference_pipe.llm_gateway import execute_inference
+        from backend.services.inference_pipe.prompt_assembly import build_prompt
+        from backend.services.inference_pipe.schema_enforcer import enforce_v2_contract
+        
+        # 1. PROMPT ASSEMBLY (Arch context is safely preserved here)
+        with open(rubric_path, "r", encoding="utf-8") as f:
+            sys_prompt = f.read()
 
-            if str(os.environ.get("MATRIX_STRESS_TEST", "false")).strip().lower() in ("1", "true", "yes", "on"):
-                import random
-                if random.random() < float(os.environ.get("MATRIX_CRASH_RATE", "0.3")):
-                    raise Exception("litellm.ServiceUnavailableError: 503 STRESS TEST simulated")
+        user_prompt = build_prompt(arch_context, arch_gen_trail, hash_short, date_str, author, subject, diff)
 
-            rate_limits.wait_if_needed()
+        # 2. INFERENCE CALL
+        if str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on"):
+            import random
+            from backend.utils.mock_generator import generate_dynamic_mock_touches
+            import re
+            
+            axes_keys = re.findall(r'"([A-Z])":', sys_prompt)
+            if not axes_keys:
+                axes_keys = ["C", "O", "R", "D"]
+            from backend.utils.mock_generator import generate_mock_axes
+            axes = generate_mock_axes(axes_keys)
+            touches = generate_dynamic_mock_touches(sys_prompt)
+            tot_score = sum(axes.values())
+            
+            result = {
+                "axes": axes,
+                "tot": tot_score,
+                "tier": "Pivotal" if tot_score >= 13 else "Core" if tot_score >= 8 else "Minor",
+                "touches": touches
+            }
+            aimd.release(success=True)
+        else:
+            raw_content = execute_inference(model_name, sys_prompt, user_prompt, rate_limits, aimd)
+            result = enforce_v2_contract(raw_content)
 
-            with open(rubric_path, "r", encoding="utf-8") as f:
-                sys_prompt = f.read()
+        # 3. DATA EXTRACTION
+        axes = result.get("axes", {})
+        touches = result.get("touches", {})
+        total_score = result.get("tot", sum(axes.values()))
+        tier_label_raw = result.get("tier", "Minor")
 
-            trail_section = f"\n\n# {arch_gen_trail}" if arch_gen_trail else ""
-            user_prompt = (
-                f"# Repository Architecture Context\n{arch_context}{trail_section}\n\n"
-                f"# Commit to Score\n"
-                f"Hash: {hash_short}\n"
-                f"Date: {date_str}\n"
-                f"Author: {author}\n"
-                f"Subject: {subject}\n\n"
-                f"Diff:\n{diff[:8000]}\n"
-            )
+        if not axes:
+            import re
+            rubric_keys = re.findall(r'"([A-Z])":', sys_prompt) if 'sys_prompt' in locals() else []
+            axes = {k: 1 for k in rubric_keys} if rubric_keys else {"C": 1, "O": 1, "R": 1, "D": 1}
 
-            if str(os.environ.get("RANDOM_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on"):
-                import random
-                result = {
-                    "criticality": random.randint(1, 3),
-                    "infrastructure": random.randint(1, 3),
-                    "ripple": random.randint(1, 3),
-                    "scope": random.randint(1, 3),
-                    "documentation": random.randint(1, 3)
-                }
-                aimd.release(success=True)
-            else:
-                response = completion(
-                    model=model_name,
-                    api_key=os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"),
-                    messages=[
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    response_format={"type": "json_object"},
-                )
-                aimd.release(success=True)
-                usage = response.get("usage", {})
-                rate_limits.record_usage(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
-                response_headers = getattr(response, "_hidden_params", {}).get("response_headers", {})
-                if response_headers:
-                    rate_limits.update_from_headers(response_headers)
-                raw_content = response.choices[0].message.content
-                try:
-                    result = json.loads(raw_content)
-                except json.JSONDecodeError:
-                    import re
-                    json_match = re.search(r"\{.*\}", raw_content, re.DOTALL)
-                    result = json.loads(json_match.group(0)) if json_match else {"criticality": 1, "infrastructure": 1, "ripple": 1, "scope": 1, "documentation": 1}
+        tier_label = (
+            "🔺 PIVOTAL" if "critical" in tier_label_raw.lower() or "pivotal" in tier_label_raw.lower() else
+            "🟦 CORE" if "significant" in tier_label_raw.lower() or "core" in tier_label_raw.lower() else
+            "➖ MINOR"
+        )
 
-            criticality = int(result.get("criticality") or result.get("Criticality") or result.get("C") or 1)
-            infrastructure = int(result.get("infrastructure") or result.get("Infrastructure") or result.get("I") or 1)
-            ripple = int(result.get("ripple") or result.get("Ripple") or result.get("R") or 1)
-            scope = int(result.get("scope") or result.get("Scope") or result.get("S") or 1)
-            documentation = int(result.get("documentation") or result.get("Documentation") or result.get("D") or 1)
-            total_score = criticality + infrastructure + ripple + scope + documentation
-
-            tier_label = (
-                "🔴 CRITICAL" if total_score >= 12
-                else "🟡 SIGNIFICANT" if total_score >= 8
-                else "🟢 ROUTINE"
-            )
-
-            diff_lower = diff.lower()
-            scope_tags = []
-            if any(x in diff_lower for x in ("backend/parser.py", "backend/main.py", "dockerfile")):
-                scope_tags.append("scripts")
-            if ".json" in diff_lower or "config" in diff_lower:
-                scope_tags.append("config")
-            if "dashboard" in diff_lower or "index.html" in diff_lower:
-                scope_tags.append("dashboard")
-            if "readme" in diff_lower or ".md" in diff_lower:
-                scope_tags.append("docs")
-            if "metrics" in diff_lower:
-                scope_tags.append("metrics")
-            if total_score >= 12:
-                scope_tags.append("critical")
-            scope_str = ", ".join(scope_tags) if scope_tags else "None"
-
-            commit_type = ""
+        import re
+        m_type = re.match(r"^([a-zA-Z_-]+)(?:\(([^)]+)\))?:", subject)
+        if m_type:
+            commit_type = m_type.group(1).lower()
+            commit_scope = m_type.group(2) or ""
+        else:
+            commit_type = "chore"
             commit_scope = ""
-            if subject.startswith("feat"):
-                commit_type = "feat"
-                commit_scope = subject.split("(")[1].split(")")[0] if "(" in subject else "core"
-            elif subject.startswith("fix"):
-                commit_type = "fix"
-                commit_scope = subject.split("(")[1].split(")")[0] if "(" in subject else "core"
-            elif subject.startswith("chore"):
-                commit_type = "chore"
-                commit_scope = subject.split("(")[1].split(")")[0] if "(" in subject else ""
 
-            additions = diff.count("\n+") - diff.count("\n+++")
-            deletions = diff.count("\n-") - diff.count("\n---")
+        additions = diff.count("\n+") - diff.count("\n+++")
+        deletions = diff.count("\n-") - diff.count("\n---")
 
-            headers = [
-                "#", "Date", "Type", "Scope", "Subject", "Tier",
-                "C", "I", "R", "S", "D", "Total",
-                "Additions", "Deletions", "Hash", "TreeSig", "ArchGen",
-                "touches_metrics", "touches_preflight", "touches_tests",
-                "touches_docs", "touches_dashboard", "touches_config",
-                "touches_scripts", "touches_proxy", "touches_core"
-            ]
-            row = [
-                topo_id, date_str, commit_type, commit_scope, subject, tier_label.split()[1],
-                criticality, infrastructure, ripple, scope, documentation, total_score,
-                f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else "",
-                "true" if "metrics" in diff_lower else "false",
-                "true" if "preflight" in diff_lower else "false",
-                "true" if "test" in diff_lower else "false",
-                "true" if any(x in diff_lower for x in ("readme", ".md", "docs")) else "false",
-                "true" if any(x in diff_lower for x in ("dashboard", "index.html", "ui")) else "false",
-                "true" if any(x in diff_lower for x in (".json", "config")) else "false",
-                "true" if any(x in diff_lower for x in ("backend/parser.py", "backend/main.py", "dockerfile", "script")) else "false",
-                "true" if "proxy" in diff_lower else "false",
-                "true" if total_score >= 12 or "core" in diff_lower else "false",
-            ]
+        # 4. ROW GENERATION (Arch sig and gen safely preserved here for the DB/CSV)
+        headers = ["#", "Date", "Type", "Scope", "Subject", "Tier", "Total", "Additions", "Deletions", "Hash", "TreeSig", "ArchGen"]
+        clean_tier = tier_label.split()[1] if tier_label else tier_label_raw
+        row = [topo_id, date_str, commit_type, commit_scope, subject, clean_tier, total_score, f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else ""]
 
-            safe_total = max(1, total_unscanned)
-            safe_done = min(max(0, processed_count), safe_total)
-            progress_pct = int((safe_done / safe_total) * 100)
-            remaining = max(0, safe_total - safe_done)
-            filled = min(16, int((progress_pct / 100) * 16))
-            bar = "█" * filled + "░" * (16 - filled)
+        import re
+        axes_ordered = re.findall(r'"([A-Z])":', sys_prompt) if 'sys_prompt' in locals() else ["C", "O", "R", "D"]
+        for k in axes_ordered:
+            if k in axes:
+                headers.append(k)
+                row.append(axes[k])
+            
+        for k in sorted(touches.keys()):
+            headers.append(k)
+            row.append(touches[k])
 
-            ui_block = (
-                "─────────────────────────────────────────────────────────────────────────\n"
-                f"🧬 Commit #{topo_id} • {hash_short} __TOPO:{topo_id}__\n"
-                "─────────────────────────────────────────────────────────────────────────\n"
-                f"Date      │ {date_str}\n"
-                f"Subject   │ {subject[:60]}...\n"
-                f"Tier      │ {tier_label} (Score: {total_score})\n"
-                f"Scope     │ {scope_str}\n"
-                f"Impact    │ C {_axis_bar(criticality)}  I {_axis_bar(infrastructure)}  R {_axis_bar(ripple)}  S {_axis_bar(scope)}  D {_axis_bar(documentation)}\n"
-                f"Snapshot  │ {(arch_tree_signature or 'N/A')[:24]} ({_resolve_shape(arch_tree_signature, arch_change_shape)})\n"
-                "─────────────────────────────────────────────────────────────────────────\n"
-                f"🚀 [{bar}] {progress_pct}% • {remaining} commits remaining\n"
-            )
-            return topo_id, (headers, row, hash_short, ui_block)
+        # 5. UI GENERATION (Delegated safely)
+        safe_total = max(1, total_unscanned)
+        safe_done = min(max(0, processed_count), safe_total)
+        progress_pct = int((safe_done / safe_total) * 100)
+        
+        from types import SimpleNamespace
+        from backend.services.pipeline.pipeline_presentation import render_commit_score_card
+        
+        # Safely map arch_change_shape into arch_meta so the presentation module doesn't lose the label
+        safe_arch_meta = arch_meta.copy() if arch_meta else {}
+        if "cause_tag" not in safe_arch_meta and arch_change_shape:
+            safe_arch_meta["cause_tag"] = arch_change_shape
 
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            err_str = str(e)
-            aimd.release(success=False)
+        work_item = SimpleNamespace(
+            topo_id=topo_id,
+            arch_meta=safe_arch_meta,
+            commit_parts=parts,
+            arch_tree_signature=arch_tree_signature
+        )
+        scores = axes.copy()
+        scores['tier'] = tier_label
+        scores['touches'] = touches
+        scores['tot'] = total_score
+        
+        progress_data = {
+            'filled': min(16, int((progress_pct / 100) * 16)),
+            'pct': progress_pct,
+            'remaining': max(0, safe_total - safe_done)
+        }
+        
+        ui_block = render_commit_score_card(work_item, scores, progress_data)
 
-            is_transient = any(
-                token in err_str.lower()
-                for token in ("503", "429", "unavailable", "quota", "spending cap", "high demand", "rate limit")
-            )
+        return topo_id, (headers, row, hash_short, ui_block)
 
-            if is_transient:
-                if retries > 0:
-                    backoff = 15 * (7 - retries)
-                    print(
-                        f"⚠️  [Worker] API congestion on {hash_short} (attempt {7 - retries}/6). "
-                        f"Pausing {backoff}s... Resuming shortly.\n",
-                        flush=True,
-                    )
-                    import time
-                    time.sleep(backoff)
-                    retries -= 1
-                    continue
-
-                print(f"❌ CRITICAL: API error hard-failed {MAX_RETRIES} times on {hash_short}. Aborting.", flush=True)
-                return topo_id, f"❌ API hard-fail on {hash_short}. Aborting this commit."
-
-            import traceback
-            print(f"\n🔴 FATAL EXCEPTION in worker processing {hash_short}:", flush=True)
-            traceback.print_exc()
-            return topo_id, f"❌ Error scoring commit {hash_short}: {err_str}"
-
-    return topo_id, f"❌ Error scoring commit {hash_short}: Max retries exceeded"
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:
+        err_str = str(e)
+        if "Max retries exceeded" in err_str or "API Error" in err_str:
+            return topo_id, f"❌ API hard-fail on {hash_short}. Aborting this commit. Error: {err_str}"
+        import traceback
+        print(f"\n🔴 FATAL EXCEPTION in worker processing {hash_short}:", flush=True)
+        traceback.print_exc()
+        return topo_id, f"❌ Error scoring commit {hash_short}: {err_str}"

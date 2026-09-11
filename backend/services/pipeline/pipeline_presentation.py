@@ -1,5 +1,5 @@
 from __future__ import annotations
-__version__ = '0.1.28'
+__version__ = '0.1.29'
 
 _ACTUAL_WARNINGS = 0
 import os
@@ -119,26 +119,38 @@ def report_sensor_mutation(commit_sha: str, from_sig: str, to_sig: str, raw_shap
         print(f"\n[arch-tree] ⚠️  Warning ⚠️ : Significant Boundary Shift to {to_emoji} detected. A corresponding {ordinal_str} era banner must follow.", flush=True)
 
 def render_commit_score_card(work_item: any, scores: dict, progress_data: dict) -> str:
-    h = work_item.arch_meta.get("heuristics", {})
-    c, i, r, s, d = scores.get('C', 1), scores.get('I', 1), scores.get('R', 1), scores.get('S', 1), scores.get('D', 1)
-    total_score = sum([c, i, r, s, d])
+    axes = {k: v for k, v in scores.items() if len(k) == 1 and k.isupper()}
+    if not axes:
+        axes = {'C': scores.get('C', 1), 'I': scores.get('I', 1), 'R': scores.get('R', 1), 'S': scores.get('S', 1), 'D': scores.get('D', 1)}
     
+    total_score = scores.get('tot', sum(axes.values()))
+    axis_bars = "  ".join([f"{k} {_axis_bar(v)}" for k, v in axes.items()])
+    
+    touches = scores.get('touches', {})
+    if touches:
+        touched_names = [k.replace("touches_", "") for k, v in touches.items() if (isinstance(v, int) and v > 0) or (isinstance(v, bool) and v)]
+        scope_str = ", ".join(touched_names) if touched_names else "None"
+    else:
+        scope_str = work_item.arch_meta.get("heuristics", {}).get('tags', 'None')
+        
     bar = "█" * progress_data['filled'] + "░" * (16 - progress_data['filled'])
     role = work_item.arch_meta.get("role", "successive")
     cause_tag = work_item.arch_meta.get("cause_tag", "")
     effective_tag = cause_tag if role == "trigger" else "leaf-only"
+    
     meta = get_shape_metadata(effective_tag)
     shape_display = f"{meta.get('icon', '•')} {meta.get('label')}" if meta else "unknown"
+    commit_sha = work_item.arch_meta.get('commit_sha') or work_item.commit_parts[0]
 
     return (
         "─────────────────────────────────────────────────────────────────────────\n"
-        f"🧬 Commit #{work_item.topo_id} • {work_item.arch_meta['commit_sha'][:7]} __TOPO:{work_item.topo_id}__\n"
+        f"🧬 Commit #{work_item.topo_id} • {commit_sha[:7]} __TOPO:{work_item.topo_id}__\n"
         "─────────────────────────────────────────────────────────────────────────\n"
         f"Date      │ {work_item.commit_parts[1]}\n"
         f"Subject   │ {work_item.commit_parts[3][:60]}...\n"
-        f"Tier      │ {scores.get('tier', '🟢 ROUTINE')} (Score: {total_score})\n"
-        f"Scope     │ {h.get('tags', 'None')}\n"
-        f"Impact    │ C {_axis_bar(c)}  I {_axis_bar(i)}  R {_axis_bar(r)}  S {_axis_bar(s)}  D {_axis_bar(d)}\n"
+        f"Tier      │ {scores.get('tier', '➖ MINOR')} (Score: {total_score})\n"
+        f"Scope     │ {scope_str}\n"
+        f"Impact    │ {axis_bars}\n"
         f"Snapshot  │ {(work_item.arch_tree_signature or 'N/A')[:24]} ({shape_display})\n"
         "─────────────────────────────────────────────────────────────────────────\n"
         f"🚀 [{bar}] {progress_data['pct']}% • {progress_data['remaining']} commits remaining\n"
@@ -329,8 +341,8 @@ def render_bootstrap_banner(repo_path, repo_label, log_path=None):
     context_str = "🌐 BROWSER / FRONTEND" if is_browser else "🐚 NATIVE TERMINAL"
     
     # 1. Resolve True Execution Mode Options
-    is_random = str(os.environ.get("RANDOM_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
-    mode_str = "🎲 RANDOM SCORING ENABLED" if is_random else "🤖 LLM SCORING MODE"
+    is_random = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    mode_str = "🎲 MOCK SCORING ENABLED" if is_random else "🤖 LLM SCORING MODE"
     
     # 2. Extract and match runtime keys cleanly
     # Check both potential environment keys used across local layouts

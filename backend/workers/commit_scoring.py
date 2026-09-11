@@ -66,9 +66,9 @@ def process_commit_scoring(work_item, rate_limits, aimd):
             total = c + i + r + s + d
 
             tier_label = (
-                "🔴 CRITICAL" if total >= 12
-                else "🟡 SIGNIFICANT" if total >= 8
-                else "🟢 ROUTINE"
+                "🔺 PIVOTAL" if total >= 12
+                else "🟦 CORE" if total >= 8
+                else "➖ MINOR"
             )
 
             logging.debug(f"Worker scored {hash_short}")

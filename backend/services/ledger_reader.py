@@ -70,26 +70,25 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
                     "type": type_val,
                     "scope": scope_val,
                     "s": s_val,
-                    "tier": str(r.get("Tier", "Routine")).capitalize(),
-                    "C": s_int("C", 1),
-                    "I": s_int("I", 1),
-                    "R": s_int("R", 1),
-                    "S": s_int("S", 1),
-                    "D": s_int("D", 1),
+                    "tier": str(r.get("Tier", "Minor")).capitalize(),
+
                     "tot": s_int("Total", 5),
                     "lines_added": s_int("Additions", 0),
                     "lines_deleted": s_int("Deletions", 0),
-                    "h": r.get("Hash") or r.get("hash", ""),
-                    "t_metrics": str(r.get("touches_metrics", "")).lower() == "true",
-                    "t_preflight": str(r.get("touches_preflight", "")).lower() == "true",
-                    "t_tests": str(r.get("touches_tests", "")).lower() == "true",
-                    "t_docs": str(r.get("touches_docs", "")).lower() == "true",
-                    "t_dashboard": str(r.get("touches_dashboard", "")).lower() == "true",
-                    "t_config": str(r.get("touches_config", "")).lower() == "true",
-                    "t_scripts": str(r.get("touches_scripts", "")).lower() == "true",
-                    "t_proxy": str(r.get("touches_proxy", "")).lower() == "true",
-                    "t_core": str(r.get("touches_core", "")).lower() == "true"
+                    "h": r.get("Hash") or r.get("hash", "")
                 })
+                
+                for k, v in r.items():
+                    if len(str(k)) == 1 and str(k).isupper():
+                        out[-1][k] = s_int(k, 0)
+                    elif str(k).startswith("touches_"):
+                        val_str = str(v).strip().lower()
+                        if val_str in ("true", "1"):
+                            out[-1][k] = 1
+                        elif val_str.isdigit():
+                            val = int(val_str)
+                            if val > 0:
+                                out[-1][k] = val
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception as e:
