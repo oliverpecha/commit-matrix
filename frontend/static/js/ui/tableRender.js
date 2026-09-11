@@ -1,4 +1,4 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.171';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.188';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -23,37 +23,30 @@ const TIER_ICONS = {
 };
 
 export function getTableColumns() {
-        return [
+    const axes = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
+    const cols = [
         { label: "#", key: "n", align: "left" },
         { label: "AUTHORED", key: "ts", align: "left" },
         { label: "TIER", key: "tot", align: "left" },
         { label: "TYPE", key: "p_type", align: "left" },
         { label: "SCOPE", key: "p_scope", align: "left" },
         { label: "SUBJECT", key: "p_desc", align: "left" },
-        { label: "SCORE", key: "tot", align: "center" },
-        { label: "C", key: "C", align: "center" },
-        { label: "I", key: "I", align: "center" },
-        { label: "R", key: "R", align: "center" },
-        { label: "S", key: "S", align: "center" },
-        { label: "D", key: "D", align: "center" },
-        { label: "HASH", key: "h", align: "left" },
-        { label: "+", key: "lines_added", align: "center" },
-        { label: "-", key: "lines_deleted", align: "center" }
+        { label: "SCORE", key: "tot", align: "center" }
     ];
+    axes.forEach(a => cols.push({ label: a, key: a, align: "center" }));
+    cols.push({ label: "HASH", key: "h", align: "left" });
+    cols.push({ label: "+", key: "lines_added", align: "center" });
+    cols.push({ label: "-", key: "lines_deleted", align: "center" });
+    return cols;
 }
 
 export function normalizeCommits(commits) {
     return (commits || []).map(c => {
         const p = parseCommit(c.s || c.subject || "");
-        return {
+        const out = {
             ...c,
             n: Number(c.n) || 0,
             ts: Number(c.ts) || 0,
-            C: Number(c.C) || 0,
-            I: Number(c.I) || 0,
-            R: Number(c.R) || 0,
-            S: Number(c.S) || 0,
-            D: Number(c.D) || 0,
             tot: Number(c.tot) || 0,
             lines_added: Number(c.lines_added) || 0,
             lines_deleted: Number(c.lines_deleted) || 0,
@@ -61,6 +54,10 @@ export function normalizeCommits(commits) {
             p_scope: c.p_scope || c.scope || p.scope,
             p_desc: c.p_desc || p.desc || c.s || c.subject || ""
         };
+        for (let k in c) {
+            if (k.length === 1 && k >= 'A' && k <= 'Z') out[k] = Number(c[k]) || 0;
+        }
+        return out;
     });
 }
 
@@ -69,8 +66,8 @@ export function sortDisplayData(displayData, currentSort) {
         let valA = a[currentSort.col];
         let valB = b[currentSort.col];
 
-        const numericColumns = ["n", "C", "I", "R", "S", "D", "tot", "lines_added", "lines_deleted", "ts"];
-        if (numericColumns.includes(currentSort.col)) {
+        const numericColumns = ["n", "tot", "lines_added", "lines_deleted", "ts"];
+        if (numericColumns.includes(currentSort.col) || (currentSort.col.length === 1 && currentSort.col >= 'A' && currentSort.col <= 'Z')) {
             valA = Number(valA) || 0;
             valB = Number(valB) || 0;
             return currentSort.asc ? (valA - valB) : (valB - valA);
@@ -85,23 +82,42 @@ export function sortDisplayData(displayData, currentSort) {
         if (valA > valB) return currentSort.asc ? 1 : -1;
         return 0;
     });
-
     return displayData;
+}
+
+export function syncTableHeaders() {
+    const axes = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
+    const ths = Array.from(document.querySelectorAll('th[data-sort]')).filter(th => th.getAttribute('data-sort').length === 1);
+    if (ths.length > 0) {
+        const parent = ths[0].parentNode;
+        const nextNode = ths[ths.length - 1].nextSibling;
+        const baseStyle = ths[0].getAttribute('style') || "";
+        const baseClass = ths[0].className || "";
+        const currentHeaders = ths.map(th => th.getAttribute('data-sort')).join("");
+        
+        if (currentHeaders !== axes.join("")) {
+            ths.forEach(th => th.remove());
+            axes.forEach(k => {
+                const th = document.createElement('th');
+                th.setAttribute('data-sort', k);
+                th.setAttribute('style', baseStyle);
+                th.className = baseClass;
+                th.innerHTML = k;
+                parent.insertBefore(th, nextNode);
+            });
+        }
+    }
 }
 
 export function renderTableRows(displayData) {
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
+    syncTableHeaders();
+    const axesKeys = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
+    const colors = ["#5c91e0", "#c99ef0", "#ffb84d", "#ff4b4b", "#4caf50", "#00bcd4"];
     
     if (displayData && displayData.length > 0 && !window._DEBUG_COLOR_LOGGED) {
         window._DEBUG_COLOR_LOGGED = true;
         console.log("🎨 Table Color Mapping Debug:");
-        console.table(displayData.slice(0, 10).map(c => ({
-            Row: c.n,
-            Type: c.p_type,
-            TypeColor: getTypeColor(c.p_type),
-            Scope: c.p_scope,
-            ScopeColor: getScopeColor(c.p_scope)
-        })));
     }
 
     return displayData.map((c) => {
@@ -111,9 +127,10 @@ export function renderTableRows(displayData) {
         const displayTier = tierMap[c.tier] || c.tier || "N/A";
         const trC = displayTier === "Pivotal" ? "#D43BC6" : displayTier === "Core" ? "#36B8D8" : "#6F8197";
         
-        
         const tStyle = tc === "#888888" ? `color:${tc}; font-size:11px; font-weight:700;` : `color:${tc}; border:1px solid ${tc}66; background:${tc}1A; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; display:inline-block; line-height:1.2;`;
         const sStyle = sc === "#aaaaaa" ? `color:${sc}; font-size:11px; font-weight:700;` : `color:${sc}; border:1px solid ${sc}66; background:${sc}1A; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; display:inline-block; line-height:1.2;`;
+
+        const axesTds = axesKeys.map((k, i) => `<td style="padding:12px 8px; text-align:center; color:${colors[i % colors.length]}; font-weight:700; font-size:12px;">${c[k] || 0}</td>`).join("");
 
         return `
         <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
@@ -130,11 +147,7 @@ export function renderTableRows(displayData) {
                 <a target="_blank" rel="noopener noreferrer" href="https://github.com/oliverpecha/${repo}/commit/${c.h || c.hash_short}" style="color:inherit; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis;" title="View Commit">${c.p_desc}</a>
             </td>
             <td style="padding:12px 8px; text-align:center; font-weight:400; color:#fff; font-size:13px;">${c.tot}</td>
-            <td style="padding:12px 8px; text-align:center; color:#5c91e0; font-weight:700; font-size:12px;">${c.C}</td>
-            <td style="padding:12px 8px; text-align:center; color:#c99ef0; font-weight:700; font-size:12px;">${c.I}</td>
-            <td style="padding:12px 8px; text-align:center; color:#ffb84d; font-weight:700; font-size:12px;">${c.R}</td>
-            <td style="padding:12px 8px; text-align:center; color:#8ed068; font-weight:700; font-size:12px;">${c.S}</td>
-            <td style="padding:12px 8px; text-align:center; color:#ff4b4b; font-weight:700; font-size:12px;">${c.D}</td>
+            ${axesTds}
             <td style="padding:12px 8px;">
                 <a class="bp-hash" target="_blank" rel="noopener noreferrer" href="https://github.com/oliverpecha/${repo}/commit/${c.h || c.hash_short}" title="View Commit">${(c.h || c.hash_short || "").toString().substring(0, 7)}</a>
             </td>
@@ -143,7 +156,6 @@ export function renderTableRows(displayData) {
         </tr>`;
     }).join("");
 }
-
 
 export function renderTableRowsBatched(displayData, tbodyId = "cm-tbody", batchSize = 100, replace = true) {
     const tbody = document.getElementById(tbodyId);

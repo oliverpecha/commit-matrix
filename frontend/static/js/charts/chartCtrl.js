@@ -1,8 +1,8 @@
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.171';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.171';
-import { UI_STATE } from '../core/state.js?v=0.1.171';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.171';
-const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy','Critical'];
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.188';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.188';
+import { UI_STATE } from '../core/state.js?v=0.1.188';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.188';
+const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');
 ghostCanvas.width = 600;
 ghostCanvas.height = 200;
@@ -86,7 +86,7 @@ export function renderStackChart(rawC) {
     const allVals = c.map(x=>x.tot).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const maxVal = allVals.length ? Math.max(...allVals) : 16;
     const sMax = maxVal + 1;
-    charts.stack = new Chart('cm-c-stack',{type:'bar',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:['C','I','R','S','D'].map((ax,i)=>({label:ax,data:mk(ax),backgroundColor:BP_AXC_BASE[i],stack:'s',barThickness:lin?6:undefined}))},options:{...defRaw(c),layout:{padding:{top: lin ? MD_TOP : 6, right: 8, left: 2}},scales:{x:{...getXConf(lin,c),stacked:true},y:{...defRaw(c).scales.y,stacked:true,min:0,max:sMax,ticks:{...defRaw(c).scales.y.ticks,stepSize:4}}}},plugins:lin?[monthDiv(c)]:[]});
+    charts.stack = new Chart('cm-c-stack',{type:'bar',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:(window.CM_ACTIVE_AXES || ['C','O','R','D']).map((ax, i) => ({ label: ax, data: mk(ax), backgroundColor: ['#5c91e0', '#c99ef0', '#ffb84d', '#ff4b4b', '#4caf50', '#00bcd4'][i % 6], stack: 's', barThickness: lin ? 6 : undefined }))},options:{...defRaw(c),layout:{padding:{top: lin ? MD_TOP : 6, right: 8, left: 2}},scales:{x:{...getXConf(lin,c),stacked:true},y:{...defRaw(c).scales.y,stacked:true,min:0,max:sMax,ticks:{...defRaw(c).scales.y.ticks,stepSize:4}}}},plugins:lin?[monthDiv(c)]:[]});
 }
 
 export function renderTrendChart(rawC) {
@@ -111,15 +111,15 @@ function buildCombo(id, stKey, avgKey, rawC, dFunc, clr) {
 }
 
 export function renderFragChart(c) {
-    buildCombo('cm-c-frag','frag','avgFrag',c,x=>(x.C+x.R)/(x.D||1),'rgba(255, 75, 75, 0.7)');
+    buildCombo('cm-c-frag','frag','avgFrag',c,x=>((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)+(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[2]] || 0))/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[3]] || 0)||1),'rgba(255, 75, 75, 0.7)');
 }
 
 export function renderChurnChart(c) {
-    buildCombo('cm-c-churn','churn','avgChurn',c,x=>x.C/(x.I||1),'rgba(201, 158, 240, 0.7)');
+    buildCombo('cm-c-churn','churn','avgChurn',c,x=>(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[1]] || 0)||1),'rgba(201, 158, 240, 0.7)');
 }
 
 export function renderBlastChart(c) {
-    buildCombo('cm-c-blast','blast','avgBlast',c,x=>x.S*x.R,'rgba(255, 184, 77, 0.7)');
+    buildCombo('cm-c-blast','blast','avgBlast',c,x => { const a = window.CM_ACTIVE_AXES || ['C','O','R','D']; return (x[a[0]] || 1) * (x[a[2] || a[1]] || 1); },'rgba(255, 184, 77, 0.7)');
 }
 
 export function renderAnalytics(c) {
@@ -130,7 +130,7 @@ export function renderAnalytics(c) {
 
 export function renderConvergenceChart(rawC) {
     if(charts.conv) charts.conv.destroy(); const lin=UI_STATE.conv; const c = lin ? ensureRange(rawC) : rawC;
-    const f=c.map(x=>(x.C+x.R)/(x.D||1)), ch=c.map(x=>x.C/(x.I||1)), b=c.map(x=>x.S*x.R); const fT=getTop25(f), cT=getTop25(ch), bT=getTop25(b);
+    const f=c.map(x=>((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)+(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[2]] || 0))/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[3]] || 0)||1)), ch=c.map(x=>(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[1]] || 0)||1)), b=c.map(x => { const a = window.CM_ACTIVE_AXES || ['C','O','R','D']; return (x[a[0]] || 1) * (x[a[2] || a[1]] || 1); }); const fT=getTop25(f), cT=getTop25(ch), bT=getTop25(b);
     const nd=c.map((x,i)=>{ const h=(f[i]>=fT?1:0)+(ch[i]>=cT?1:0)+(b[i]>=bT?1:0); if(h>=2&&x.tot>0){const m=Math.max(f[i],ch[i],b[i]);return lin?{x:x.ts,y:x._fake?null:m+1}:m+1;} return lin?{x:x.ts,y:null}:null; });
     const allVals = f.concat(ch, b).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const cvMin = allVals.length ? Math.max(0, Math.floor(Math.min(...allVals) - 1)) : 0;
@@ -239,7 +239,7 @@ if (!window._cmChartBindingsReady) {
             renderChurnChart(payload);
             renderBlastChart(payload);
             
-            import('../ui/heatmap.js?v=0.1.171').then(m => {
+            import('../ui/heatmap.js?v=0.1.188').then(m => {
                 if (m.renderHeatmap) m.renderHeatmap(payload);
             }).catch(err => console.error("Failed to trigger heatmap redraw", err));
         } else if (action === 'cycleAvg') {

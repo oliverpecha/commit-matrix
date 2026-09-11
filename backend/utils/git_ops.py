@@ -52,13 +52,11 @@ def read_file_at_commit(repo_path, commit_sha, rel_path):
 
 # --- Git remote URL -> human-readable Organization/Entity/Namespace heuristic ---
 import re
-
-_AZURE_VISUALSTUDIO = re.compile(r'^([\w-]+)\.visualstudio\.com$', re.I)
-_IPV4 = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
+import os
 
 _FLAT_HOSTS = {
     'github.com', 'bitbucket.org', 'gitea.com', 'codeberg.org',
-    'git.sr.ht', 'sr.ht', 'sourceforge.net', 'launchpad.net',
+    'git.sr.ht', 'sr.ht', 'sourceforge.net', 'launchpad.net', 'gitlab.com'
 }
 
 _INFRA_SUBS = {
@@ -66,13 +64,23 @@ _INFRA_SUBS = {
     'source', 'gitbox', 'cvsweb', 'anongit', 'invent', 'salsa', 'www',
 }
 
-_NOISE = {'git', 'src', 'tree', 'blob', 'repos', 'pub', 'scm'}
+_AZURE_VISUALSTUDIO = re.compile(r'^([\w-]+)\.visualstudio\.com$', re.I)
+_IPV4 = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
 
+_SUFFIXES = set()
+def _load_suffixes():
+    if _SUFFIXES: return
+    p = os.path.join(os.path.dirname(__file__), "public_suffix_list.txt")
+    if os.path.exists(p):
+        with open(p, "r", encoding="utf-8") as f:
+            for line in f:
+                l = line.split("//")[0].strip()
+                if l and not l.startswith("!") and not l.startswith("*"):
+                    _SUFFIXES.add(l.lower())
 
 def _strip_port(host_and_rest: str) -> str:
     m = re.match(r'^([^/:]+):(\d{1,5})(/.*|$)', host_and_rest)
     return (m.group(1) + m.group(3)) if m else host_and_rest
-
 
 def extract_owner_from_remote_url(url: str) -> str:
     """Extract a human-readable org/entity/namespace name from a git remote URL."""
@@ -81,6 +89,12 @@ def extract_owner_from_remote_url(url: str) -> str:
     u = re.sub(r'^(?:https?://|ssh://|git://|file://)?(?:[^@\s/]+@)?', '', u)
     u = re.sub(r'\.git/?$', '', u)
     u = u.rstrip('/')
+
+    # 1. SSH Alias Block
+    if ':' in u and '/' not in u.split(':', 1)[0]:
+        host = u.split(':', 1)[0]
+        if '.' not in host and host != 'localhost':
+            return host
 
     if ':' in u.split('/', 1)[0]:
         host, _, rest = u.partition(':')
@@ -92,43 +106,43 @@ def extract_owner_from_remote_url(url: str) -> str:
         u = _strip_port(u)
 
     pts = [p for p in u.split('/') if p]
-    if not pts:
-        return "Unknown"
-
+    if not pts: return "Unknown"
     host = pts[0].lower()
 
+    # 2. Cloud Signatures (AWS, GCP, Azure)
+    if host.endswith('.amazonaws.com') and host.startswith('git-codecommit'):
+        return 'aws'
+    if host == 'source.developers.google.com' and len(pts) >= 3 and pts[1] == 'p':
+        return pts[2]
+    if host == 'dev.azure.com' and len(pts) >= 2:
+        return pts[1]
     if host in ('vs-ssh.visualstudio.com', 'ssh.dev.azure.com') and 'v3' in pts:
         idx = pts.index('v3')
         if idx + 1 < len(pts):
             return pts[idx + 1]
-
     m = _AZURE_VISUALSTUDIO.match(host)
-    if m:
-        return m.group(1)
+    if m: return m.group(1)
 
-    if '_git' in pts:
-        idx = pts.index('_git')
-        if idx >= 2:
-            return pts[idx - 2]
+    # 3. Flat Host Path Resolution
+    if host in _FLAT_HOSTS:
+        return pts[1] if len(pts) > 1 else host
 
-    owner_name = None
-    if len(pts) >= 3:
-        if host in _FLAT_HOSTS:
-            owner_name = pts[-2]
-        else:
-            offset = 2
-            while offset < len(pts) and pts[-offset] in _NOISE:
-                offset += 1
-            owner_name = pts[-offset] if offset < len(pts) else host
-    else:
-        owner_name = pts[0]
+    # 4. Native Domain Parsing with Suffix List
+    if '.' in host and not _IPV4.match(host):
+        dom_parts = host.split('.')
+        
+        # Scrub infrastructure left-side logic
+        while len(dom_parts) > 2 and dom_parts[0] in _INFRA_SUBS:
+            dom_parts.pop(0)
 
-    if '.' in owner_name:
-        if _IPV4.match(owner_name):
-            return owner_name
-        dom_parts = owner_name.split('.')
-        while len(dom_parts) > 1 and dom_parts[0].lower() in _INFRA_SUBS:
-            dom_parts = dom_parts[1:]
-        owner_name = dom_parts[0] if dom_parts else owner_name
+        _load_suffixes()
+        if _SUFFIXES:
+            for i in range(len(dom_parts)):
+                if ".".join(dom_parts[i:]) in _SUFFIXES:
+                    return dom_parts[i-1] if i > 0 else dom_parts[0]
 
-    return owner_name
+        # Ultimate fail-safe if txt file is missing
+        if len(dom_parts) >= 2:
+            return dom_parts[-2]
+
+    return pts[0]
