@@ -205,6 +205,8 @@ Standard file structure:
 # Profile: [Project Type Name]
 # Acronym: [true / false]
 # Axes: [N] | max_score: [N*3]
+# Colors: [Comma separated hex codes]
+# Overlay: [Comma separated acronym overlay texts]
 # Best for: [comma-separated concrete repo type examples]
 
 [One paragraph: project type characterization from Step 1]

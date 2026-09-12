@@ -1,4 +1,4 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.188';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.211';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -85,27 +85,91 @@ export function sortDisplayData(displayData, currentSort) {
     return displayData;
 }
 
+function getActiveRubricMeta() {
+    const payloadEl = document.getElementById('cm-page-payload');
+    const data = payloadEl ? JSON.parse(payloadEl.textContent) : {};
+    const rawRubric = new URLSearchParams(window.location.search).get("rubric") || data.default_rubric || "unknown";
+    const activeRubric = rawRubric.replace('_mock', '').toLowerCase();
+    const meta = data.rubrics_meta || {};
+    for (let k in meta) {
+        if (k.toLowerCase() === activeRubric) return meta[k];
+    }
+    return { colors: [], overlays: {} };
+}
+
 export function syncTableHeaders() {
-    const axes = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
-    const ths = Array.from(document.querySelectorAll('th[data-sort]')).filter(th => th.getAttribute('data-sort').length === 1);
-    if (ths.length > 0) {
-        const parent = ths[0].parentNode;
-        const nextNode = ths[ths.length - 1].nextSibling;
-        const baseStyle = ths[0].getAttribute('style') || "";
-        const baseClass = ths[0].className || "";
-        const currentHeaders = ths.map(th => th.getAttribute('data-sort')).join("");
+    const thead = document.getElementById('cm-thead');
+    if (!thead) return;
+    
+    const cols = getTableColumns();
+    const rMeta = getActiveRubricMeta();
+    const axesKeys = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
+    const baseColors = ["#5c91e0", "#c99ef0", "#ffb84d", "#ff4b4b", "#4caf50", "#00bcd4"];
+    
+    // Check if re-render is needed based on axes signature
+    const currentSignature = Array.from(thead.querySelectorAll('th[data-sort]'))
+        .filter(th => th.getAttribute('data-sort').length === 1)
+        .map(th => th.getAttribute('data-sort'))
+        .join("");
         
-        if (currentHeaders !== axes.join("")) {
-            ths.forEach(th => th.remove());
-            axes.forEach(k => {
-                const th = document.createElement('th');
-                th.setAttribute('data-sort', k);
-                th.setAttribute('style', baseStyle);
-                th.className = baseClass;
-                th.innerHTML = k;
-                parent.insertBefore(th, nextNode);
+    if (currentSignature !== axesKeys.join("") || thead.innerHTML === "") {
+        let trHtml = '<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">';
+        cols.forEach(c => {
+            const isAxis = c.key.length === 1 && c.key >= 'A' && c.key <= 'Z';
+            let thStyle = `padding: 12px 8px; text-align: ${c.align}; font-size: 10px; font-weight: 700; color: #7a7874; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap;`;
+            let spanStyle = `cursor: help;`;
+            let label = c.label;
+            let dataKey = `table_${c.key}`;
+            
+            if (isAxis) {
+                const axisIdx = axesKeys.indexOf(c.key);
+                const aColor = (rMeta.colors && rMeta.colors[axisIdx]) ? rMeta.colors[axisIdx] : baseColors[axisIdx % 6];
+                spanStyle += ` color: ${aColor};`;
+                dataKey = `axis_${c.key}`;
+            } else if (c.key === 'tot') {
+                if (c.label === 'TIER') dataKey = `tierDist`;
+                else dataKey = `table_tot`;
+            } else if (c.key === 'n') {
+                label = `▼ ${label}`;
+            }
+            // Wrapping text in a span applies the .info-hover border directly under the text, mimicking card headers perfectly.
+            trHtml += `<th style="${thStyle}"><span class="info-hover" style="${spanStyle}" data-key="${dataKey}">${label}</span></th>`;
+        });
+        trHtml += '</tr>';
+        thead.innerHTML = trHtml;
+        
+        // Update Rubric Acronyms Menu Table
+        const rubricMenu = document.getElementById('cm-rubric-menu');
+        if (rubricMenu) {
+            let existing = document.getElementById('rubric-acronyms-table');
+            if (!existing) {
+                existing = document.createElement('div');
+                existing.id = 'rubric-acronyms-table';
+                existing.style = "padding:12px; font-size:12px; color:#ccc;";
+                rubricMenu.appendChild(existing);
+            }
+            let html = '<table style="width:100%; border-collapse:collapse;">';
+            axesKeys.forEach((k, i) => {
+                const aColor = (rMeta.colors && rMeta.colors[i]) ? rMeta.colors[i] : baseColors[i % 6];
+                html += `<tr><td style="color:${aColor}; font-weight:bold; padding:4px 0;">${k}</td><td style="padding:4px 0 4px 8px;" class="info-hover" data-key="axis_${k}">[ View Info ]</td></tr>`;
             });
+            html += '</table>';
+            existing.innerHTML = html;
         }
+    }
+
+    // Replace the static Axis Breakdown header with dynamic acronyms
+    const axisCardHd = document.querySelector('.cm-card-title[data-key="rubricAxis"]')?.closest('.cm-card-hd');
+    if (axisCardHd) {
+        const acronymsHtml = axesKeys.map((k, i) => {
+            const aColor = (rMeta.colors && rMeta.colors[i]) ? rMeta.colors[i] : baseColors[i % 6];
+            return `<span class="info-hover" data-key="axis_${k}" style="color:${aColor}; cursor:help; font-size:11px; font-weight:800; margin-left:16px; display:inline-block;">${k}</span>`;
+        }).join("");
+        
+        axisCardHd.innerHTML = `
+            <div class="cm-card-title info-hover" data-key="rubricAxis">Axis Breakdown</div>
+            <div style="display:flex; align-items:center;">${acronymsHtml}</div>
+        `;
     }
 }
 
@@ -114,6 +178,8 @@ export function renderTableRows(displayData) {
     syncTableHeaders();
     const axesKeys = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
     const colors = ["#5c91e0", "#c99ef0", "#ffb84d", "#ff4b4b", "#4caf50", "#00bcd4"];
+    const rMeta = getActiveRubricMeta();
+    const getAxisColor = (k, i) => (rMeta.colors && rMeta.colors[i]) ? rMeta.colors[i] : colors[i % colors.length];
     
     if (displayData && displayData.length > 0 && !window._DEBUG_COLOR_LOGGED) {
         window._DEBUG_COLOR_LOGGED = true;
@@ -130,7 +196,7 @@ export function renderTableRows(displayData) {
         const tStyle = tc === "#888888" ? `color:${tc}; font-size:11px; font-weight:700;` : `color:${tc}; border:1px solid ${tc}66; background:${tc}1A; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; display:inline-block; line-height:1.2;`;
         const sStyle = sc === "#aaaaaa" ? `color:${sc}; font-size:11px; font-weight:700;` : `color:${sc}; border:1px solid ${sc}66; background:${sc}1A; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; display:inline-block; line-height:1.2;`;
 
-        const axesTds = axesKeys.map((k, i) => `<td style="padding:12px 8px; text-align:center; color:${colors[i % colors.length]}; font-weight:700; font-size:12px;">${c[k] || 0}</td>`).join("");
+        const axesTds = axesKeys.map((k, i) => `<td style="padding:12px 8px; text-align:center; color:${getAxisColor(k, i)}; font-weight:700; font-size:12px;">${c[k] || 0}</td>`).join("");
 
         return `
         <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">

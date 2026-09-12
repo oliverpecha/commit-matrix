@@ -50,14 +50,26 @@ async def list_rubrics(repo: str = None, owner: str = None):
             if filename.startswith(prefix):
                 active_rubrics.add(filename[len(prefix):].lower())
 
-    rubrics = []
+    rubrics_dict = {}
     for path in glob.glob("rubrics/*.md"):
         name = Path(path).stem
-        rubrics.append({
-            "id": name, 
-            "name": name.upper(),
-            "has_data": name.lower() in active_rubrics
-        })
+        if name.upper() not in ("RUBRIC_AUTHORING_GUIDE", "README"):
+            rubrics_dict[name.lower()] = {
+                "id": name, 
+                "name": name.upper(),
+                "has_data": name.lower() in active_rubrics
+            }
+            
+    # Dynamically inject _mock ledgers that lack a physical .md file
+    for ar in active_rubrics:
+        if ar not in rubrics_dict:
+            rubrics_dict[ar] = {
+                "id": ar,
+                "name": ar.upper(),
+                "has_data": True
+            }
+            
+    rubrics = sorted(list(rubrics_dict.values()), key=lambda x: x["name"])
         
     # Hardcoded cirsd fallback removed
 

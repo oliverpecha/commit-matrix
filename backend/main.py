@@ -13,6 +13,31 @@ from backend.controllers.api import api_router
 from backend.services.ledger_reader import fetch_ledger
 from backend.services.db.reader import get_repos_grouped_by_owner
 
+def get_rubrics_meta():
+    import glob, re
+    from pathlib import Path
+    meta = {}
+    for p in glob.glob("rubrics/*.md"):
+        stem = Path(p).stem
+        if stem.upper() in ("RUBRIC_AUTHORING_GUIDE", "README"): continue
+        try:
+            with open(p, 'r') as f:
+                c = f.read()
+            colors = []
+            c_match = re.search(r"# Colors:\s*(.+)", c, re.I)
+            if c_match: colors = [x.strip() for x in c_match.group(1).split(',')]
+            overlays = {}
+            o_match = re.search(r"# Overlay:\s*(.+)", c, re.I)
+            if o_match:
+                for pair in o_match.group(1).split(','):
+                    if '=' in pair:
+                        k, v = pair.split('=', 1)
+                        overlays[k.strip()] = v.strip()
+            meta[stem] = {"colors": colors, "overlays": overlays}
+        except Exception:
+            pass
+    return meta
+
 def get_available_rubrics():
     import glob
     from pathlib import Path
@@ -69,7 +94,7 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
     if not available_owners or not available_rubrics:
         return templates.TemplateResponse(request=request, name="matrix.html", context={"owners": backend.services.db.reader.get_repos_grouped_by_owner().get("owners", []), 
             "repo": "system-setup", "chart_data": [], "table_data": [], "system_empty": True, "invalid_repo": False, "invalid_rubric": False,
-            "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
+            "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts, "rubrics_meta": get_rubrics_meta(), "rubrics_meta": get_rubrics_meta(), "rubrics_meta": get_rubrics_meta()
         })
 
     
@@ -121,7 +146,20 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
     chart_data = [{k: v for k, v in c.items() if k not in ('s', 'h')} for c in ledger]
     table_data = ledger[:100]
 
+    # Resolve physical path for browser console logging
+    # import glob, os  # fixed UnboundLocalError
+    physical_path = "Unknown"
+    owner_str = request.query_params.get("owner", "local")
+    for c in [f"data/{owner_str}/{repo}/db/{repo}_ledger_{rubric}.csv", f"data/{owner_str}/{repo}/db/{repo}_ledger_{rubric}_mock.csv", f"data/*/{repo}/db/{repo}_ledger_{rubric}.csv", f"data/*/{repo}/db/{repo}_ledger_{rubric}_mock.csv"]:
+        matches = glob.glob(c)
+        if matches and os.path.exists(matches[0]):
+            physical_path = os.path.abspath(matches[0])
+            break
+
     return templates.TemplateResponse(request=request, name="matrix.html", context={"owners": backend.services.db.reader.get_repos_grouped_by_owner().get("owners", []), 
         "repo": repo, "chart_data": chart_data, "table_data": table_data, "system_empty": False, "invalid_repo": False,
+        "default_rubric": __import__("os").environ.get("RUBRIC_NAME", "unknown"),
+        "rubrics_meta": get_rubrics_meta(),
+        "ledger_path": physical_path,
         "time_autoclose": int(os.environ.get("MATRIX_TIME_AUTOCLOSE", "5")), "ts": ts
     })

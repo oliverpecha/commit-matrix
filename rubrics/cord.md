@@ -1,6 +1,8 @@
 # CommitMatrix Telemetry: CORD Scoring Engine
 # Profile: Full-Stack / Mixed / Monorepo
 # Acronym: true | Axes: 4 | max_score: 16
+# Colors: #5c91e0, #c99ef0, #ffb84d, #ff4b4b
+# Overlay: C=Coupling, O=Openness, R=Resilience, D=Documentation
 # Best for: Full-stack apps, monorepos, projects where frontend, backend, database, and infra coexist
 
 Full-stack repositories carry failure surfaces at every layer seam. A commit that touches the database schema, the API contract, and the frontend simultaneously has three independent failure points — any one can break in isolation. The primary documentation failure is the business decision behind the change: full-stack commits encode the most consequential product decisions and are the least documented. Debt accumulates as tight cross-layer coupling with no abstraction — API calls hardcoded in components, business logic in view files, database queries in route handlers.
