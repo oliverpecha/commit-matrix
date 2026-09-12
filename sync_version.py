@@ -1,41 +1,33 @@
-import os, re, sys, subprocess
+import os
+import re
+from pathlib import Path
 
-def main():
-    try:
-        with open('VERSION', 'r') as f:
-            version = f.read().strip()
-    except FileNotFoundError:
-        print("❌ Fatal: VERSION file not found.")
-        sys.exit(1)
+def get_version():
+    with open("VERSION", "r", encoding="utf-8") as f:
+        return f.read().strip()
 
-    # Safely captures static imports, dynamic import(), and src/href assets
-    pattern = re.compile(r'((?:import\s+.*?from\s+|import\s*\(\s*|(?:src|href)=)["\'][^"\']+\.(?:js|css))(?:\?v=[^"\']+)?(["\'])')
-    changes = False
-
-    def process_file(filepath):
-        with open(filepath, 'r') as f:
-            content = f.read()
-        
-        new_content = pattern.sub(rf'\g<1>?v={version}\g<2>', content)
-        
-        if content != new_content:
-            with open(filepath, 'w') as f:
-                f.write(new_content)
-            subprocess.run(['git', 'add', filepath], check=False)
-            return True
-        return False
-
-    for root, _, files in os.walk('frontend/static'):
-        for file in files:
-            if file.endswith('.js') and process_file(os.path.join(root, file)):
-                changes = True
-
-    for root, _, files in os.walk('frontend/templates'):
-        for file in files:
-            if file.endswith('.html') and process_file(os.path.join(root, file)):
-                changes = True
-
-    print(f"✅ Sync complete for {version}")
+def sync_all_frontend_assets(version):
+    # Regex to match any ?v=0.1.x or similar version strings
+    pattern = re.compile(r'\?v=\d+\.\d+\.\d+')
+    replacement = f'?v={version}'
+    
+    frontend_dir = Path("frontend")
+    updated_count = 0
+    
+    for ext in ("*.js", "*.html"):
+        for file_path in frontend_dir.rglob(ext):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            if pattern.search(content):
+                new_content = pattern.sub(replacement, content)
+                if new_content != content:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                    updated_count += 1
+                    
+    print(f"✅ Synchronized {updated_count} files to v{version}")
 
 if __name__ == "__main__":
-    main()
+    v = get_version()
+    sync_all_frontend_assets(v)

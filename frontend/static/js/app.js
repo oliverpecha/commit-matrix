@@ -1,17 +1,17 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.188";
-import "./core/appStateCtrl.js?v=0.1.98";
-import "./engine/repoManager.js?v=0.1.98";
-import "./engine/telemetryStream.js?v=0.1.98";
-import "./engine/engineControl.js?v=0.1.98";
-import "./ui/terminalView.js?v=0.1.98";
+import { hub } from "./core/eventHub.js?v=0.1.211";
+import "./core/appStateCtrl.js?v=0.1.211";
+import "./engine/repoManager.js?v=0.1.211";
+import "./engine/telemetryStream.js?v=0.1.211";
+import "./engine/engineControl.js?v=0.1.211";
+import "./ui/terminalView.js?v=0.1.211";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.188';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.188';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.188';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.188';
-import { CM_COLORS } from './constants/colors.js?v=0.1.188';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.188';
+import { processCommits } from './core/dataEngine.js?v=0.1.211';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.211';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.211';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.211';
+import { CM_COLORS } from './constants/colors.js?v=0.1.211';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.211';
 window.hub = hub;
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
 window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
@@ -301,5 +301,5 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
     if (payload.gen && payload.gen !== window.CM_RENDER_GEN) return;
     if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });
-import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.188';
+import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.211';
 initGlobalTooltips();

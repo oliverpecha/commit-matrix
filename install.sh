@@ -155,12 +155,12 @@ if [ $_CMD_EXIT -eq 0 ]; then
     echo -e "\n🤝 Telemetry synchronized. Pipeline finished."
 elif [ "$_CMD_EXIT" = "130" ] || [ "$_CMD_EXIT" = "137" ] || [ "$_CMD_EXIT" = "143" ]; then
     echo -e "\n🛑 CommitMatrix engine gracefully halted."
-    SCORED_COUNT=$(grep -c "scored -> Queued" "$LOG_FILE" 2>/dev/null || echo 0)
     [ -f "/root/commit-matrix/.env" ] && source "/root/commit-matrix/.env"
+    SCORED_COUNT=$(grep -c "scored -> Queued" "$LOG_FILE" 2>/dev/null || echo 0)
     echo "⏸️  $SCORED_COUNT commit(s) were successfully scored and saved to the ledger."
     echo "   Visit the dashboard to review the progress:"
     echo " 🏠 Local:  http://localhost:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
-    echo " ☁️  Server: http://$SERVER_IP:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN
+    echo " ☁️  Server: http://$SERVER_IP:8000/?owner=$HOST_REPO_OWNER&repo=$HOST_REPO_NAME&token=$MATRIX_TOKEN"
 elif [ "$_CMD_EXIT" != "0" ]; then
     echo -e "\n❌ Error: The CommitMatrix engine failed unexpectedly. (Exit Code: $_CMD_EXIT)"
 fi

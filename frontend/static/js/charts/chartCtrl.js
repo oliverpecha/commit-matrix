@@ -1,7 +1,7 @@
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.188';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.188';
-import { UI_STATE } from '../core/state.js?v=0.1.188';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.188';
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.211';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.211';
+import { UI_STATE } from '../core/state.js?v=0.1.211';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.211';
 const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');
 ghostCanvas.width = 600;
@@ -239,7 +239,7 @@ if (!window._cmChartBindingsReady) {
             renderChurnChart(payload);
             renderBlastChart(payload);
             
-            import('../ui/heatmap.js?v=0.1.188').then(m => {
+            import('../ui/heatmap.js?v=0.1.211').then(m => {
                 if (m.renderHeatmap) m.renderHeatmap(payload);
             }).catch(err => console.error("Failed to trigger heatmap redraw", err));
         } else if (action === 'cycleAvg') {
