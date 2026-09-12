@@ -1,10 +1,16 @@
 {% extends "layout.html" %}
-{% block title %}CommitMatrix Telemetry{% endblock %}
+{% block title %}
+{% if request.query_params.get('owner') and request.query_params.get('repo') and request.query_params.get('rubric') %}
+CommitMatrix - {{ request.query_params.get('owner') }}/{{ request.query_params.get('repo') }}/{{ request.query_params.get('rubric') | upper | replace('_MOCK', ' (mock)') }}
+{% else %}
+CommitMatrix Telemetry
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.188"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.188">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.211"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.211">
 <div class="cm-top-bar" style="position:sticky; top:0; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
     
@@ -57,7 +63,7 @@
     <div style="position:relative;">
         <div id="cm-rubric-toggle" style="display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; cursor:pointer; display:flex; align-items:center; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); padding:4px 10px; border-radius:6px; font-family:Satoshi, sans-serif; color:#aaa; gap:8px; transition:all 0.2s ease;">
             
-            <span id="cm-active-rubric-name" style="font-size:12px; font-weight:500;">Rubric</span>
+            <span id="cm-active-rubric-name" style="font-size:12px; font-weight:500;">{% if request.query_params.get("rubric") %}{{ request.query_params.get("rubric") | upper | replace("_MOCK", " (mock)") }}{% else %}Rubric{% endif %}</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
         <div id="cm-rubric-menu" style="display:none; position:absolute; top:100%; left:0; margin-top:8px; width:220px; background:#131314; border:1px solid rgba(255,255,255,0.08); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.8); z-index:9999; flex-direction:column; overflow:hidden;">
@@ -97,7 +103,7 @@
         </div>
       </div>
     </div>
-    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="cirsdAxis">Axis Breakdown</div></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
+    <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="rubricAxis">Axis Breakdown</div></div><div class="cm-chart-body"><canvas id="cm-c-stack"></canvas></div></div>
     <div class="cm-card"><div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="commitTypes">Commit Types</div></div><div class="cm-chart-body"><canvas id="cm-c-types"></canvas></div></div>
   </div>
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:260px;">
@@ -127,7 +133,7 @@
         const upd = (id, val, fallback) => {
             const el = document.getElementById(id);
             if (el) {
-                el.textContent = val ? (id === "cm-active-rubric-name" ? val.toUpperCase() : val) : fallback;
+                el.textContent = val ? (id === "cm-active-rubric-name" ? val.toUpperCase().replace(/_MOCK$/, " (mock)") : val) : fallback;
                 el.dataset.hydrated = "true";
             }
         };
@@ -180,11 +186,14 @@ window.UI_THEME = {
     }
 };
 </script>
-<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data|default([]), 'table_data': table_data|default([]), 'time_autoclose': time_autoclose|default(12), 'system_empty': system_empty|default(false), 'invalid_owner': invalid_owner|default(false), 'invalid_repo': invalid_repo|default(false), 'invalid_rubric': invalid_rubric|default(false), 'default_rubric': default_rubric|default('unknown')} | tojson | safe }}</script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.188"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.188"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.188"></script>
-<script type="module" src="/static/js/app.js?v=0.1.188"></script>
+<script id="cm-page-payload" type="application/json">{{ {'chart_data': chart_data|default([]), 'table_data': table_data|default([]), 'time_autoclose': time_autoclose|default(12), 'system_empty': system_empty|default(false), 'invalid_owner': invalid_owner|default(false), 'invalid_repo': invalid_repo|default(false), 'invalid_rubric': invalid_rubric|default(false), 'default_rubric': default_rubric|default('unknown'), 'rubrics_meta': rubrics_meta|default({})} | tojson | safe }}</script>
+<script>
+    {% if ledger_path %}console.log("[ENGINE] 📂 MOUNTED LEDGER PATH: {{ ledger_path }}");{% endif %}
+</script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.211"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.211"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.211"></script>
+<script type="module" src="/static/js/app.js?v=0.1.211"></script>
 
 {% endblock %}
 

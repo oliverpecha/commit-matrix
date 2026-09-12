@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.1.188";
+import { hub } from "../core/eventHub.js?v=0.1.211";
 const UI_THEME = window.UI_THEME;
 
 const showScrollableModal = (title, contentText, color = "#a38b4f") => {
@@ -178,16 +178,20 @@ const initDashboard = async () => {
         console.log('[Menu Hydration] Rubrics loaded for active repo:', window.VALID_RUBRICS.map(r => r.name || r.id || r).join(', '));
 
         const updLabel = (cfg, text) => {
+            let displayText = text;
+            if (cfg && cfg.labelId === "cm-active-rubric-name" && typeof displayText === 'string') {
+                displayText = displayText.toUpperCase().replace(/_MOCK$/i, ' (mock)');
+            }
             const el = document.getElementById(cfg.labelId);
             if (el) {
-                el.textContent = text;
+                el.textContent = displayText;
                 el.dataset.hydrated = "true";
             } else {
                 const toggle = document.getElementById(cfg.toggleId);
                 if (toggle && toggle.children.length > 0) {
                     const spans = toggle.getElementsByTagName("span");
                     if (spans.length > 0) {
-                        spans[0].textContent = text;
+                        spans[0].textContent = displayText;
                         spans[0].dataset.hydrated = "true";
                     }
                 }
@@ -252,7 +256,10 @@ const initDashboard = async () => {
                     }
 
                     const isSelected = String(item[idKey]) === String(activeId);
-                    const labelStr = item[labelKey];
+                    let labelStr = item[labelKey];
+                    if (cfg.menuId === "cm-rubric-menu" && typeof labelStr === 'string' && labelStr.toLowerCase().endsWith('_mock')) {
+                        labelStr = labelStr.replace(/_mock$/i, ' (mock)');
+                    }
                     const valStr = item[idKey];
                     
                     if (isSelected) {
@@ -360,7 +367,11 @@ const initDashboard = async () => {
                 updLabel(UI_THEME.owner, activeOwner || UI_THEME.owner.title);
                 updLabel(UI_THEME.repo, activeRepoObj ? activeRepoObj.name : UI_THEME.repo.title);
                 const rObj = window.VALID_RUBRICS.find(r => String(r.id) === String(activeRubric));
-                updLabel(UI_THEME.rubric, rObj ? rObj.name.toUpperCase() : UI_THEME.rubric.title);
+                const rubricName = rObj ? rObj.name.toUpperCase() : UI_THEME.rubric.title;
+                updLabel(UI_THEME.rubric, rubricName);
+                if (activeOwner && activeRepoObj && rObj) {
+                    document.title = `CommitMatrix | ${activeOwner}/${activeRepoObj.name}/${rubricName.replace(/_MOCK$/i, ' (mock)')}`;
+                }
             }
         };
 

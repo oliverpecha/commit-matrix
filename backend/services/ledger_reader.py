@@ -36,6 +36,7 @@ def fetch_ledger_raw(repo, rubric=None, owner=None):
     p = next((candidate for candidate in candidates if os.path.exists(candidate)), None)
     if not p:
         return []
+    print(f"\n[ENGINE] 📂 LOADING LEDGER FROM: {p}\n", flush=True)
     out = []
     try:
         with open(p, mode="r", encoding="utf-8-sig", errors="replace") as f:
@@ -108,6 +109,7 @@ def fetch_ledger(repo, rubric=None, owner=None, force=False):
     if cached_path and os.path.exists(cached_path):
         current_mtime = os.path.getmtime(cached_path)
         if not force and (now - cached.get('ts', 0) < CACHE_TTL) and (cached.get('mtime', 0) == current_mtime):
+            print(f"\n[ENGINE] 📂 SERVING LEDGER FROM CACHE: {cached_path}\n", flush=True)
             return cached['data']
             
     # 2. Slow-path: path discovery (only runs on pure cache miss or file deletion)
