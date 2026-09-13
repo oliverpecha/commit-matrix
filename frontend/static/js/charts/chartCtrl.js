@@ -1,7 +1,7 @@
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.211';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.211';
-import { UI_STATE } from '../core/state.js?v=0.1.211';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.211';
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.234';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.234';
+import { UI_STATE } from '../core/state.js?v=0.1.234';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.234';
 const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');
 ghostCanvas.width = 600;
@@ -26,6 +26,13 @@ document.fonts.ready.then(() => {
 
 let charts = {};
 
+const safeDestroy = (chartInstance) => {
+    if (!chartInstance) return;
+    const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible');
+    const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible');
+    chartInstance.destroy();
+};
+
 const ensureRange = (c) => {
     if (c.length > 1) return c;
     const fake = { ...c[0], ts: c[0].ts - 3600, _fake: true };
@@ -38,15 +45,9 @@ const defRaw = (c) => ({ responsive:true, maintainAspectRatio:false, plugins:{le
 export function renderTypesChart(c) {
     const canvasId = 'cm-c-types';
     let canvasEl = document.getElementById(canvasId);
-    
-    if (canvasEl) {
-        const newCanvas = document.createElement('canvas');
-        newCanvas.id = canvasId;
-        canvasEl.parentNode.replaceChild(newCanvas, canvasEl);
-        canvasEl = newCanvas; 
-    }
-    
-    if (charts.types) { delete charts.types; }
+    if (charts.types) { safeDestroy(charts.types); delete charts.types; }
+    if (!canvasEl) return;
+
 
     const tc = {};
     c.forEach(x => {
@@ -73,15 +74,13 @@ export function renderTypesChart(c) {
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-            plugins: { legend: { display: false } },
-            scales: { x: { grid: { color: 'rgba(255,255,255,.04)' } }, y: { grid: { color: 'rgba(255,255,255,.04)' } } }
-        }
-    });
+        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: { legend: { display: false }, tooltip: { enabled: false, external: customTooltip(c) } },
+        scales: { x: { grid: { color: 'rgba(255,255,255,.04)' } }, y: { grid: { color: 'rgba(255,255,255,.04)' } } }
+    }});
 }
-
 export function renderStackChart(rawC) {
-    if(charts.stack) charts.stack.destroy(); const lin=UI_STATE.stack; const c = lin ? ensureRange(rawC) : rawC; 
+    if(charts.stack) safeDestroy(charts.stack); const lin=UI_STATE.stack; const c = lin ? ensureRange(rawC) : rawC; 
     const mk=(ax)=>c.map(x=>lin?{x:x.ts,y:x._fake?null:x[ax]}:x[ax]);
     const allVals = c.map(x=>x.tot).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const maxVal = allVals.length ? Math.max(...allVals) : 16;
@@ -90,7 +89,7 @@ export function renderStackChart(rawC) {
 }
 
 export function renderTrendChart(rawC) {
-    if(charts.trend) charts.trend.destroy(); const lin=UI_STATE.trend; const c = lin ? ensureRange(rawC) : rawC;
+    if(charts.trend) safeDestroy(charts.trend); const lin=UI_STATE.trend; const c = lin ? ensureRange(rawC) : rawC;
     const avg=calcMAvg(c.map(x=>x.tot),UI_STATE.avgTrend,c,lin); const mk=(tr)=>c.map(x=>tr&&x.tier!==tr?(lin?{x:x.ts,y:null}:null):(lin?{x:x.ts,y:x._fake?null:x.tot}:x.tot));
     const allVals = c.map(x=>x.tot).concat(avg.map(v=>typeof v==='object'&&v!==null?v.y:v)).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const tMin = allVals.length ? Math.max(0, Math.floor(Math.min(...allVals) - 1)) : 0;
@@ -100,14 +99,14 @@ export function renderTrendChart(rawC) {
 }
 
 function buildCombo(id, stKey, avgKey, rawC, dFunc, clr) {
-    if(charts[stKey]) charts[stKey].destroy(); const lin=UI_STATE[stKey]; const c = lin ? ensureRange(rawC) : rawC;
+    if(charts[stKey]) safeDestroy(charts[stKey]); const lin=UI_STATE[stKey]; const c = lin ? ensureRange(rawC) : rawC;
     const avg=calcMAvg(c.map(dFunc),UI_STATE[avgKey],c,lin);
     const rawVals = c.map(dFunc).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const avgVals = avg.map(v=>typeof v==='object'&&v!==null?v.y:v).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const allVals = rawVals.concat(avgVals);
     const cMin = allVals.length ? Math.max(0, Math.floor(Math.min(...allVals) - 1)) : 0;
     const cMax = allVals.length ? Math.ceil(Math.max(...allVals) + 1) : 10;
-    charts[stKey] = new Chart(id,{type:'bar',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{type:'line',data:avg,borderColor:'rgba(79,152,163,0.8)',borderWidth:1.5,pointRadius:0,tension:0.3},{type:'bar',data:c.map(x=>lin?{x:x.ts,y:x._fake?null:dFunc(x)}:dFunc(x)),backgroundColor:clr,borderRadius:2,barThickness:lin?4:undefined}]},options:{...def(c),layout:{padding:{top: lin ? MD_TOP : 6, right: 8, left: 2}},scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:cMin,max:cMax}}},plugins:lin?[monthDiv(c)]:[]});
+    charts[stKey] = new Chart(id,{type:'bar',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{type:'line',data:avg,borderColor:'rgba(79,152,163,0.8)',borderWidth:1.5,pointRadius:0,tension:0.3},{type:'bar',data:c.map(x=>lin?{x:x.ts,y:x._fake?null:dFunc(x)}:dFunc(x)),backgroundColor:clr,borderRadius:2,barThickness:lin?4:undefined}]},options:{...def(c),interaction:{mode:'index',intersect:false},layout:{padding:{top: lin ? MD_TOP : 6, right: 8, left: 2}},scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:cMin,max:cMax}}},plugins:lin?[monthDiv(c)]:[]});
 }
 
 export function renderFragChart(c) {
@@ -129,13 +128,13 @@ export function renderAnalytics(c) {
 }
 
 export function renderConvergenceChart(rawC) {
-    if(charts.conv) charts.conv.destroy(); const lin=UI_STATE.conv; const c = lin ? ensureRange(rawC) : rawC;
+    if(charts.conv) safeDestroy(charts.conv); const lin=UI_STATE.conv; const c = lin ? ensureRange(rawC) : rawC;
     const f=c.map(x=>((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)+(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[2]] || 0))/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[3]] || 0)||1)), ch=c.map(x=>(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[1]] || 0)||1)), b=c.map(x => { const a = window.CM_ACTIVE_AXES || ['C','O','R','D']; return (x[a[0]] || 1) * (x[a[2] || a[1]] || 1); }); const fT=getTop25(f), cT=getTop25(ch), bT=getTop25(b);
     const nd=c.map((x,i)=>{ const h=(f[i]>=fT?1:0)+(ch[i]>=cT?1:0)+(b[i]>=bT?1:0); if(h>=2&&x.tot>0){const m=Math.max(f[i],ch[i],b[i]);return lin?{x:x.ts,y:x._fake?null:m+1}:m+1;} return lin?{x:x.ts,y:null}:null; });
     const allVals = f.concat(ch, b).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const cvMin = allVals.length ? Math.max(0, Math.floor(Math.min(...allVals) - 1)) : 0;
     const cvMax = allVals.length ? Math.ceil(Math.max(...allVals) + 1) : 10;
-    charts.conv = new Chart('cm-c-conv',{type:'line',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{label:'Node',data:nd,type:'scatter',pointBackgroundColor:c.map(x=>SC_COLORS['t_'+x.scope]||'#fff'),pointBorderColor:'rgba(255,255,255,0.8)',pointBorderWidth:2,pointRadius:6},{label:'Frag',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:f[i]}:f[i]),borderColor:'rgba(255, 75, 75, 0.4)',backgroundColor:'rgba(255, 75, 75, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Churn',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:ch[i]}:ch[i]),borderColor:'rgba(201, 158, 240, 0.4)',backgroundColor:'rgba(201, 158, 240, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Blast',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:b[i]}:b[i]),borderColor:'rgba(255, 184, 77, 0.4)',backgroundColor:'rgba(255, 184, 77, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0}]},options:{...def(c),layout:{padding:{top: lin ? MD_TOP : 6, right: 8, left: 2}},scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:cvMin,max:cvMax}}},plugins:lin?[monthDiv(c)]:[]});
+    charts.conv = new Chart('cm-c-conv',{type:'line',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{label:'Node',data:nd,type:'scatter',pointBackgroundColor:c.map(x=>SC_COLORS['t_'+x.scope]||'#fff'),pointBorderColor:'rgba(255,255,255,0.8)',pointBorderWidth:2,pointRadius:6},{label:'Frag',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:f[i]}:f[i]),borderColor:'rgba(255, 75, 75, 0.4)',backgroundColor:'rgba(255, 75, 75, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Churn',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:ch[i]}:ch[i]),borderColor:'rgba(201, 158, 240, 0.4)',backgroundColor:'rgba(201, 158, 240, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Blast',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:b[i]}:b[i]),borderColor:'rgba(255, 184, 77, 0.4)',backgroundColor:'rgba(255, 184, 77, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0}]},options:{...def(c),interaction:{mode:'index',intersect:false},layout:{padding:{top: lin ? MD_TOP : 6, right: 8, left: 2}},scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:cvMin,max:cvMax}}},plugins:lin?[monthDiv(c)]:[]});
 }
 
 
@@ -174,7 +173,7 @@ export function updateKPIs(c) {
 
 export function renderTierChart(c) {
     updateKPIs(c);
-    if(charts.tier) charts.tier.destroy();
+    if(charts.tier) safeDestroy(charts.tier);
     const counts = { Pivotal: 0, Core: 0, Minor: 0 };
     c.forEach(x => { if(counts[x.tier] !== undefined) counts[x.tier]++; });
     charts.tier = new Chart('cm-c-tier', {
@@ -188,7 +187,7 @@ export function renderTierChart(c) {
                 hoverOffset: 4
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: true } } }
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: false, external: customTooltip(c) } } }
     });
 }
 
@@ -239,7 +238,7 @@ if (!window._cmChartBindingsReady) {
             renderChurnChart(payload);
             renderBlastChart(payload);
             
-            import('../ui/heatmap.js?v=0.1.211').then(m => {
+            import('../ui/heatmap.js?v=0.1.234').then(m => {
                 if (m.renderHeatmap) m.renderHeatmap(payload);
             }).catch(err => console.error("Failed to trigger heatmap redraw", err));
         } else if (action === 'cycleAvg') {

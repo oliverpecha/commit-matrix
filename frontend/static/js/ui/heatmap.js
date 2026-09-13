@@ -1,6 +1,6 @@
-import { SCOPE_COLORS } from '../constants/colors.js?v=0.1.211';
-import { UI_STATE } from '../core/state.js?v=0.1.211';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.211';
+import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.234';
+import { UI_STATE } from '../core/state.js?v=0.1.234';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.234';
 
 let lastCommits = [];
 let _transBound = false;
@@ -169,8 +169,32 @@ export function renderHeatmap(commits) {
                 
                 // Tooltip handling (relies on global document listener in tooltips.js)
                 rect.setAttribute('class', 'info-hover');
-                const ttt = `${svc} [${val}/4] - ${c.h ? c.h.substring(0,7) : c.hash_short}\n\n${c.s || c.subject}`;
-                rect.setAttribute('data-tt-temp', ttt);
+                const d = new Date((c.ts || 0) * 1000); 
+                const dateStr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + String(d.getDate()).padStart(2,'0');
+                const svgs = {'Pivotal':'<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M11.13 2.76a1 1 0 011.74 0l9.26 16.05a1 1 0 01-.87 1.5H2.74a1 1 0 01-.87-1.5l9.26-16.05z"/></svg>','Core':'<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>','Minor':'<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="10" width="16" height="4" rx="2"/></svg>'};
+                const tColor = c.tier === 'Pivotal' ? '#D43BC6' : c.tier === 'Core' ? '#36B8D8' : '#6F8197';
+                
+                const typ = (c.p_type || c.t || c.type || 'chore').toLowerCase();
+                const scp = (c.p_scope || c.scope || 'global').toLowerCase();
+                const typClr = (typeof TYPE_COLORS !== 'undefined' && TYPE_COLORS[typ]) ? TYPE_COLORS[typ] : '#aaa';
+                const scpClr = SCOPE_COLORS[scp] || '#aaa';
+
+                let barsHtml = '';
+                SVCS.forEach(s => {
+                    const sVal = c[`touches_${s.toLowerCase()}`];
+                    if (sVal > 0) {
+                        const sColor = SCOPE_COLORS[s.toLowerCase()] || '#4caf50';
+                        const pct = (sVal / 4) * 100;
+                        barsHtml += `<div style="display:flex;align-items:center;justify-content:flex-start;gap:12px;"><span style="color:${sColor};font-weight:700;width:60px;text-align:right;">${s}</span><div style="flex-grow:1;background:rgba(255,255,255,0.05);height:6px;border-radius:3px;overflow:hidden;min-width:100px;"><div style="width:${pct}%;background:${sColor};height:100%;border-radius:3px;"></div></div></div>`;
+                    }
+                });
+                
+                let h = `<div style="display:flex;justify-content:space-between;gap:16px;font-weight:bold;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:6px;"><span>#${c.n || ''} — ${dateStr}</span><span style="font-family:monospace;opacity:0.5">${(c.h || c.hash_short || '').substring(0,7)}</span></div>`;
+                h += `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;font-family:monospace;margin-bottom:8px;color:#9e9e9e;"><div style="display:flex;gap:4px;"><span style="color:${typClr};background:rgba(255,255,255,0.05);padding:2px 4px;border-radius:3px;">${typ}</span><span style="color:${scpClr};background:rgba(255,255,255,0.05);padding:2px 4px;border-radius:3px;">${scp}</span></div><div><span style="color:#4caf50">+${c.lines_added||c.la||0}</span> <span style="color:#f44336">-${c.lines_deleted||c.ld||0}</span></div></div>`;
+                h += `<div style="display:flex;align-items:center;font-size:10px;font-family:monospace;margin-bottom:12px;color:${tColor};"><span style="background:rgba(255,255,255,0.05);padding:2px 4px;border-radius:3px;display:flex;align-items:center;gap:4px;">${svgs[c.tier]||''} ${c.tier}</span></div>`;
+                h += `<div style="display:flex;flex-direction:column;gap:6px;">${barsHtml}</div>`;
+                h += `<div style="font-size:11px;color:#9e9e9e;border-top:1px solid rgba(255,255,255,0.06);margin-top:8px;padding-top:8px;line-height:1.4;max-width:250px;white-space:normal;">${c.s || c.subject || c.clean_s || 'unknown'}</div>`;
+                rect.setAttribute('data-info', h);
                 
                 fragment.appendChild(rect);
             }

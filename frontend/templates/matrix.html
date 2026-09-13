@@ -9,8 +9,8 @@ CommitMatrix Telemetry
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.211"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.211">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.234"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.234">
 <div class="cm-top-bar" style="position:sticky; top:0; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
     
@@ -81,6 +81,23 @@ CommitMatrix Telemetry
   </div>
 </div>
 
+<style>
+  .info-hover { cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.4); display: inline-block; transition: color 0.15s, border-color 0.15s; }
+  .info-hover:hover { color: #fff; border-color: rgba(255,255,255,0.8); }
+
+  #info-tt { position: fixed; background: rgba(20,20,18,0.98); color: #d9d8d5; font-size: 11.5px; padding: 10px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.8); pointer-events: none; z-index: 99999; opacity: 0; transition: opacity 0.15s; max-width: 280px; font-family: 'Satoshi', sans-serif; transform: translate(-50%, -100%); line-height: 1.5; white-space: pre-wrap; }
+  #info-tt.visible { opacity: 1; }
+
+  #cm-tt { position: fixed; background: rgba(20,20,18,0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 12px 14px; pointer-events: none; z-index: 9999; opacity: 0; transition: opacity 0.2s; font-family: 'Satoshi', sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,0.6); transform: translate(-50%, -100%); min-width: 240px; }
+  #cm-tt.visible { opacity: 1; }
+
+  .cm-tt-hd { font-size: 12px; font-weight: 700; color: #d9d8d5; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px; }
+  .cm-tt-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; font-family: monospace; margin-bottom: 10px; color: #9e9e9e; }
+  .cm-tt-bd { font-size: 11px; color: #9e9e9e; display: flex; flex-direction: column; gap: 6px; }
+  .cm-tt-row { display: flex; align-items: center; justify-content: space-between; }
+  .cm-tt-val { font-weight: 700; color: #d9d8d5; }
+  .cm-tt-subj { font-size: 11px; color: #9e9e9e; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 8px; padding-top: 8px; line-height: 1.4; max-width: 250px; white-space: normal; }
+</style>
 <div id="info-tt"></div><div id="cm-tt"></div>
 
 <div class="cm-wrap" id="main-dashboard-wrap">
@@ -97,9 +114,9 @@ CommitMatrix Telemetry
       <div class="cm-chart-body" style="display:flex; flex-direction:column;">
         <div style="flex:1; position:relative; min-height:0;"><canvas id="cm-c-tier"></canvas></div>
         <div style="display:flex; justify-content:center; gap:12px; padding-top:10px;">
-          <span id="tier-badge-pivotal" style="color:#D43BC6; border:1px solid #D43BC6; background:#D43BC61A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M11.13 2.76a1 1 0 011.74 0l9.26 16.05a1 1 0 01-.87 1.5H2.74a1 1 0 01-.87-1.5l9.26-16.05z"/></svg>Pivotal <span id="cm-tier-val-pivotal" style="margin-left:4px;opacity:0.8;">0</span></span>
-          <span id="tier-badge-core" style="color:#36B8D8; border:1px solid #36B8D8; background:#36B8D81A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>Core <span id="cm-tier-val-core" style="margin-left:4px;opacity:0.8;">0</span></span>
-          <span id="tier-badge-minor" style="color:#6F8197; border:1px solid #6F8197; background:#6F81971A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><rect x="4" y="10" width="16" height="4" rx="2"/></svg>Minor <span id="cm-tier-val-minor" style="margin-left:4px;opacity:0.8;">0</span></span>
+          <span id="tier-badge-pivotal" style="color:#D43BC6; border:1px solid #D43BC6; background:#D43BC61A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M11.13 2.76a1 1 0 011.74 0l9.26 16.05a1 1 0 01-.87 1.5H2.74a1 1 0 01-.87-1.5l9.26-16.05z"/></svg>Pivotal</span>
+          <span id="tier-badge-core" style="color:#36B8D8; border:1px solid #36B8D8; background:#36B8D81A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>Core</span>
+          <span id="tier-badge-minor" style="color:#6F8197; border:1px solid #6F8197; background:#6F81971A; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; line-height:1.2;"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><rect x="4" y="10" width="16" height="4" rx="2"/></svg>Minor</span>
         </div>
       </div>
     </div>
@@ -190,10 +207,10 @@ window.UI_THEME = {
 <script>
     {% if ledger_path %}console.log("[ENGINE] 📂 MOUNTED LEDGER PATH: {{ ledger_path }}");{% endif %}
 </script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.211"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.211"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.211"></script>
-<script type="module" src="/static/js/app.js?v=0.1.211"></script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.234"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.234"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.234"></script>
+<script type="module" src="/static/js/app.js?v=0.1.234"></script>
 
 {% endblock %}
 

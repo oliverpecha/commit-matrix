@@ -1,4 +1,4 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.211';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.234';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -174,6 +174,7 @@ export function syncTableHeaders() {
 }
 
 export function renderTableRows(displayData) {
+    const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible');
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
     syncTableHeaders();
     const axesKeys = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];

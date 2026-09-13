@@ -143,7 +143,7 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
 
     # 3. Normal Load
     ledger = fetch_ledger(repo, rubric=rubric, owner=request.query_params.get("owner", "local"))
-    chart_data = [{k: v for k, v in c.items() if k not in ('s', 'h')} for c in ledger]
+    chart_data = [{k: v for k, v in c.items()} for c in ledger]
     table_data = ledger[:100]
 
     # Resolve physical path for browser console logging
