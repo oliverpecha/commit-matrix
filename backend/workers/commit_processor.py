@@ -68,6 +68,9 @@ def process_commit(
         axes = result.get("axes", {})
         touches = result.get("touches", {})
         total_score = result.get("tot", sum(axes.values()))
+        score_pct = result.get("score_pct", 0.0)
+        danger_flag = result.get("danger_flag", False)
+        debt_direction = result.get("debt_direction", "neutral")
         tier_label_raw = result.get("tier", "Minor")
 
         if not axes:
@@ -94,9 +97,9 @@ def process_commit(
         deletions = diff.count("\n-") - diff.count("\n---")
 
         # 4. ROW GENERATION (Arch sig and gen safely preserved here for the DB/CSV)
-        headers = ["#", "Date", "Type", "Scope", "Subject", "Tier", "Total", "Additions", "Deletions", "Hash", "TreeSig", "ArchGen"]
+        headers = ["#", "Date", "Type", "Scope", "Subject", "Tier", "Total", "ScorePct", "Danger", "Debt", "Additions", "Deletions", "Hash", "TreeSig", "ArchGen", "Model"]
         clean_tier = tier_label.split()[1] if tier_label else tier_label_raw
-        row = [topo_id, date_str, commit_type, commit_scope, subject, clean_tier, total_score, f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else ""]
+        row = [topo_id, date_str, commit_type, commit_scope, subject, clean_tier, total_score, score_pct, str(danger_flag).upper(), debt_direction, f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else "", model_name]
 
         import re
         axes_ordered = re.findall(r'"([A-Z])":', sys_prompt) if 'sys_prompt' in locals() else ["C", "O", "R", "D"]

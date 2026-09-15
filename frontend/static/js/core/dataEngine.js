@@ -1,5 +1,6 @@
 export function extractDynamicAxes(commits) { if (!commits || !commits.length) return []; const keys = new Set(); commits.forEach(c => Object.keys(c).forEach(k => { if (k.startsWith('touches_')) keys.add(k); })); return Array.from(keys).sort(); }
 export function processCommits(r) {
+    window.CM_AUDIT_ANOMALIES = [];
     if (!r || !r.length) return [];
     const isCSV = Array.isArray(r[0]);
     const list = isCSV ? r.slice(1).map(row => {
@@ -8,7 +9,8 @@ export function processCommits(r) {
         return obj;
     }) : r;
 
-    const out = list.map((c, i) => {
+    const out = list.map((cOrig, i) => {
+        const c = { ...cOrig };
         const lc = {};
         for (let k in c) {
             if (k.trim().length === 1) lc[k.trim()] = c[k];
@@ -54,8 +56,8 @@ export function processCommits(r) {
         else if (rawTier.includes('significant') || rawTier.includes('core')) c.tier = 'Core';
         else if (rawTier.includes('routine') || rawTier.includes('minor')) c.tier = 'Minor';
         else {
-            if (c.tot >= 10) c.tier = 'Pivotal';
-            else if (c.tot >= 7) c.tier = 'Core';
+            if (c.tot >= 13) c.tier = 'Pivotal';
+            else if (c.tot >= 8) c.tier = 'Core';
             else c.tier = 'Minor';
         }
 
@@ -73,9 +75,41 @@ export function processCommits(r) {
                 // If it's empty, null, or undefined, we leave it off 'c' entirely to prevent cross-rubric key leakage.
             }
         }
+        let mathSum = 0;
+        let hasAxes = false;
+        for (let k in lc) {
+            if (k.length === 1 && k >= 'A' && k <= 'Z') { mathSum += (Number(lc[k]) || 0); hasAxes = true; }
+        }
+        let mathTier = c.tot >= 13 ? 'Pivotal' : (c.tot >= 8 ? 'Core' : 'Minor');
+        let anomalyReasons = [];
+        
+        if (hasAxes && mathSum !== c.tot) anomalyReasons.push(`Sum of axes (${mathSum}) ≠ Total (${c.tot})`);
+        if (c.tier !== mathTier) anomalyReasons.push(`Tier '${c.tier}' conflicts with Total ${c.tot} (Expected ${mathTier})`);
+        
+        c.model = lc.model || 'gemini/gemini-2.5-flash-lite (Legacy)';
+        if (anomalyReasons.length > 0) {
+            window.CM_AUDIT_ANOMALIES.push({ hash: c.h, num: c.n, ts: c.ts, subj: c.s, model: c.model, reasons: anomalyReasons });
+        }
           
         return c;
     });
+    // Stagger same-day commits evenly across 24 hours so bar charts don't eclipse each other
+    const dayMap = {};
+    out.forEach(c => {
+        const baseDay = Math.floor(c.ts / 86400) * 86400;
+        if (!dayMap[baseDay]) dayMap[baseDay] = [];
+        dayMap[baseDay].push(c);
+    });
+    Object.values(dayMap).forEach(dayCommits => {
+        if (dayCommits.length > 1) {
+            dayCommits.sort((a, b) => a.n - b.n); // Maintain logical sequence
+            const step = 86400 / (dayCommits.length + 1);
+            dayCommits.forEach((c, idx) => {
+                c.ts = c.ts + Math.floor(step * (idx + 1));
+            });
+        }
+    });
+
     const MAP = { cord:['C','O','R','D'], ship:['S','H','I','P'], wave:['W','A','V','E'], grid:['G','R','I','D'], flux:['F','L','U','X'], form:['F','O','R','M'], lock:['L','O','C','K'], plan:['P','L','A','N'] };
     const rName = (new URLSearchParams(window.location.search).get("rubric") || "cord").toLowerCase().replace(/_mock$/i, '');
     

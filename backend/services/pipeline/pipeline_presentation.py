@@ -121,7 +121,7 @@ def report_sensor_mutation(commit_sha: str, from_sig: str, to_sig: str, raw_shap
 def render_commit_score_card(work_item: any, scores: dict, progress_data: dict) -> str:
     axes = {k: v for k, v in scores.items() if len(k) == 1 and k.isupper()}
     if not axes:
-        axes = {'C': scores.get('C', 1), 'I': scores.get('I', 1), 'R': scores.get('R', 1), 'S': scores.get('S', 1), 'D': scores.get('D', 1)}
+        axes = {'?': 1}
     
     total_score = scores.get('tot', sum(axes.values()))
     axis_bars = "  ".join([f"{k} {_axis_bar(v)}" for k, v in axes.items()])

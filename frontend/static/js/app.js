@@ -1,17 +1,17 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.234";
-import "./core/appStateCtrl.js?v=0.1.234";
-import "./engine/repoManager.js?v=0.1.234";
-import "./engine/telemetryStream.js?v=0.1.234";
-import "./engine/engineControl.js?v=0.1.234";
-import "./ui/terminalView.js?v=0.1.234";
+import { hub } from "./core/eventHub.js?v=0.1.324";
+import "./core/appStateCtrl.js?v=0.1.324";
+import "./engine/repoManager.js?v=0.1.324";
+import "./engine/telemetryStream.js?v=0.1.324";
+import "./engine/engineControl.js?v=0.1.324";
+import "./ui/terminalView.js?v=0.1.324";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.234';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderAnalytics, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.234';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.234';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.234';
-import { CM_COLORS } from './constants/colors.js?v=0.1.234';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.234';
+import { processCommits } from './core/dataEngine.js?v=0.1.324';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.324';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.324';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.324';
+import { CM_COLORS } from './constants/colors.js?v=0.1.324';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.324';
 window.hub = hub;
 import { initGlobalTooltips } from './ui/tooltips.js';
 initGlobalTooltips();
@@ -40,7 +40,7 @@ function paintKPIs(k) {
     const kc = document.getElementById('cm-kc'); if(kc) { kc.textContent = k.crit; kc.style.color = CM_COLORS.Pivotal; }
     const ks = document.getElementById('cm-ks'); if(ks) { ks.textContent = k.sig; ks.style.color = CM_COLORS.Core; }
     const kr = document.getElementById('cm-kr'); if(kr) { kr.textContent = k.rout; kr.style.color = CM_COLORS.Minor; }
-    
+
     const applyBadge = (id, color) => {
         const el = document.getElementById(id);
         if (el && color) {
@@ -60,7 +60,7 @@ function buildRenderSteps(p) {
         () => renderTypesChart(p),
         () => renderTrendChart(p),
         () => renderStackChart(p),
-        () => renderAnalytics(p),
+        () => renderRiskCharts(p),
         () => renderConvergenceChart(p),
         () => renderHeatmap(p),
         () => renderTable(p),
@@ -89,11 +89,11 @@ function runRenderQueue(steps, gen) {
 function setDashboardVisibility(hasData, errorMsg = "") {
     const rows = document.querySelectorAll('.cm-row');
     const flexes = document.querySelectorAll('.cm-kpi-row, #cm-ledger-card');
-    
+
     // Broad selector to capture common header action containers holding the Toggle/Filter/Sync buttons
     const actions = document.querySelectorAll('#cm-header-actions, .cm-header-actions, #cm-toolbar, .cm-toolbar, #cm-actions, .cm-actions');
     const wrap = document.getElementById("main-dashboard-wrap");
-    
+
     if (hasData) {
         // Clear inline display style to safely restore original CSS stylesheet layout (restores full width grid/flex)
         rows.forEach(el => el.style.display = '');
@@ -107,10 +107,10 @@ function setDashboardVisibility(hasData, errorMsg = "") {
         flexes.forEach(el => el.style.display = 'none');
         actions.forEach(el => el.style.display = 'none');
         if (wrap) wrap.style.opacity = "1";
-        
+
         // Suppress Ledger Empty ghost dialog if the route itself is a 404 state
         if (window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC) return;
-        
+
         let zs = document.getElementById('cm-zero-state');
         if (!zs && wrap) {
             zs = document.createElement("div");
@@ -139,9 +139,33 @@ function attemptRender() {
     } catch (e) {
         console.error("[Data Engine] processCommits failed silently:", e);
     }
-    
+
     console.log(`[Data Engine] attemptRender -> rawData: ${rawData.length}, processed: ${p.length}`);
 
+    const floatingAudit = document.getElementById('cm-alert-float');
+    if (window.CM_AUDIT_ANOMALIES && window.CM_AUDIT_ANOMALIES.length > 0) {
+        if (floatingAudit) floatingAudit.style.display = 'flex';
+        const floatCount = document.getElementById('cm-alert-float-count');
+        if (floatCount) floatCount.textContent = window.CM_AUDIT_ANOMALIES.length;
+        const floatNoun = document.getElementById('cm-alert-float-noun');
+        if (floatNoun) floatNoun.textContent = window.CM_AUDIT_ANOMALIES.length === 1 ? 'Scoring Anomaly' : 'Scoring Anomalies';
+        const auditList = document.getElementById('cm-alert-list');
+        if (auditList) {
+            auditList.innerHTML = window.CM_AUDIT_ANOMALIES.map(a => `
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; color:#8ab4f0;">
+                        <span><strong>#${a.num}</strong> <code style="background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px;">${(a.hash||'').substring(0,7)}</code></span>
+                        <span style="color:#888;">${new Date(a.ts * 1000).toLocaleDateString()}</span>
+                    </div>
+                    <div style="color:#e0e0e0; margin-bottom:8px; font-family:Satoshi, sans-serif;">${a.subj}</div>
+                    <div style="color:#ff4b4b; margin-bottom:8px;">${a.reasons.map(r => `<div>↳ ${r}</div>`).join('')}</div>
+                    <div style="font-size:11px; color:#a38b4f;">🤖 Scored by: <strong>${a.model}</strong></div>
+                </div>
+            `).join('');
+        }
+    } else {
+        if (floatingAudit) floatingAudit.style.display = 'none';
+    }
     const params = new URLSearchParams(window.location.search);
     if (!params.get('rubric')) {
         setDashboardVisibility(false, "Please select an available rubric ledger to continue.");
@@ -152,11 +176,37 @@ function attemptRender() {
         setDashboardVisibility(false);
         return;
     }
-    
+
     setDashboardVisibility(true);
 
+    // [Patch] Enforce Timeline Mode defaults securely on initial boot
+    if (!window._cmBootSyncDone) {
+        window._cmBootSyncDone = true;
+        UI_STATE.globalChron = true;
+
+        const CHRONO_CAPABLE = ['stack', 'trend', 'conv', 'frag', 'churn', 'blast', 'heat', 'types', 'tier'];
+        CHRONO_CAPABLE.forEach(t => {
+            UI_STATE[t] = true;
+            if (['trend', 'frag', 'churn', 'blast'].includes(t)) {
+                const avgKey = t === 'trend' ? 'avgTrend' : 'avg' + t.charAt(0).toUpperCase() + t.slice(1);
+                UI_STATE[avgKey] = 2; // Default to Daily Peak
+                const ab = document.querySelector(`button[data-action="cycleAvg"][data-target="${t}"]`);
+                if (ab) { 
+                    ab.innerHTML = `<svg width="14" height="14" viewBox="0 0 32 32" fill="currentColor" style="display:inline-block; vertical-align:-2px; margin-right:4px;"><path d="M23,24c-3.5991,0-5.0293-4.1758-6.4126-8.2139C15.2764,11.9583,13.92,8,11,8a3.44,3.44,0,0,0-3.0532,2.3215L6.0513,9.6838C6.1016,9.5334,7.3218,6,11,6c4.3491,0,6.0122,4.8547,7.48,9.1379C19.6885,18.6667,20.83,22,23,22a3.44,3.44,0,0,0,3.0532-2.3215l1.8955.6377C27.8984,20.4666,26.6782,24,23,24Z"/><path d="M4,28V17H6V15H4V2H2V28a2,2,0,0,0,2,2H30V28Z"/><rect x="8" y="15" width="2" height="2"/><rect x="12" y="15" width="2" height="2"/><rect x="20" y="15" width="2" height="2"/><rect x="24" y="15" width="2" height="2"/><rect x="28" y="15" width="2" height="2"/></svg> Daily Peak`; 
+                    ab.classList.add('active'); 
+                }
+            }
+        });
+
+        const mainBtn = document.getElementById('cm-global-chron-btn');
+        if (mainBtn && !mainBtn.classList.contains('active')) {
+            mainBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px;"><circle cx="5" cy="12" r="4"/><path d="M5 9v3h1.5M9 12h1.5M13.5 12h1M17.5 12h3"/><circle cx="12" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="22" cy="12" r="1.5"/></svg> Timeline`;
+            mainBtn.classList.add('active');
+        }
+    }
+
     const gen = window.CM_RENDER_GEN;
-    
+
     // Force browser layout recalculation immediately so dimensions are available
     void document.body.offsetHeight;
 
@@ -177,7 +227,7 @@ window.addEventListener('load', async () => {
     const owner = urlParams.get('owner') || window.MATRIX_OWNER || '';
     const repo = urlParams.get('repo');
     const rubric = urlParams.get('rubric');
-    
+
     const isInvalid = window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC;
     if (repo && rubric && !isInvalid && (window.MATRIX_PAYLOAD || window.MATRIX_CHART_PAYLOAD)) {
         console.log(`[Data Engine] Loading SQLite ledger via API: /api/data?owner=${owner}&repo=${repo}&rubric=${rubric} (Force: ${typeof isForce !== 'undefined' ? isForce : false})`);
@@ -214,7 +264,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
         if (opts.repo && opts.repo !== urlParams.get('repo')) { urlParams.set('repo', opts.repo); urlChanged = true; }
         if (opts.rubric && opts.rubric !== urlParams.get('rubric')) { urlParams.set('rubric', opts.rubric); urlChanged = true; }
         if (urlChanged) window.history.replaceState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
-        
+
         if (!rubric) {
             if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false, "Please select an available rubric ledger to continue.");
             return;
@@ -232,7 +282,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
 
         // Gate: Drop response if generation drifted during our fetch round trip
         if (myGen !== window.CM_RENDER_GEN) return; 
-        
+
         console.log(`[Data Engine] Fetched ${repo}/${rubric} | Array Size: ${Array.isArray(newData) ? newData.length : 'Not Array (Err)'}`);
 
         if (isForce || JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
@@ -265,7 +315,7 @@ hub.on("CONTEXT_CHANGED", (payload) => {
 
     const wrap = document.getElementById("main-dashboard-wrap");
     if (wrap) wrap.style.opacity = "0.4";
-    
+
     // Invalidate stale payload immediately to fix the Equality Trap
     window.MATRIX_PAYLOAD = null;
     window.MATRIX_CHART_PAYLOAD = null;
@@ -277,7 +327,7 @@ hub.on("CONTEXT_CHANGED", (payload) => {
         fetchMsg.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10,14,20,0.95); border:1px solid rgba(255,255,255,0.1); padding:16px 32px; border-radius:8px; font-family:monospace; font-size:14px; z-index:9999; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); ";
         document.body.appendChild(fetchMsg);
     }
-    
+
     if (ru) {
         fetchMsg.innerHTML = `<span style="color:#8ab4f0; font-weight:bold;">${o}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#8ed068; font-weight:bold;">${r}</span> <span style="color:#555; margin:0 6px;">/</span> <span style="color:#a38b4f; font-weight:bold;">${ru.toUpperCase()}</span> <span style="color:#aaa; margin-left:8px;">metrics being fetched...</span>`;
     } else {

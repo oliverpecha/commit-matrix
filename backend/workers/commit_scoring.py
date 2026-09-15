@@ -55,27 +55,36 @@ def process_commit_scoring(work_item, rate_limits, aimd):
             except json.JSONDecodeError:
                 import re
                 json_match = re.search(r"\{.*\}", raw_content, re.DOTALL)
-                result = json.loads(json_match.group(0)) if json_match else {"C": 1, "I": 1, "R": 1, "S": 1, "D": 1}
+                if not json_match:
+                    raise ValueError("No valid JSON found in LLM response.")
+                result = json.loads(json_match.group(0))
 
-            # Normalize JSON keys
-            c = int(result.get("criticality") or result.get("Criticality") or result.get("C") or 1)
-            i = int(result.get("infrastructure") or result.get("Infrastructure") or result.get("I") or 1)
-            r = int(result.get("ripple") or result.get("Ripple") or result.get("R") or 1)
-            s = int(result.get("scope") or result.get("Scope") or result.get("S") or 1)
-            d = int(result.get("documentation") or result.get("Documentation") or result.get("D") or 1)
-            total = c + i + r + s + d
+            # Dynamically extract all uppercase single-letter axes from whichever rubric was evaluated
+            axes = {k: int(v) for k, v in result.items() if len(k) == 1 and k.isupper()}
+            if not axes:
+                raise ValueError("Missing rubric axes in response.")
+            
+            total = int(result.get("tot", sum(axes.values())))
+            
+            # Retrofit emojis for UI if missing, based on generic tiers
+            tier_label = str(result.get("tier", "Minor"))
+            if not tier_label.startswith(("🔺", "🟦", "➖")):
+                tier_upper = tier_label.upper()
+                if "PIVOTAL" in tier_upper: tier_label = "🔺 PIVOTAL"
+                elif "CORE" in tier_upper: tier_label = "🟦 CORE"
+                else: tier_label = "➖ MINOR"
 
-            tier_label = (
-                "🔺 PIVOTAL" if total >= 12
-                else "🟦 CORE" if total >= 8
-                else "➖ MINOR"
-            )
-
-            logging.debug(f"Worker scored {hash_short}")
+            logging.debug(f"Worker scored {hash_short} -> {axes} (total: {total})")
             
             return work_item.topo_id, {
-                "C": c, "I": i, "R": r, "S": s, "D": d,
+                "axes": axes,
+                "tot": total,
+                "score_pct": float(result.get("score_pct", round(total / (max(len(axes), 1) * 3) * 100, 1))),
                 "tier": tier_label,
+                "danger_flag": str(result.get("danger_flag", "false")).lower() == "true",
+                "debt_direction": str(result.get("debt_direction", "neutral")),
+                "touches": {k: int(v) if str(v).isdigit() else (1 if str(v).lower() == "true" else 0) 
+                            for k, v in result.items() if k.startswith("touches_")},
                 "success": True
             }
 
