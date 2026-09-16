@@ -1,9 +1,51 @@
-import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.234';
-import { UI_STATE } from '../core/state.js?v=0.1.234';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.234';
+import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.324';
+import { UI_STATE } from '../core/state.js?v=0.1.324';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.324';
 
 let lastCommits = [];
 let _transBound = false;
+
+if (!window._hmHoverBound) {
+    window._hmHoverBound = true;
+    const style = document.createElement('style');
+    style.textContent = `
+        #cm-heat-svg rect.info-hover { transition: opacity 0.2s ease; cursor: default !important; }
+        #cm-heat-svg.is-hovering rect.info-hover:not(.active-col) { opacity: 0.10 !important; }
+    `;
+    document.head.appendChild(style);
+
+    document.addEventListener('mouseover', (e) => {
+        const t = e.target;
+        if (t && typeof t.closest === 'function') {
+            const rect = t.closest('rect.info-hover');
+            if (rect) {
+                const svg = rect.closest('#cm-heat-svg');
+                if (svg) {
+                    svg.classList.add('is-hovering');
+                    const col = rect.getAttribute('data-col');
+                    if (col !== null) {
+                        svg.querySelectorAll('rect[data-col="' + col + '"]').forEach(r => r.classList.add('active-col'));
+                    }
+                }
+            }
+        }
+    });
+    
+    document.addEventListener('mouseout', (e) => {
+        const t = e.target;
+        if (t && typeof t.closest === 'function') {
+            const rect = t.closest('rect.info-hover');
+            if (rect) {
+                const svg = rect.closest('#cm-heat-svg');
+                if (svg) {
+                    svg.classList.remove('is-hovering');
+                    svg.querySelectorAll('rect.active-col').forEach(r => r.classList.remove('active-col'));
+                }
+            }
+        }
+    });
+}
+
 
 function scheduleRender(commits) {
     requestAnimationFrame(() => {
@@ -153,6 +195,7 @@ export function renderHeatmap(commits) {
             const val = c[`touches_${svc.toLowerCase()}`];
             if (val > 0) {
                 const rect = document.createElementNS(ns, 'rect');
+                rect.setAttribute('data-col', col);
                 rect.setAttribute('x', rx);
                 rect.setAttribute('y', PAD_T + row * rowH + 1);
                 rect.setAttribute('width', colW);
@@ -191,9 +234,9 @@ export function renderHeatmap(commits) {
                 
                 let h = `<div style="display:flex;justify-content:space-between;gap:16px;font-weight:bold;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:6px;"><span>#${c.n || ''} — ${dateStr}</span><span style="font-family:monospace;opacity:0.5">${(c.h || c.hash_short || '').substring(0,7)}</span></div>`;
                 h += `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;font-family:monospace;margin-bottom:8px;color:#9e9e9e;"><div style="display:flex;gap:4px;"><span style="color:${typClr};background:rgba(255,255,255,0.05);padding:2px 4px;border-radius:3px;">${typ}</span><span style="color:${scpClr};background:rgba(255,255,255,0.05);padding:2px 4px;border-radius:3px;">${scp}</span></div><div><span style="color:#4caf50">+${c.lines_added||c.la||0}</span> <span style="color:#f44336">-${c.lines_deleted||c.ld||0}</span></div></div>`;
-                h += `<div style="display:flex;align-items:center;font-size:10px;font-family:monospace;margin-bottom:12px;color:${tColor};"><span style="background:rgba(255,255,255,0.05);padding:2px 4px;border-radius:3px;display:flex;align-items:center;gap:4px;">${svgs[c.tier]||''} ${c.tier}</span></div>`;
+                h += `<div style="font-size:12px;color:#d9d8d5;margin-bottom:12px;line-height:1.4;max-width:250px;white-space:normal;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:10px;">${c.s || c.subject || c.clean_s || 'unknown'}</div>`;
+                h += `<div style="display:flex;align-items:center;justify-content:space-between;font-size:14px;font-family:Satoshi, sans-serif;font-weight:700;margin-bottom:12px;color:${tColor};"><div style="display:flex;align-items:center;gap:6px;">${svgs[c.tier]||''} ${c.tier}</div><div style="color:#e0e0e0;font-size:12px;">Score: ${c.tot||0}</div></div>`;
                 h += `<div style="display:flex;flex-direction:column;gap:6px;">${barsHtml}</div>`;
-                h += `<div style="font-size:11px;color:#9e9e9e;border-top:1px solid rgba(255,255,255,0.06);margin-top:8px;padding-top:8px;line-height:1.4;max-width:250px;white-space:normal;">${c.s || c.subject || c.clean_s || 'unknown'}</div>`;
                 rect.setAttribute('data-info', h);
                 
                 fragment.appendChild(rect);

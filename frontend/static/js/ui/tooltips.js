@@ -1,4 +1,4 @@
-import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.234';
+import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.324';
 
 export function initGlobalTooltips() {
     const infoTtEl = document.getElementById('info-tt');
@@ -32,17 +32,49 @@ export function initGlobalTooltips() {
             infoTtEl.innerHTML = (explanation || 'Explanation missing').replace(/\n/g, '<br>');
             
             const rect = target.getBoundingClientRect();
-            infoTtEl.style.left = (rect.left + rect.width / 2) + 'px';
+            const isGraph = target.tagName.toLowerCase() === 'rect' || target.closest('svg');
             
-            let calculatedTop = rect.top - 8;
-            if (rect.top < 50) { 
-                calculatedTop = rect.bottom + window.scrollY + 16;
-                infoTtEl.style.transform = 'translate(-50%, 0)'; 
+            let transX = '-50%';
+            let transY = '-100%';
+            
+            if (isGraph) {
+                // Mimic Chart.js behavior (bottom-right offset from cursor)
+                const cursorOffsetX = 12;
+                const cursorOffsetY = 12;
+                infoTtEl.style.left = (e.clientX + cursorOffsetX) + 'px';
+                infoTtEl.style.top = (e.clientY + cursorOffsetY) + 'px';
+                transX = '0px';
+                transY = '0px';
             } else {
-                infoTtEl.style.transform = 'translate(-50%, -100%)'; 
+                // UI Elements: Anchor to element bounds
+                infoTtEl.style.left = (rect.left + rect.width / 2) + 'px';
+                let calculatedTop = rect.top - 8;
+                if (rect.top < 50) { 
+                    calculatedTop = rect.bottom + 16; // Removed buggy scrollY math on fixed element
+                    transY = '0px'; 
+                }
+                infoTtEl.style.top = calculatedTop + 'px';
             }
-            infoTtEl.style.top = calculatedTop + 'px';
+
+            infoTtEl.style.transform = `translate(${transX}, ${transY})`;
             infoTtEl.classList.add('visible');
+
+            // Apply dual-axis viewport clamping
+            requestAnimationFrame(() => {
+                const ttRect = infoTtEl.getBoundingClientRect();
+                let shiftX = 0;
+                let shiftY = 0;
+
+                if (ttRect.left < 10) shiftX = 10 - ttRect.left;
+                else if (ttRect.right > window.innerWidth - 10) shiftX = window.innerWidth - 10 - ttRect.right;
+
+                if (ttRect.top < 10) shiftY = 10 - ttRect.top;
+                else if (ttRect.bottom > window.innerHeight - 10) shiftY = window.innerHeight - 10 - ttRect.bottom;
+
+                if (shiftX !== 0 || shiftY !== 0) {
+                    infoTtEl.style.transform = `translate(calc(${transX} + ${shiftX}px), calc(${transY} + ${shiftY}px))`;
+                }
+            });
         }
     });
 

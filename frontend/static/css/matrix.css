@@ -20,7 +20,7 @@
   box-sizing: border-box;
   font-size: 13px;
   color: var(--bp-text);
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 
@@ -145,4 +145,22 @@
     background: rgba(255,255,255,0.15);
     color: #fff;
     border-color: rgba(255,255,255,0.3);
+}
+
+
+/* --- Persistent Table Header & Stacking Context Isolation --- */
+#cm-ledger-card {
+  overflow: clip !important;
+  isolation: isolate;
+}
+
+.cm-tbl-wrap {
+  overflow-x: visible;
+}
+
+#cm-thead th {
+  position: sticky;
+  top: 48px;
+  background: var(--bp-s2);
+  z-index: 20;
 }

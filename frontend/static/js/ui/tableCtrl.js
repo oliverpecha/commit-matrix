@@ -1,5 +1,5 @@
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.234";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.1.234";
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.324";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.1.324";
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");
     const tbody = document.getElementById("cm-tbody");
@@ -11,7 +11,7 @@ export function renderTable(commits) {
         const tr = document.createElement("tr");
         columns.forEach(col => {
             const th = document.createElement("th");
-            th.style.cssText = `text-align:${col.align}; padding:12px 8px; color:#7a7874; font-size:10px; font-weight:800; letter-spacing:1px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; user-select:none; white-space:nowrap; transition: color 0.2s;`;
+            th.style.cssText = `text-align:${col.align}; padding:12px 8px; color:#7a7874; font-size:10px; font-weight:800; letter-spacing:1px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; user-select:none; white-space:nowrap; transition: color 0.2s; position:sticky; top:48px; background:var(--bp-s2); z-index:20; pointer-events:auto;`;
             const ttKeyMap = {
                 'c': 'cirsd_C', 'i': 'cirsd_I', 'r': 'cirsd_R', 's': 'cirsd_S', 'd': 'cirsd_D',
                 'n': 'table_n', 'tot': 'table_tot', 'score': 'table_tot', 'la': 'table_la', 'ld': 'table_ld'

@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.1.234";
+import { hub } from "../core/eventHub.js?v=0.1.324";
 const UI_THEME = window.UI_THEME;
 
 const showScrollableModal = (title, contentText, color = "#a38b4f") => {
