@@ -5,12 +5,36 @@ CommitMatrix - {{ request.query_params.get('owner') }}/{{ request.query_params.g
 {% else %}
 CommitMatrix Console
 {% endif %}
+<div id="cm-alert-float" style="display:none; position:fixed; top:70px; right:24px; z-index:999999; background:rgba(20,20,18,0.95); border:2px solid rgba(255,75,75,0.6); border-radius:8px; padding:12px 18px; align-items:center; justify-content:space-between; gap:24px; box-shadow:0 8px 32px rgba(0,0,0,0.8); backdrop-filter:blur(8px);">
+    <div style="cursor:pointer; display:flex; align-items:center; gap:10px; flex:1;" onclick="document.getElementById('cm-alert-modal').style.display='flex';">
+        <span style="font-size:16px;">⚠️</span>
+        <span style="color:#e0e0e0; font-family:Satoshi, sans-serif; font-size:14px;">Show <strong style="color:#ff4b4b;" id="cm-alert-float-count">0</strong> <span id="cm-alert-float-noun">Scoring Anomalies</span></span>
+    </div>
+    <button onclick="this.parentElement.style.display='none'" style="background:none; border:none; color:#888; cursor:pointer; padding:2px; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+</div>
+<div id="cm-alert-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:999999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <div style="background:#131314; border:1px solid rgba(255,75,75,0.3); border-radius:8px; width:700px; max-width:90vw; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 12px 48px rgba(0,0,0,0.9);">
+        <div style="padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; color:#ff4b4b; font-family:Satoshi, sans-serif; display:flex; align-items:center; gap:8px;">⚠️ Scoring Anomalies Detected</h3>
+            <button onclick="this.closest('#cm-alert-modal').style.display='none'" style="background:none; border:none; color:#888; cursor:pointer; font-size:18px;">&times;</button>
+        </div>
+        <div style="padding:24px; overflow-y:auto; flex:1; font-family:monospace; font-size:12px; color:#d9d8d5;">
+            <p style="font-family:Satoshi, sans-serif; font-size:14px; color:#aaa; margin-top:0; margin-bottom:20px; line-height:1.5;">
+                The current LLM hallucinated conflicting mathematical invariants (e.g., axes sum mismatch or threshold tier violations). Consider switching to a higher-reasoning model like <strong>Claude 4.6 Sonnet</strong> or <strong>Gemini 3.1 Pro</strong> to guarantee deterministic ledger scoring.
+            </p>
+            <div id="cm-alert-list" style="display:flex; flex-direction:column; gap:12px;"></div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.324"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.324">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.348"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.348">
 <div class="cm-top-bar" style="position:sticky; top:0; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:8px 20px; height:48px; box-sizing:border-box; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
     
@@ -74,7 +98,24 @@ CommitMatrix Console
 
   <div id="cm-repo-controls" class="cm-action-group" style="display:{% if invalid_repo or system_empty %}none{% else %}flex{% endif %}; gap:12px; align-items:center;">
     
-    <button class="cm-fbtn">📅 Filter Dates</button>
+    <!-- Date Filter Dropdown & Custom Range Inputs -->
+    <div style="position:relative; display:inline-block;">
+        <button id="cm-date-toggle" class="cm-fbtn" style="min-width:140px; justify-content:space-between;">
+            <span style="display:inline-flex; align-items:center; gap:6px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                <span id="cm-date-label">All history</span>
+            </span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="cm-date-menu" class="cm-dropdown-menu" style="display:none; position:absolute; top:100%; left:0; margin-top:6px; width:250px; background:#131314; border:1px solid rgba(255,255,255,0.08); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.8); z-index:9999; flex-direction:column; overflow-y:auto; max-height:550px; font-family:Satoshi, sans-serif;"></div>
+    </div>
+    <div id="cm-date-custom-panel" style="display:none; align-items:center; gap:6px; background:#1e1d1b; border:1px solid rgba(255,255,255,0.12); padding:3px 8px; border-radius:6px;">
+        <input type="date" id="cm-date-start" style="background:#131314; border:1px solid rgba(255,255,255,0.1); color:#d9d8d5; font-family:monospace; font-size:11px; padding:2px 6px; border-radius:4px; outline:none;">
+        <span style="color:#7a7874; font-size:11px;">to</span>
+        <input type="date" id="cm-date-end" style="background:#131314; border:1px solid rgba(255,255,255,0.1); color:#d9d8d5; font-family:monospace; font-size:11px; padding:2px 6px; border-radius:4px; outline:none;">
+        
+        <button id="cm-date-cancel-btn" style="background:none; border:none; color:#888; font-size:14px; cursor:pointer; padding:0 2px; line-height:1;" title="Cancel custom range">&times;</button>
+    </div>
         <button  id="cm-sync-btn" class="cm-fbtn">Sync</button>
     <button id="cm-global-chron-btn" data-action="toggleGlobalChron" class="cm-fbtn active" style="width: 90px; padding: 4px 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px;"><circle cx="5" cy="12" r="4"/><path d="M5 9v3h1.5M9 12h1.5M13.5 12h1M17.5 12h3"/><circle cx="12" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="22" cy="12" r="1.5"/></svg> Timeline
@@ -134,9 +175,35 @@ CommitMatrix Console
     <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="blast">Blast Radius</div></div><div class="cm-chart-body"><canvas id="cm-c-blast"></canvas></div></div>
     <div class="cm-card"><div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;"><div class="cm-card-title info-hover" data-key="nexus">Risk Convergence</div></div><div class="cm-chart-body"><canvas id="cm-c-conv"></canvas></div></div>
   </div>
-  <div class="cm-card" id="cm-ledger-card" style="flex:none"><div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="table_all">Architectural Ledger</div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table>
+  <div class="cm-card" id="cm-ledger-card" style="flex:none"><div class="cm-card-hd" style="display:flex; justify-content:space-between; align-items:center;"><div class="cm-card-title info-hover" data-key="table_all">Architectural Ledger</div><div style="position:relative; display:flex; align-items:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9e9e9e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute; left:12px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input type="text" id="cm-ledger-search" placeholder="Search" style="background:#242424; border:1px solid transparent; border-radius:24px; padding:6px 28px 6px 36px; color:#d9d8d5; font-size:12px; font-family:'Satoshi', sans-serif; width: 146px; outline:none; transition: all 0.2s;" onfocus="this.style.background='#2a2a2a'; this.style.borderColor='rgba(255,255,255,0.15)'" onblur="this.style.background='#242424'; this.style.borderColor='transparent'"><svg id="cm-search-clear" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9e9e9e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute; right:10px; cursor:pointer; display:none; transition: stroke 0.2s;" onmouseover="this.style.stroke='#fff'" onmouseout="this.style.stroke='#9e9e9e'"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div></div><div class="cm-tbl-wrap"><table id="cm-table"><thead id="cm-thead"></thead><tbody id="cm-tbody"></tbody></table>
     <div id="cm-table-sentinel" style="height: 1px; width: 100%;"></div>
   </div></div>
+</div>
+
+<div id="cm-alert-float" style="display:none; position:fixed; top:70px; right:24px; z-index:999999; background:rgba(20,20,18,0.95); border:2px solid rgba(255,75,75,0.6); border-radius:8px; padding:12px 18px; align-items:center; justify-content:space-between; gap:24px; box-shadow:0 8px 32px rgba(0,0,0,0.8); backdrop-filter:blur(8px);">
+    <div style="cursor:pointer; display:flex; align-items:center; gap:10px; flex:1;" onclick="document.getElementById('cm-alert-modal').style.display='flex';">
+        <span style="font-size:16px;">⚠️</span>
+        <span style="color:#e0e0e0; font-family:Satoshi, sans-serif; font-size:14px;">Show <strong style="color:#ff4b4b;" id="cm-alert-float-count">0</strong> <span id="cm-alert-float-noun">Scoring Anomalies</span></span>
+    </div>
+    <button onclick="this.parentElement.style.display='none'" style="background:none; border:none; color:#888; cursor:pointer; padding:2px; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+</div>
+<div id="cm-alert-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:999999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <div style="background:#131314; border:1px solid rgba(255,75,75,0.3); border-radius:8px; width:700px; max-width:90vw; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 12px 48px rgba(0,0,0,0.9);">
+        <div style="padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; color:#ff4b4b; font-family:Satoshi, sans-serif; display:flex; align-items:center; gap:8px;">⚠️ Scoring Anomalies Detected</h3>
+            <button onclick="this.closest('#cm-alert-modal').style.display='none'" style="background:none; border:none; color:#888; cursor:pointer; font-size:18px;">&times;</button>
+        </div>
+        <div style="padding:24px; overflow-y:auto; flex:1; font-family:monospace; font-size:12px; color:#d9d8d5;">
+            <p style="font-family:Satoshi, sans-serif; font-size:14px; color:#aaa; margin-top:0; margin-bottom:20px; line-height:1.5;">
+                The current LLM hallucinated conflicting mathematical invariants (e.g., axes sum mismatch or threshold tier violations). Consider switching to a higher-reasoning model like <strong>Claude 4.6 Sonnet</strong> or <strong>Gemini 3.1 Pro</strong> to guarantee deterministic ledger scoring.
+            </p>
+            <div id="cm-alert-list" style="display:flex; flex-direction:column; gap:12px;"></div>
+        </div>
+    </div>
+</div>
+
 </div>
 {% endblock %}
 
@@ -208,10 +275,10 @@ window.UI_THEME = {
 <script>
     {% if ledger_path %}console.log("[ENGINE] 📂 MOUNTED LEDGER PATH: {{ ledger_path }}");{% endif %}
 </script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.324"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.324"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.324"></script>
-<script type="module" src="/static/js/app.js?v=0.1.324"></script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.348"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.348"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.348"></script>
+<script type="module" src="/static/js/app.js?v=0.1.348"></script>
 
 {% endblock %}
 
