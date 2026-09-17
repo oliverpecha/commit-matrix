@@ -164,3 +164,28 @@
   background: var(--bp-s2);
   z-index: 20;
 }
+
+/* Date Filter Dropdown Styles */
+.cm-date-opt {
+    color: var(--bp-text);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.cm-date-opt:hover {
+    background: rgba(255,255,255,0.06) !important;
+}
+.cm-date-opt.active {
+    background: rgba(138,180,240,0.12) !important;
+    color: #8ab4f0 !important;
+    font-weight: 600;
+}
+.cm-date-span {
+    font-size: 10px;
+    color: var(--bp-muted);
+    font-family: monospace;
+}
+input[type="date"] { color-scheme: dark; cursor: pointer; }
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: none !important;
+    opacity: 0.75;
+    cursor: pointer;
+}

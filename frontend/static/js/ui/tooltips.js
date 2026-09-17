@@ -1,4 +1,4 @@
-import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.324';
+import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.348';
 
 export function initGlobalTooltips() {
     const infoTtEl = document.getElementById('info-tt');

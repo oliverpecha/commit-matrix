@@ -241,6 +241,7 @@ window.addEventListener('load', async () => {
     }
 
     initDateFilter();
+    initDateFilter();
     attemptRender();
     if (repo) {
         const currentOwner = new URLSearchParams(window.location.search).get('owner') || (typeof owner !== "undefined" ? owner : window.MATRIX_OWNER || "local");
@@ -295,6 +296,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
 
         if (isForce || JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
             window.MATRIX_PAYLOAD_RAW = newData;
+            window.MATRIX_PAYLOAD_RAW = newData;
             window.MATRIX_PAYLOAD = newData;
             window.MATRIX_CHART_PAYLOAD = null;
 
@@ -326,6 +328,7 @@ hub.on("CONTEXT_CHANGED", (payload) => {
     if (wrap) wrap.style.opacity = "0.4";
 
     // Invalidate stale payload immediately to fix the Equality Trap
+    window.MATRIX_PAYLOAD_RAW = null;
     window.MATRIX_PAYLOAD_RAW = null;
     window.MATRIX_PAYLOAD = null;
     window.MATRIX_CHART_PAYLOAD = null;

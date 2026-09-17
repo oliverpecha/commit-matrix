@@ -5,30 +5,6 @@ CommitMatrix - {{ request.query_params.get('owner') }}/{{ request.query_params.g
 {% else %}
 CommitMatrix Console
 {% endif %}
-<div id="cm-alert-float" style="display:none; position:fixed; top:70px; right:24px; z-index:999999; background:rgba(20,20,18,0.95); border:2px solid rgba(255,75,75,0.6); border-radius:8px; padding:12px 18px; align-items:center; justify-content:space-between; gap:24px; box-shadow:0 8px 32px rgba(0,0,0,0.8); backdrop-filter:blur(8px);">
-    <div style="cursor:pointer; display:flex; align-items:center; gap:10px; flex:1;" onclick="document.getElementById('cm-alert-modal').style.display='flex';">
-        <span style="font-size:16px;">⚠️</span>
-        <span style="color:#e0e0e0; font-family:Satoshi, sans-serif; font-size:14px;">Show <strong style="color:#ff4b4b;" id="cm-alert-float-count">0</strong> <span id="cm-alert-float-noun">Scoring Anomalies</span></span>
-    </div>
-    <button onclick="this.parentElement.style.display='none'" style="background:none; border:none; color:#888; cursor:pointer; padding:2px; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-    </button>
-</div>
-<div id="cm-alert-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:999999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
-    <div style="background:#131314; border:1px solid rgba(255,75,75,0.3); border-radius:8px; width:700px; max-width:90vw; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 12px 48px rgba(0,0,0,0.9);">
-        <div style="padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0; color:#ff4b4b; font-family:Satoshi, sans-serif; display:flex; align-items:center; gap:8px;">⚠️ Scoring Anomalies Detected</h3>
-            <button onclick="this.closest('#cm-alert-modal').style.display='none'" style="background:none; border:none; color:#888; cursor:pointer; font-size:18px;">&times;</button>
-        </div>
-        <div style="padding:24px; overflow-y:auto; flex:1; font-family:monospace; font-size:12px; color:#d9d8d5;">
-            <p style="font-family:Satoshi, sans-serif; font-size:14px; color:#aaa; margin-top:0; margin-bottom:20px; line-height:1.5;">
-                The current LLM hallucinated conflicting mathematical invariants (e.g., axes sum mismatch or threshold tier violations). Consider switching to a higher-reasoning model like <strong>Claude 4.6 Sonnet</strong> or <strong>Gemini 3.1 Pro</strong> to guarantee deterministic ledger scoring.
-            </p>
-            <div id="cm-alert-list" style="display:flex; flex-direction:column; gap:12px;"></div>
-        </div>
-    </div>
-</div>
-
 {% endblock %}
 
 {% block content %}

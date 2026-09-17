@@ -1,5 +1,6 @@
 export const UI_STATE = {
     globalChron: true,
+    dateFilter: { start: null, end: null, label: 'All history' },
     stack: true,
     trend: true,
     heat: true,

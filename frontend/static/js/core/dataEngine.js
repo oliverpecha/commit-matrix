@@ -1,3 +1,13 @@
+export function filterByDateBounds(commits, startTs, endTs) {
+    if (!Array.isArray(commits) || !commits.length) return [];
+    if (!startTs && !endTs) return commits;
+    return commits.filter(c => {
+        const ts = c.ts || 0;
+        if (startTs && ts < startTs) return false;
+        if (endTs && ts > endTs) return false;
+        return true;
+    });
+}
 export function extractDynamicAxes(commits) { if (!commits || !commits.length) return []; const keys = new Set(); commits.forEach(c => Object.keys(c).forEach(k => { if (k.startsWith('touches_')) keys.add(k); })); return Array.from(keys).sort(); }
 export function processCommits(r) {
     window.CM_AUDIT_ANOMALIES = [];
@@ -38,11 +48,17 @@ export function processCommits(r) {
             if (k.length === 1 && k >= 'A' && k <= 'Z') c[k] = Number(lc[k]) || 0;
         }
         
-        if (c.ts) {
-            c.ts = Number(c.ts);
+        if (cOrig.orig_ts !== undefined) {
+            c.orig_ts = Number(cOrig.orig_ts);
+            c.ts = c.orig_ts;
+        } else if (c.ts) {
+            c.orig_ts = Number(c.ts);
+            c.ts = c.orig_ts;
         } else if (lc.date) {
-            c.ts = Math.floor(new Date(String(lc.date).replace("'", "20")).getTime() / 1000) || 0;
+            c.orig_ts = Math.floor(new Date(String(lc.date).replace("'", "20")).getTime() / 1000) || 0;
+            c.ts = c.orig_ts;
         } else {
+            c.orig_ts = 0;
             c.ts = 0;
         }
 
@@ -96,7 +112,7 @@ export function processCommits(r) {
     // Stagger same-day commits evenly across 24 hours so bar charts don't eclipse each other
     const dayMap = {};
     out.forEach(c => {
-        const baseDay = Math.floor(c.ts / 86400) * 86400;
+        const baseDay = Math.floor(c.orig_ts / 86400) * 86400;
         if (!dayMap[baseDay]) dayMap[baseDay] = [];
         dayMap[baseDay].push(c);
     });
@@ -105,7 +121,7 @@ export function processCommits(r) {
             dayCommits.sort((a, b) => a.n - b.n); // Maintain logical sequence
             const step = 86400 / (dayCommits.length + 1);
             dayCommits.forEach((c, idx) => {
-                c.ts = c.ts + Math.floor(step * (idx + 1));
+                c.ts = c.orig_ts + Math.floor(step * (idx + 1));
             });
         }
     });
@@ -129,10 +145,8 @@ export function fmtStr(ts){ const d=new Date(ts*1000); return `${d.getFullYear()
 export function calcMAvg(arr, mode, cArr, isLin) {
     if(mode===0) return [];
     const collapse = (valMap) => {
-        if (!isLin) return cArr.map(c => valMap[fmtStr(c.ts)]);
-        let maxTs = {};
-        cArr.forEach(c => { const d = fmtStr(c.ts); if (!maxTs[d] || c.ts > maxTs[d]) maxTs[d] = c.ts; });
-        return Object.keys(valMap).map(d => ({ x: maxTs[d], y: valMap[d] })).sort((a, b) => a.x - b.x);
+        if (!isLin) return cArr.map(c => valMap[fmtStr(c.ts)] ?? 0);
+        return cArr.map(c => ({ x: c.ts, y: valMap[fmtStr(c.ts)] ?? 0 })).sort((a, b) => a.x - b.x);
     };
     if(mode===1){ const w=5; let res = arr.map((_,i)=>{ const sl=arr.slice(Math.max(0,i-w+1),i+1); const a=sl.reduce((s,x)=>s+x,0)/sl.length; return isLin?{x:cArr[i].ts,y:parseFloat(a.toFixed(2))}:parseFloat(a.toFixed(2));}); if (isLin) res.sort((a, b) => a.x - b.x); return res; }
     if(mode===2){ let mx={}; cArr.forEach((c,i)=>{ const d=fmtStr(c.ts); if(!mx[d]||arr[i]>mx[d]) mx[d]=arr[i]; }); return collapse(mx); }

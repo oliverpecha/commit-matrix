@@ -1,7 +1,7 @@
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.324';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.324';
-import { UI_STATE } from '../core/state.js?v=0.1.324';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.324';
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.348';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.348';
+import { UI_STATE } from '../core/state.js?v=0.1.348';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.348';
 
 const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');
@@ -34,18 +34,20 @@ const safeDestroy = (chartInstance) => {
 
 const ensureRange = (c) => {
     if (c.length > 1) return c;
-    const fake = { ...c[0], ts: c[0].ts - 3600, _fake: true };
+    if (!c || c.length === 0) return [];
+    if (c.length > 1) return c;
+    const fake = { ...c[0], ts: c[0].ts - 86400, _fake: true };
     return [fake, c[0]];
 };
 
-const def = (c) => ({ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false,external:customTooltip(c)}}, scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7874',font:{family:'Satoshi',size:10}}}} });
-const defRaw = (c) => ({ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false,external:customTooltip(c)}}, scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7874',font:{family:'Satoshi',size:10}}}} });
+const def = (c) => ({ clip: false, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false,external:customTooltip(c)}}, scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7874',font:{family:'Satoshi',size:10}}}} });
+const defRaw = (c) => ({ clip: false, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false,external:customTooltip(c)}}, scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7874',font:{family:'Satoshi',size:10}}}} });
 
 export function renderTypesChart(rawC) {
     const canvasId = 'cm-c-types';
     let canvasEl = document.getElementById(canvasId);
     if (charts.types) { safeDestroy(charts.types); delete charts.types; }
-    if (!canvasEl) return;
+    if (!canvasEl || !rawC || rawC.length === 0) return;
 
     const lin = UI_STATE.globalChron;
     const c = lin ? ensureRange(rawC) : rawC;
@@ -76,6 +78,18 @@ export function renderTypesChart(rawC) {
         });
 
         const sortedDays = Array.from(dayMap.values()).sort((a, b) => a.ts - b.ts);
+        if (sortedDays.length > 0 && c.length > 0) {
+            const minTs = Math.min(...c.map(x => x.ts));
+            const maxTs = Math.max(...c.map(x => x.ts));
+            // Prevent first snapshot from rendering before t0 (Bug B fix)
+            if (sortedDays[0].ts < minTs) {
+                sortedDays[0].ts = minTs;
+            }
+            const lastDay = sortedDays[sortedDays.length - 1];
+            if (maxTs > lastDay.ts) {
+                sortedDays.push({ ...lastDay, ts: maxTs });
+            }
+        }
 
         const datasets = knownTypes.map((t, tIdx) => ({
             label: t,
@@ -108,7 +122,9 @@ export function renderTypesChart(rawC) {
             });
         });
 
-        const activeDs = datasets.filter(ds => ds.data.some(d => d && d.y > 0));
+        const activeDs = datasets
+            .filter(ds => ds.data.some(d => d && d.y > 0))
+            .map((ds, i) => ({ ...ds, fill: i > 0 ? '-1' : 'origin' }));
         charts.types = new Chart(canvasEl, {
             type: 'line', data: { datasets: activeDs },
             options: {
@@ -125,7 +141,7 @@ export function renderTypesChart(rawC) {
                 interaction: { mode: 'index', intersect: false }, 
                 layout: { padding: { top: MD_TOP, right: 4, left: 0 } },
                 scales: { 
-                    x: getXConf(true, c), 
+                    x: getXConf(true, c, UI_STATE.dateFilter?.end, 'types'), 
                     y: { ...def(c).scales.y, min: 0, max: 100, stacked: true, ticks: { ...def(c).scales.y.ticks, callback: v => v + '%' } }
                 }
             }, plugins: [monthDiv(c)]
@@ -196,7 +212,7 @@ export function renderStackChart(rawC) {
             ...defRaw(c),
             layout:{padding:{top: lin ? MD_TOP : 6, right: 4, left: 0}},
             scales:{
-                x:{...getXConf(lin,c),stacked:true},
+                x:{...getXConf(lin, c, UI_STATE.dateFilter?.end),stacked:true},
                 y:{...defRaw(c).scales.y,stacked:true,min:0,max:sMax,ticks:{...(defRaw(c).scales.y.ticks||{}),stepSize:4}}
             }
         },
@@ -383,11 +399,12 @@ export function renderTrendChart(rawC) {
             interaction:{mode:'nearest',intersect:true},
             animations:{x:{duration:0}},
             layout:{padding:{top: lin ? MD_TOP : 6, right: 4, left: 0}},
-            scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:tMin,max:tMax,ticks:{...(def(c).scales.y.ticks||{}),stepSize:2}}}
+            scales:{x:getXConf(lin, c, UI_STATE.dateFilter?.end),y:{...def(c).scales.y,min:tMin,max:tMax,ticks:{...(def(c).scales.y.ticks||{}),stepSize:2}}}
         },
         plugins:lin?[monthDiv(c)]:[]
     });
-    charts.trend._cmCommits = c; 
+    charts.trend._cmCommits = c;
+    charts.trend.update("none");
 }
 
 function buildCombo(id, stKey, avgKey, rawC, dFunc, clr) {
@@ -398,7 +415,7 @@ function buildCombo(id, stKey, avgKey, rawC, dFunc, clr) {
     const allVals = rawVals.concat(avgVals);
     const cMin = allVals.length ? Math.max(0, Math.floor(Math.min(...allVals) - 1)) : 0;
     const cMax = allVals.length ? Math.ceil(Math.max(...allVals) + 1) : 10;
-    charts[stKey] = new Chart(id,{type:'bar',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{type:'line',data:avg,borderColor:'rgba(79,152,163,0.8)',borderWidth:1.5,pointRadius:0,tension:0.3},{type:'bar',data:c.map(x=>lin?{x:x.ts,y:x._fake?null:dFunc(x)}:dFunc(x)),backgroundColor:clr,borderRadius:2,barThickness:lin?4:undefined}]},options:{...def(c),interaction:{mode:'index',intersect:false},layout:{padding:{top: lin ? MD_TOP : 6, right: 4, left: 0}},scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:cMin,max:cMax}}},plugins:lin?[monthDiv(c)]:[]});
+    charts[stKey] = new Chart(id,{type:'bar',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{type:'line',data:avg,borderColor:'rgba(79,152,163,0.8)',borderWidth:1.5,pointRadius:0,tension:0.3},{type:'bar',data:c.map(x=>lin?{x:x.ts,y:x._fake?null:dFunc(x)}:dFunc(x)),backgroundColor:clr,borderRadius:2,barThickness:lin?4:undefined}]},options:{...def(c),interaction:{mode:'index',intersect:false},layout:{padding:{top: lin ? MD_TOP : 6, right: 4, left: 0}},scales:{x:getXConf(lin, c, UI_STATE.dateFilter?.end),y:{...def(c).scales.y,min:cMin,max:cMax}}},plugins:lin?[monthDiv(c)]:[]});
 }
 
 export function renderFragChart(c) {
@@ -426,7 +443,7 @@ export function renderConvergenceChart(rawC) {
     const allVals = f.concat(ch, b).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const cvMin = allVals.length ? Math.max(0, Math.floor(Math.min(...allVals) - 1)) : 0;
     const cvMax = allVals.length ? Math.ceil(Math.max(...allVals) + 1) : 10;
-    charts.conv = new Chart('cm-c-conv',{type:'line',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{label:'Node',data:nd,type:'scatter',pointBackgroundColor:c.map(x=>SC_COLORS['t_'+x.scope]||'#fff'),pointBorderColor:'rgba(255,255,255,0.8)',pointBorderWidth:2,pointRadius:6},{label:'Frag',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:f[i]}:f[i]),borderColor:'rgba(255, 75, 75, 0.4)',backgroundColor:'rgba(255, 75, 75, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Churn',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:ch[i]}:ch[i]),borderColor:'rgba(201, 158, 240, 0.4)',backgroundColor:'rgba(201, 158, 240, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Blast',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:b[i]}:b[i]),borderColor:'rgba(255, 184, 77, 0.4)',backgroundColor:'rgba(255, 184, 77, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0}]},options:{...def(c),interaction:{mode:'index',intersect:false},layout:{padding:{top: lin ? MD_TOP : 6, right: 4, left: 0}},scales:{x:getXConf(lin,c),y:{...def(c).scales.y,min:cvMin,max:cvMax}}},plugins:lin?[monthDiv(c)]:[]});
+    charts.conv = new Chart('cm-c-conv',{type:'line',data:{labels:lin?undefined:c.map(x=>`#${x.n}`),datasets:[{label:'Node',data:nd,type:'scatter',pointBackgroundColor:c.map(x=>SC_COLORS['t_'+x.scope]||'#fff'),pointBorderColor:'rgba(255,255,255,0.8)',pointBorderWidth:2,pointRadius:6},{label:'Frag',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:f[i]}:f[i]),borderColor:'rgba(255, 75, 75, 0.4)',backgroundColor:'rgba(255, 75, 75, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Churn',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:ch[i]}:ch[i]),borderColor:'rgba(201, 158, 240, 0.4)',backgroundColor:'rgba(201, 158, 240, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0},{label:'Blast',data:c.map((x,i)=>lin?{x:x.ts,y:x._fake?null:b[i]}:b[i]),borderColor:'rgba(255, 184, 77, 0.4)',backgroundColor:'rgba(255, 184, 77, 0.05)',borderWidth:1,fill:true,tension:0.4,pointRadius:0}]},options:{...def(c),interaction:{mode:'index',intersect:false},layout:{padding:{top: lin ? MD_TOP : 6, right: 4, left: 0}},scales:{x:getXConf(lin, c, UI_STATE.dateFilter?.end),y:{...def(c).scales.y,min:cvMin,max:cvMax}}},plugins:lin?[monthDiv(c)]:[]});
 }
 
 export function updateKPIs(c) {
@@ -463,6 +480,7 @@ export function updateKPIs(c) {
 export function renderTierChart(rawC) {
     updateKPIs(rawC);
     if (charts.tier) { safeDestroy(charts.tier); delete charts.tier; }
+    if (!rawC || rawC.length === 0) return;
     const lin = UI_STATE.globalChron;
     const c = lin ? ensureRange(rawC) : rawC;
 
@@ -484,11 +502,25 @@ export function renderTierChart(rawC) {
                 else if (x.tier === 'Minor') curM++;
                 validCount++;
             }
-            const dTs = x._fake ? x.ts : Math.floor(x.ts / 86400) * 86400;
+            const dTs = Math.floor(x.ts / 86400) * 86400;
             dayMap.set(dTs, { x: dTs, p: curP, c: curC, m: curM, fake: x._fake });
         });
         
-        Array.from(dayMap.values()).sort((a, b) => a.x - b.x).forEach(d => {
+        const sortedDays = Array.from(dayMap.values()).sort((a, b) => a.x - b.x);
+        if (sortedDays.length > 0 && c.length > 0) {
+            const minTs = Math.min(...c.map(x => x.ts));
+            const maxTs = Math.max(...c.map(x => x.ts));
+            // Prevent first snapshot from rendering before t0 (Bug B fix)
+            if (sortedDays[0].x < minTs) {
+                sortedDays[0].x = minTs;
+            }
+            const lastDay = sortedDays[sortedDays.length - 1];
+            if (maxTs > lastDay.x) {
+                sortedDays.push({ ...lastDay, x: maxTs });
+            }
+        }
+        
+        sortedDays.forEach(d => {
             dp.push({ x: d.x, y: d.fake ? null : d.p });
             dc.push({ x: d.x, y: d.fake ? null : d.c });
             dm.push({ x: d.x, y: d.fake ? null : d.m });
@@ -518,7 +550,7 @@ export function renderTierChart(rawC) {
             borderWidth: 1.5,
             pointRadius: 0,
             fill: tIdx === 0 ? 'origin' : '-1',
-            tension: 0.5
+            tension: 0.4
         }));
 
         charts.tier = new Chart('cm-c-tier', {
@@ -538,7 +570,7 @@ export function renderTierChart(rawC) {
                 interaction: { mode: 'index', intersect: false }, 
                 layout: { padding: { top: MD_TOP, right: 4, left: 0 } }, 
                 scales: { 
-                    x: getXConf(true, c), 
+                    x: getXConf(true, c, UI_STATE.dateFilter?.end, 'types'), 
                     y: { 
                         ...def(c).scales.y, 
                         min: 0, 
@@ -577,7 +609,7 @@ if (!window._cmChartBindingsReady) {
         const target = btn.getAttribute('data-target');
         if (!['toggleChron', 'cycleAvg', 'toggleGlobalChron'].includes(action)) return;
 
-        const payload = processCommits(window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || []);
+        const payload = window.CM_CURRENT_FILTERED_PAYLOAD || window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
 
         if (action === 'toggleGlobalChron') {
             UI_STATE.globalChron = !UI_STATE.globalChron;

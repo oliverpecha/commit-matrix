@@ -3,9 +3,9 @@ if (typeof window !== 'undefined' && !window._cmMouseTracker) {
     window._cmMouseY = 0;
     document.addEventListener('mousemove', e => window._cmMouseY = e.clientY);
 }
-import { fmtCD } from '../core/dataEngine.js?v=0.1.324';
-import { CM_COLORS, BP_AXC, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.324';
-import { BP_AX } from '../constants/config.js?v=0.1.324';export const MD_TOP = 18;
+import { fmtCD } from '../core/dataEngine.js?v=0.1.348';
+import { CM_COLORS, BP_AXC, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.348';
+import { BP_AX } from '../constants/config.js?v=0.1.348';export const MD_TOP = 18;
 export const monthDiv = (commits) => ({
     id: 'monthDiv',
     afterDraw(chart) {
@@ -268,9 +268,31 @@ const c = (ctx.chart._cmCommits || commits)[m.dataPoints[0].dataIndex]; if (!c) 
         }
     });
 };
-export const getXConf = (isLin, c) => {
+export const getXConf = (isLin, c, filterEnd, chartName = 'unknown') => {
     if(!isLin||c.length<2) return {type:'category'}; 
     const t0 = Math.min(...c.map(x=>x.ts)), tN = Math.max(...c.map(x=>x.ts));
-    const pad=(tN-t0)*0.005;
-    return { type:'linear', bounds:'data', offset:false, min:t0, max:tN+pad, grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#7a7874',font:{family:'Satoshi',size:10},maxRotation:0,autoSkipPadding:25,callback:v=>fmtCD(v)} };
+    const span = tN - t0;
+    const avgGap = span / Math.max(1, c.length - 1);
+    const pad = Math.min(Math.max(avgGap * 0.6, span * 0.01), span * 0.06);
+    const finalMax = tN + pad;
+
+    if (typeof window !== 'undefined' && window.UI_STATE?.dateFilter?.label === 'This Month') {
+        console.debug('[cm:x-range]', {
+            chart: chartName,
+            filter: window.UI_STATE?.dateFilter?.label,
+            commits: c.length,
+            t0,
+            tN,
+            span,
+            spanHours: +(span / 3600).toFixed(2),
+            avgGap,
+            avgGapHours: +(avgGap / 3600).toFixed(2),
+            pad,
+            padHours: +(pad / 3600).toFixed(2),
+            padPctOfSpan: +(pad / span * 100).toFixed(2),
+            finalMax
+        });
+    }
+
+    return { type:'linear', bounds:'data', offset:false, min:t0, max: finalMax, grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#7a7874',font:{family:'Satoshi',size:10},maxRotation:0,autoSkipPadding:25,callback:v=>fmtCD(v)} };
 };
