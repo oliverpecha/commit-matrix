@@ -1,4 +1,5 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.324';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.348';
+import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.348';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -27,7 +28,7 @@ export function getTableColumns() {
     const cols = [
         { label: "#", key: "n", align: "left" },
         { label: "AUTHORED", key: "ts", align: "left" },
-        { label: "TIER", key: "tot", align: "left" },
+        { label: "TIER", key: "tier", align: "left" },
         { label: "TYPE", key: "p_type", align: "left" },
         { label: "SCOPE", key: "p_scope", align: "left" },
         { label: "SUBJECT", key: "p_desc", align: "left" },
@@ -63,6 +64,13 @@ export function normalizeCommits(commits) {
 
 export function sortDisplayData(displayData, currentSort) {
     displayData.sort((a, b) => {
+        if (currentSort.col === "tier") {
+            const rank = { 'Pivotal': 3, 'Critical': 3, 'Core': 2, 'Significant': 2, 'Minor': 1, 'Routine': 1 };
+            const rA = rank[a.tier] || 0;
+            const rB = rank[b.tier] || 0;
+            return currentSort.asc ? (rA - rB) : (rB - rA);
+        }
+
         let valA = a[currentSort.col];
         let valB = b[currentSort.col];
 
@@ -126,14 +134,16 @@ export function syncTableHeaders() {
                 const aColor = (rMeta.colors && rMeta.colors[axisIdx]) ? rMeta.colors[axisIdx] : baseColors[axisIdx % 6];
                 spanStyle += ` color: ${aColor};`;
                 dataKey = `axis_${c.key}`;
-            } else if (c.key === 'tot') {
+            } else if (c.key === 'tot' || c.key === 'tier') {
                 if (c.label === 'TIER') dataKey = `tierDist`;
                 else dataKey = `table_tot`;
-            } else if (c.key === 'n') {
-                label = `▼ ${label}`;
             }
             // Wrapping text in a span applies the .info-hover border directly under the text, mimicking card headers perfectly.
-            trHtml += `<th style="${thStyle}"><span class="info-hover" style="${spanStyle}" data-key="${dataKey}">${label}</span></th>`;
+            thStyle += " cursor:pointer; user-select:none; position:sticky; top:48px; background:var(--bp-s2); z-index:20; transition: color 0.2s;";
+            trHtml += `<th style="${thStyle}" data-col="${c.key}" data-sort="${isAxis ? c.key : ''}">
+                <span class="info-hover" style="${spanStyle}" data-key="${dataKey}">${label}</span>
+                <span class="sort-icon" style="font-size:10px; margin-left:4px;"></span>
+            </th>`;
         });
         trHtml += '</tr>';
         thead.innerHTML = trHtml;
@@ -176,7 +186,6 @@ export function syncTableHeaders() {
 export function renderTableRows(displayData) {
     const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible');
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
-    syncTableHeaders();
     const axesKeys = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
     const colors = ["#5c91e0", "#c99ef0", "#ffb84d", "#ff4b4b", "#4caf50", "#00bcd4"];
     const rMeta = getActiveRubricMeta();
@@ -255,7 +264,7 @@ export function renderTableRowsBatched(displayData, tbodyId = "cm-tbody", batchS
     requestAnimationFrame(renderBatch);
 }
 
-export function initInfiniteScroll(repo, initialOffset = 100) {
+export function initInfiniteScroll(repo, initialOffset = 100, startTs = null, endTs = null) {
     if (window.CM_SCROLL_ABORT) window.CM_SCROLL_ABORT.abort();
     if (window.CM_TABLE_OBSERVER) window.CM_TABLE_OBSERVER.disconnect();
     window.CM_SCROLL_ABORT = new AbortController();
@@ -270,14 +279,22 @@ export function initInfiniteScroll(repo, initialOffset = 100) {
             isLoading = true;
             try {
                 const rubric = new URLSearchParams(window.location.search).get("rubric") || window.MATRIX_DEFAULT_RUBRIC || "unknown";
-                const res = await fetch(`/api/ledger?repo=${repo}&rubric=${rubric}&offset=${offset}&limit=${limit}`, { signal: window.CM_SCROLL_ABORT.signal });
+                const startQ = startTs ? `&start_ts=${startTs}` : '';
+                const endQ = endTs ? `&end_ts=${endTs}` : '';
+                const res = await fetch(`/api/ledger?repo=${repo}&rubric=${rubric}&offset=${offset}&limit=${limit}${startQ}${endQ}`, { signal: window.CM_SCROLL_ABORT.signal });
                 const data = await res.json();
                 
                 if (!data || data.length === 0) {
                     hasMore = false;
                 } else {
-                    if (window.MATRIX_PAYLOAD) {
-                        window.MATRIX_PAYLOAD = window.MATRIX_PAYLOAD.concat(data);
+                    if (window.MATRIX_PAYLOAD_RAW) window.MATRIX_PAYLOAD_RAW = window.MATRIX_PAYLOAD_RAW.concat(data);
+                    if (window.MATRIX_PAYLOAD) window.MATRIX_PAYLOAD = window.MATRIX_PAYLOAD.concat(data);
+                    
+                    const normalized = normalizeCommits(data);
+                    const filteredData = filterByDateBounds(normalized, startTs, endTs);
+                    
+                    if (window.CM_CURRENT_FILTERED_PAYLOAD) {
+                        window.CM_CURRENT_FILTERED_PAYLOAD = window.CM_CURRENT_FILTERED_PAYLOAD.concat(filteredData);
                     }
                     // --- AUTOMATED SORT VALIDATION ---
                     let _fractures = 0;
@@ -302,8 +319,7 @@ export function initInfiniteScroll(repo, initialOffset = 100) {
                         console.error(`❌ FAILED: Found ${_fractures} sorting anomalies in the frontend payload.`);
                     }
                     // ---------------------------------
-                    const normalized = normalizeCommits(data);
-                    renderTableRowsBatched(normalized, "cm-tbody", 100, false);
+                    renderTableRowsBatched(filteredData, "cm-tbody", 100, false);
                     offset += data.length;
                 }
             } catch (e) {

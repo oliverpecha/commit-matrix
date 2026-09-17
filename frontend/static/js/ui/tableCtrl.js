@@ -1,5 +1,6 @@
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.324";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll } from "./tableRender.js?v=0.1.324";
+import { UI_STATE } from "../core/state.js?v=0.1.348";
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.348";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll, syncTableHeaders } from "./tableRender.js?v=0.1.348";
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");
     const tbody = document.getElementById("cm-tbody");
@@ -7,36 +8,27 @@ export function renderTable(commits) {
 
     const columns = getTableColumns();
 
-    if (thead.children.length === 0) {
-        const tr = document.createElement("tr");
-        columns.forEach(col => {
-            const th = document.createElement("th");
-            th.style.cssText = `text-align:${col.align}; padding:12px 8px; color:#7a7874; font-size:10px; font-weight:800; letter-spacing:1px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; user-select:none; white-space:nowrap; transition: color 0.2s; position:sticky; top:48px; background:var(--bp-s2); z-index:20; pointer-events:auto;`;
-            const ttKeyMap = {
-                'c': 'cirsd_C', 'i': 'cirsd_I', 'r': 'cirsd_R', 's': 'cirsd_S', 'd': 'cirsd_D',
-                'n': 'table_n', 'tot': 'table_tot', 'score': 'table_tot', 'la': 'table_la', 'ld': 'table_ld'
-            };
-            const ttKey = ttKeyMap[col.key] || ttKeyMap[(col.key || '').toLowerCase()];
-            const labelHtml = ttKey ? `<span class="info-hover" data-key="${ttKey}">${col.label}</span>` : col.label;
-            th.innerHTML = `${labelHtml} <span class="sort-icon" style="font-size:10px; margin-left:4px;"></span>`;
+    syncTableHeaders();
 
-            th.onclick = () => {
-                if (window.CM_SIDE_STREAM_ACTIVE) return;
+    if (!window.__THEAD_BOUND) {
+        thead.addEventListener("click", (e) => {
+            const th = e.target.closest("th[data-col]");
+            if (!th) return;
+            if (window.CM_SIDE_STREAM_ACTIVE) return;
 
-                const currentSort = getLiveSort();
-                if (currentSort.col === col.key) {
-                    setLiveSort({ col: col.key, asc: !currentSort.asc });
-                } else {
-                    setLiveSort({ col: col.key, asc: false });
-                }
+            const colKey = th.getAttribute("data-col");
+            const currentSort = getLiveSort();
+            
+            if (currentSort.col === colKey) {
+                setLiveSort({ col: colKey, asc: !currentSort.asc });
+            } else {
+                setLiveSort({ col: colKey, asc: false });
+            }
 
-                syncHeaderCarets(columns);
-                renderTable(window.MATRIX_PAYLOAD || []);
-            };
-
-            tr.appendChild(th);
+            syncHeaderCarets(columns);
+            renderTable(window.CM_CURRENT_FILTERED_PAYLOAD || window.MATRIX_PAYLOAD || []);
         });
-        thead.appendChild(tr);
+        window.__THEAD_BOUND = true;
     }
 
     const currentSort = getLiveSort();
@@ -50,11 +42,52 @@ export function renderTable(commits) {
         commits = [];
         if (window.MATRIX_PAYLOAD) window.MATRIX_PAYLOAD = [];
     }
-    const displayData = sortDisplayData(normalizeCommits(commits), currentSort);
-    renderTableRowsBatched(displayData, "cm-tbody", 100, true);
+    
+    const searchInput = document.getElementById("cm-ledger-search");
+    const clearBtn = document.getElementById("cm-search-clear");
+
+    if (searchInput && !window.__SEARCH_BOUND) {
+        searchInput.addEventListener("input", () => {
+            if (clearBtn) clearBtn.style.display = searchInput.value.length > 0 ? "block" : "none";
+            renderTable(window.CM_CURRENT_FILTERED_PAYLOAD || window.MATRIX_PAYLOAD || []);
+        });
+        if (clearBtn) {
+            clearBtn.addEventListener("click", () => {
+                searchInput.value = "";
+                clearBtn.style.display = "none";
+                renderTable(window.CM_CURRENT_FILTERED_PAYLOAD || window.MATRIX_PAYLOAD || []);
+            });
+        }
+        window.__SEARCH_BOUND = true;
+    }
+
+    if (clearBtn && searchInput) {
+        clearBtn.style.display = searchInput.value.length > 0 ? "block" : "none";
+    }
+
+    let filteredCommits = commits;
+    if (searchInput && searchInput.value.trim()) {
+        const q = searchInput.value.trim().toLowerCase();
+        filteredCommits = commits.filter(c => JSON.stringify(c).toLowerCase().includes(q));
+    }
+    
+    const displayData = sortDisplayData(normalizeCommits(filteredCommits), currentSort);
+    
+    if (displayData.length === 0) {
+        const isFilterActive = !!(UI_STATE.dateFilter?.start || UI_STATE.dateFilter?.end || (searchInput && searchInput.value.trim()));
+        const emptyMsg = isFilterActive
+            ? "No commits match the selected filter or search window."
+            : "No commits recorded in this ledger.";
+        tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:56px 16px; color:#7a7874; font-size:13px; font-weight:500;">${emptyMsg}</td></tr>`;
+    } else {
+        renderTableRowsBatched(displayData, "cm-tbody", 100, true);
+    }
     
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
-    initInfiniteScroll(repo, commits.length);
+    const rawPayload = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD || [];
+    const rawOffset = rawPayload.length > 0 ? rawPayload.length : commits.length;
+    const df = UI_STATE.dateFilter || { start: null, end: null };
+    initInfiniteScroll(repo, rawOffset, df.start, df.end);
 }
 
 window.setTableStreamMode = function(isActive, opts = {}) {
@@ -68,5 +101,5 @@ window.setTableStreamMode = function(isActive, opts = {}) {
         setLiveSort({ col: "n", asc: false });
     }
 
-    renderTable(window.MATRIX_PAYLOAD || []);
+    renderTable(window.CM_CURRENT_FILTERED_PAYLOAD || window.MATRIX_PAYLOAD || []);
 };
