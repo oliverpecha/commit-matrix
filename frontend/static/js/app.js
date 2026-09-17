@@ -1,17 +1,19 @@
 // v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.324";
-import "./core/appStateCtrl.js?v=0.1.324";
-import "./engine/repoManager.js?v=0.1.324";
-import "./engine/telemetryStream.js?v=0.1.324";
-import "./engine/engineControl.js?v=0.1.324";
-import "./ui/terminalView.js?v=0.1.324";
+import { hub } from "./core/eventHub.js?v=0.1.348";
+import "./core/appStateCtrl.js?v=0.1.348";
+import "./engine/repoManager.js?v=0.1.348";
+import "./engine/telemetryStream.js?v=0.1.348";
+import "./engine/engineControl.js?v=0.1.348";
+import "./ui/terminalView.js?v=0.1.348";
 
-import { processCommits } from './core/dataEngine.js?v=0.1.324';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.324';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.324';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.324';
-import { CM_COLORS } from './constants/colors.js?v=0.1.324';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.324';
+import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.348';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.348';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.348';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.348';
+import { CM_COLORS } from './constants/colors.js?v=0.1.348';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.348';
+import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.348';
+import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.348';
 window.hub = hub;
 import { initGlobalTooltips } from './ui/tooltips.js';
 initGlobalTooltips();
@@ -20,6 +22,7 @@ window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 
 window.CM_RENDER_GEN = 0;
+window.CM_LAST_GOOD_FILTER = { start: null, end: null, label: 'All history' };
 
 function computeKPIs(p) {
     let tot = 0, crit = 0, sig = 0, rout = 0;
@@ -29,17 +32,36 @@ function computeKPIs(p) {
         else if (c.tier === 'Core') sig++;
         else if (c.tier === 'Minor') rout++;
     }
-    return { count: p.length, avg: (tot / p.length).toFixed(1), crit, sig, rout };
+    const rawData = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD || [];
+    const totalAll = rawData.length || p.length;
+    return { count: p.length, totalAll, avg: p.length > 0 ? (tot / p.length).toFixed(1) : "0.0", crit, sig, rout };
 }
 
 function paintKPIs(k) {
     const kp = document.getElementById('cm-kp');
     if (!kp) return;
-    kp.textContent = k.count;
+    if (k.totalAll > k.count) {
+        kp.innerHTML = `${k.count}<span style="opacity:0.5;font-weight:normal;font-size:0.65em;margin-left:4px;">/ ${k.totalAll}</span>`;
+    } else {
+        kp.textContent = k.count;
+    }
     document.getElementById('cm-ka').textContent = k.avg;
-    const kc = document.getElementById('cm-kc'); if(kc) { kc.textContent = k.crit; kc.style.color = CM_COLORS.Pivotal; }
-    const ks = document.getElementById('cm-ks'); if(ks) { ks.textContent = k.sig; ks.style.color = CM_COLORS.Core; }
-    const kr = document.getElementById('cm-kr'); if(kr) { kr.textContent = k.rout; kr.style.color = CM_COLORS.Minor; }
+    
+    const setTierVal = (id, count, clr) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.color = count > 0 ? clr : '#7a7874';
+        if (k.count > 0 && count > 0) {
+            const pct = Math.round((count / k.count) * 100);
+            el.innerHTML = `${count}<span style="color:#7a7874;font-weight:normal;font-size:0.65em;margin-left:4px;">/ ~${pct}%</span>`;
+        } else {
+            el.textContent = count;
+        }
+    };
+
+    setTierVal('cm-kc', k.crit, CM_COLORS.Pivotal);
+    setTierVal('cm-ks', k.sig, CM_COLORS.Core);
+    setTierVal('cm-kr', k.rout, CM_COLORS.Minor);
 
     const applyBadge = (id, color) => {
         const el = document.getElementById(id);
@@ -86,61 +108,28 @@ function runRenderQueue(steps, gen) {
     requestAnimationFrame(step);
 }
 
-function setDashboardVisibility(hasData, errorMsg = "") {
-    const rows = document.querySelectorAll('.cm-row');
-    const flexes = document.querySelectorAll('.cm-kpi-row, #cm-ledger-card');
-
-    // Broad selector to capture common header action containers holding the Toggle/Filter/Sync buttons
-    const actions = document.querySelectorAll('#cm-header-actions, .cm-header-actions, #cm-toolbar, .cm-toolbar, #cm-actions, .cm-actions');
-    const wrap = document.getElementById("main-dashboard-wrap");
-
-    if (hasData) {
-        // Clear inline display style to safely restore original CSS stylesheet layout (restores full width grid/flex)
-        rows.forEach(el => el.style.display = '');
-        flexes.forEach(el => el.style.display = '');
-        actions.forEach(el => el.style.display = '');
-        const zs = document.getElementById('cm-zero-state');
-        if (zs) zs.remove();
-        if (wrap) wrap.style.opacity = "1";
-    } else {
-        rows.forEach(el => el.style.display = 'none');
-        flexes.forEach(el => el.style.display = 'none');
-        actions.forEach(el => el.style.display = 'none');
-        if (wrap) wrap.style.opacity = "1";
-
-        // Suppress Ledger Empty ghost dialog if the route itself is a 404 state
-        if (window.MATRIX_INVALID_OWNER || window.MATRIX_INVALID_REPO || window.MATRIX_INVALID_RUBRIC) return;
-
-        let zs = document.getElementById('cm-zero-state');
-        if (!zs && wrap) {
-            zs = document.createElement("div");
-            zs.id = "cm-zero-state";
-            zs.style.cssText = "position:fixed; left:50%; top:45%; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:Satoshi, sans-serif; z-index:50; width:100%; ";
-            wrap.insertBefore(zs, wrap.firstChild);
-        }
-        const activeZs = document.getElementById('cm-zero-state');
-        if (activeZs) {
-            const activeRubric = new URLSearchParams(window.location.search).get('rubric');
-            const msg = errorMsg ? errorMsg : (activeRubric ? `No telemetry found for rubric: ${activeRubric.toUpperCase()}.` : `Please select an available rubric ledger to continue.`);
-            activeZs.innerHTML = `
-                <div style="font-size:52px; margin-bottom:20px; opacity:0.8;">🌌</div>
-                <h2 style="color:#e0e0e0; margin-bottom:12px; font-weight:600; letter-spacing:0.5px;">Ledger Empty</h2>
-                <p style="color:#888; max-width:420px; margin-bottom:30px; line-height:1.6; font-size:15px;">${msg}</p>
-            `;
-        }
-    }
-}
 
 function attemptRender() {
-    const rawData = window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
+    if (!window.MATRIX_PAYLOAD_RAW && window.MATRIX_PAYLOAD && window.MATRIX_PAYLOAD.length) {
+        window.MATRIX_PAYLOAD_RAW = window.MATRIX_PAYLOAD;
+    }
+    const sourceData = window.MATRIX_PAYLOAD_RAW || window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
+    
     let p = [];
     try {
-        p = processCommits(rawData);
+        p = processCommits(sourceData);
     } catch (e) {
         console.error("[Data Engine] processCommits failed silently:", e);
     }
 
-    console.log(`[Data Engine] attemptRender -> rawData: ${rawData.length}, processed: ${p.length}`);
+    // Apply filtering AFTER processCommits normalizes the timestamps to c.ts
+    const p_all = p;
+    const df = UI_STATE.dateFilter || { start: null, end: null, label: 'All history' };
+    const filteredP = filterByDateBounds(p, df.start, df.end);
+    window.CM_CURRENT_FILTERED_PAYLOAD = filteredP;
+    p = filteredP; // Enforce filtered set downwards through the rendering chain
+
+    console.log(`[Data Engine] attemptRender -> rawData: ${sourceData.length}, processed: ${p.length}, filtered: ${filteredP.length}`);
 
     const floatingAudit = document.getElementById('cm-alert-float');
     if (window.CM_AUDIT_ANOMALIES && window.CM_AUDIT_ANOMALIES.length > 0) {
@@ -168,16 +157,34 @@ function attemptRender() {
     }
     const params = new URLSearchParams(window.location.search);
     if (!params.get('rubric')) {
-        setDashboardVisibility(false, "Please select an available rubric ledger to continue.");
+        showTotalZeroState("Please select an available rubric ledger to continue.");
+        return;
+    }
+
+    const hasRawTelemetry = Array.isArray(sourceData) && sourceData.length > 0;
+    if (!hasRawTelemetry) {
+        showTotalZeroState();
         return;
     }
 
     if (p.length === 0) {
-        setDashboardVisibility(false);
+        showFilteredZeroState({
+            filter: df,
+            allCommits: p_all,
+            lastGoodFilter: window.CM_LAST_GOOD_FILTER,
+            onRevert: () => {
+                const target = window.CM_LAST_GOOD_FILTER || { start: null, end: null, label: 'All history' };
+                if (typeof window.CM_APPLY_DATE_FILTER === 'function') {
+                    window.CM_APPLY_DATE_FILTER(target.start, target.end, target.label);
+                }
+            }
+        });
         return;
     }
 
-    setDashboardVisibility(true);
+    // Track last successful filter that returned active commits
+    window.CM_LAST_GOOD_FILTER = { start: df.start, end: df.end, label: df.label || 'All history' };
+    hideZeroStates();
 
     // [Patch] Enforce Timeline Mode defaults securely on initial boot
     if (!window._cmBootSyncDone) {
@@ -233,6 +240,7 @@ window.addEventListener('load', async () => {
         console.log(`[Data Engine] Loading SQLite ledger via API: /api/data?owner=${owner}&repo=${repo}&rubric=${rubric} (Force: ${typeof isForce !== 'undefined' ? isForce : false})`);
     }
 
+    initDateFilter();
     attemptRender();
     if (repo) {
         const currentOwner = new URLSearchParams(window.location.search).get('owner') || (typeof owner !== "undefined" ? owner : window.MATRIX_OWNER || "local");
@@ -266,14 +274,14 @@ window.triggerSilentRefresh = async function(opts = {}) {
         if (urlChanged) window.history.replaceState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
 
         if (!rubric) {
-            if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false, "Please select an available rubric ledger to continue.");
+            if (myGen === window.CM_RENDER_GEN) showTotalZeroState("Please select an available rubric ledger to continue.");
             return;
         }
 
         console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv`);
         const res = await fetch(`/api/data?owner=${owner}&repo=${repo}&rubric=${rubric}&token=${token}&force=${isForce ? 'true' : 'false'}&_t=${Date.now()}`);
         if (!res.ok) {
-            if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false);
+            if (myGen === window.CM_RENDER_GEN) showTotalZeroState();
             return;
         }
 
@@ -286,6 +294,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
         console.log(`[Data Engine] Fetched ${repo}/${rubric} | Array Size: ${Array.isArray(newData) ? newData.length : 'Not Array (Err)'}`);
 
         if (isForce || JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
+            window.MATRIX_PAYLOAD_RAW = newData;
             window.MATRIX_PAYLOAD = newData;
             window.MATRIX_CHART_PAYLOAD = null;
 
@@ -297,7 +306,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
         }
     } catch (e) {
         console.error("Silent refresh error:", e);
-        if (myGen === window.CM_RENDER_GEN) setDashboardVisibility(false);
+        if (myGen === window.CM_RENDER_GEN) showTotalZeroState();
     }
 };
 
@@ -317,6 +326,7 @@ hub.on("CONTEXT_CHANGED", (payload) => {
     if (wrap) wrap.style.opacity = "0.4";
 
     // Invalidate stale payload immediately to fix the Equality Trap
+    window.MATRIX_PAYLOAD_RAW = null;
     window.MATRIX_PAYLOAD = null;
     window.MATRIX_CHART_PAYLOAD = null;
 
@@ -347,3 +357,258 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
     if (payload.gen && payload.gen !== window.CM_RENDER_GEN) return;
     if (!window.CM_CLOSE_IN_PROGRESS) attemptRender();
 });
+
+// --- Date Filtering Controller ---
+function initDateFilter() {
+    const toggle = document.getElementById('cm-date-toggle');
+    const menu = document.getElementById('cm-date-menu');
+    const label = document.getElementById('cm-date-label');
+    const customPanel = document.getElementById('cm-date-custom-panel');
+    const cancelBtn = document.getElementById('cm-date-cancel-btn');
+    const startInput = document.getElementById('cm-date-start');
+    const endInput = document.getElementById('cm-date-end');
+
+    if (!toggle || !menu) return;
+
+    const fmtShort = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    
+    // Calculates reliable local 'YYYY-MM-DD' offset against UTC
+    const getLocalYMD = () => {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().split('T')[0];
+    };
+
+    function renderMenu() {
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const dayOfWeek = (startOfToday.getDay() + 6) % 7;
+        const startThisWeek = new Date(startOfToday); startThisWeek.setDate(startOfToday.getDate() - dayOfWeek);
+        const endThisWeek = new Date(startThisWeek); endThisWeek.setDate(startThisWeek.getDate() + 6); endThisWeek.setHours(23,59,59,999);
+
+        const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23,59,59,999);
+
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        const startThisQuarter = new Date(now.getFullYear(), currentQuarter * 3, 1);
+        const endThisQuarter = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0, 23,59,59,999);
+
+        const startThisYear = new Date(now.getFullYear(), 0, 1);
+        const endThisYear = new Date(now.getFullYear(), 11, 31, 23,59,59,999);
+
+        const startLastDay = new Date(startOfToday); startLastDay.setDate(startOfToday.getDate() - 1);
+        const endLastDay = new Date(startOfToday); endLastDay.setMilliseconds(-1);
+
+        const startLastWeek = new Date(now.getTime() - (7 * 86400000));
+        const endLastWeek = now;
+
+        const startPast30 = new Date(now.getTime() - (30 * 86400000));
+        const startPast90 = new Date(now.getTime() - (90 * 86400000));
+        const startPast180 = new Date(now.getTime() - (180 * 86400000));
+        const startPast365 = new Date(now.getTime() - (365 * 86400000));
+
+        const groups = [
+            {
+                group: 'Current',
+                opts: [
+                    { id: 'this_week', label: 'This Week', start: startThisWeek.getTime()/1000, end: endThisWeek.getTime()/1000, span: `${fmtShort(startThisWeek)} - ${fmtShort(endThisWeek)}` },
+                    { id: 'this_month', label: 'This Month', start: startThisMonth.getTime()/1000, end: endThisMonth.getTime()/1000, span: `${fmtShort(startThisMonth)} - ${fmtShort(endThisMonth)}` },
+                    { id: 'this_quarter', label: 'This quarter', start: startThisQuarter.getTime()/1000, end: endThisQuarter.getTime()/1000, span: `${fmtShort(startThisQuarter)} - ${fmtShort(endThisQuarter)}` },
+                    { id: 'this_year', label: 'This year', start: startThisYear.getTime()/1000, end: endThisYear.getTime()/1000, span: `${fmtShort(startThisYear)} - ${fmtShort(endThisYear)}` }
+                ]
+            },
+            {
+                group: 'Past',
+                opts: [
+                    { id: 'last_day', label: 'Last day', start: startLastDay.getTime()/1000, end: endLastDay.getTime()/1000, span: `${fmtShort(startLastDay)} - ${fmtShort(endLastDay)}` },
+                    { id: 'last_week', label: 'Last 7 days', start: startLastWeek.getTime()/1000, end: endLastWeek.getTime()/1000, span: `${fmtShort(startLastWeek)} - ${fmtShort(endLastWeek)}` },
+                    { id: 'past_30', label: 'Last 30 days', start: startPast30.getTime()/1000, end: now.getTime()/1000, span: `${fmtShort(startPast30)} - ${fmtShort(now)}` },
+                    { id: 'past_90', label: 'Last 90 days', start: startPast90.getTime()/1000, end: now.getTime()/1000, span: `${fmtShort(startPast90)} - ${fmtShort(now)}` },
+                    { id: 'past_180', label: 'Last 180 days', start: startPast180.getTime()/1000, end: now.getTime()/1000, span: `${fmtShort(startPast180)} - ${fmtShort(now)}` },
+                    { id: 'past_365', label: 'Last 365 days', start: startPast365.getTime()/1000, end: now.getTime()/1000, span: `${fmtShort(startPast365)} - ${fmtShort(now)}` }
+                ]
+            },
+            {
+                group: 'Custom',
+                isCustom: true
+            }
+        ];
+
+        let html = '';
+        
+        // Pin "All history" to the very top if it is NOT the currently active default
+        if (UI_STATE.dateFilter?.label && UI_STATE.dateFilter.label !== 'All history') {
+            html += `
+                <div style="padding:6px 4px 0 4px;">
+                    <button class="cm-date-opt cm-preset-btn" data-start="" data-end="" data-label="All history" style="width:100%; text-align:left; background:transparent; border:none; padding:6px 10px; border-radius:4px; font-size:12px; font-weight:600; color:#d9d8d5; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                        <span>Clear Filter (All History)</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.6;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div style="border-top:1px solid rgba(255,255,255,0.08); margin:6px 0 2px 0;"></div>
+            `;
+        }
+
+        groups.forEach(g => {
+            if (g.isCustom) {
+                html += `
+                    <div style="padding:8px 10px 4px 10px; font-size:10px; color:#7a7874; text-transform:uppercase; letter-spacing:0.05em;">Custom</div>
+                    <div style="padding:0 4px 4px 4px;"><button id="cm-date-custom-opt" class="cm-date-opt" style="width:100%; text-align:left; background:transparent; border:none; padding:7px 10px; border-radius:4px; font-size:12px; color:#d9d8d5; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                        <span>Choose a range...</span><span style="font-size:10px; opacity:0.5;">→</span>
+                    </button></div>
+                `;
+            } else {
+                html += `
+                    <div style="padding:8px 10px 4px 10px; font-size:10px; color:#7a7874; text-transform:uppercase; letter-spacing:0.05em;">${g.group}</div>
+                    <div style="display:flex; flex-direction:column; padding:0 4px;">
+                        ${g.opts.map(p => `
+                            <button class="cm-date-opt cm-preset-btn ${UI_STATE.dateFilter?.label === p.label ? 'active' : ''}" data-start="${p.start ?? ''}" data-end="${p.end ?? ''}" data-label="${p.label}" style="width:100%; text-align:left; background:transparent; border:none; padding:6px 10px; border-radius:4px; font-size:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                                <span>${p.label}</span>
+                                ${p.span ? `<span class="cm-date-span">${p.span}</span>` : ''}
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        });
+        menu.innerHTML = html;
+
+        menu.querySelectorAll('.cm-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const s = btn.dataset.start ? Number(btn.dataset.start) : null;
+                const e = btn.dataset.end ? Number(btn.dataset.end) : null;
+                applyFilter(s, e, btn.dataset.label === 'Clear Filter (All History)' ? 'All history' : btn.dataset.label);
+                if (customPanel) customPanel.style.display = 'none';
+                if (toggle) toggle.style.display = 'inline-flex';
+            });
+        });
+
+        const customOpt = document.getElementById('cm-date-custom-opt');
+        if (customOpt) {
+            customOpt.addEventListener('click', () => {
+                menu.style.display = 'none';
+                if (toggle) toggle.style.display = 'none';
+                if (customPanel) customPanel.style.display = 'inline-flex';
+                
+                // Pre-fill Custom Input constraints based on current UI_STATE bounds
+                const tsToYMD = (ts) => {
+                    const d = new Date(ts * 1000);
+                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                };
+
+                if (UI_STATE.dateFilter?.start) {
+                    startInput.value = tsToYMD(UI_STATE.dateFilter.start);
+                } else {
+                    let earliestTs = null;
+                    const src = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD;
+                    if (src && src.length > 0) earliestTs = Math.min(...src.map(c => c.ts || Infinity));
+                    startInput.value = (earliestTs && earliestTs !== Infinity) ? tsToYMD(earliestTs) : '';
+                }
+                
+                if (UI_STATE.dateFilter?.end) {
+                    endInput.value = tsToYMD(UI_STATE.dateFilter.end);
+                } else {
+                    endInput.value = getLocalYMD(); // Default to today
+                }
+                
+                // Setup bounds based on current state (ensures max-date limits sync up immediately)
+                syncDateConstraints(null);
+            });
+        }
+    }
+
+    function applyFilter(start, end, labelText) {
+        UI_STATE.dateFilter = { start, end, label: labelText };
+        if (label) label.textContent = labelText;
+        menu.style.display = 'none';
+        attemptRender();
+    }
+    window.CM_APPLY_DATE_FILTER = applyFilter;
+
+    function applyCustomRange() {
+        const sVal = startInput.value;
+        const eVal = endInput.value;
+        if (!sVal && !eVal) return;
+        const sTs = sVal ? Math.floor(new Date(sVal + 'T00:00:00').getTime() / 1000) : null;
+        const eTs = eVal ? Math.floor(new Date(eVal + 'T23:59:59').getTime() / 1000) : null;
+        const customLabel = sVal && eVal ? `${sVal} to ${eVal}` : (sVal ? `From ${sVal}` : `Until ${eVal}`);
+        applyFilter(sTs, eTs, customLabel);
+    }
+
+    function syncDateConstraints(changedInput) {
+        if (!startInput || !endInput) return;
+        const todayStr = getLocalYMD();
+        
+        // 1. Hard ceiling against selecting future dates
+        startInput.max = startInput.max && startInput.max < todayStr ? startInput.max : todayStr;
+        endInput.max = todayStr;
+
+        // 2. Prevent logical overlapping (End cannot precede Start)
+        if (startInput.value && endInput.value) {
+            if (startInput.value > endInput.value) {
+                if (changedInput === startInput) endInput.value = startInput.value;
+                else startInput.value = endInput.value;
+            }
+        }
+
+        // 3. Bind interactive min/max guardrails directly to HTML limits
+        if (startInput.value) endInput.min = startInput.value;
+        else endInput.removeAttribute('min');
+        
+        if (endInput.value) {
+            startInput.max = endInput.value < todayStr ? endInput.value : todayStr;
+        }
+    }
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = menu.style.display === 'flex';
+        menu.style.display = isOpen ? 'none' : 'flex';
+        if (!isOpen) renderMenu();
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    });
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            if (customPanel) customPanel.style.display = 'none';
+            if (toggle) toggle.style.display = 'inline-flex';
+            
+            // Revert state variables & inputs
+            startInput.value = '';
+            endInput.value = '';
+            startInput.removeAttribute('max');
+            endInput.removeAttribute('min');
+            
+            // Re-apply "All history" specifically required by cancel action
+            applyFilter(null, null, 'All history');
+        });
+    }
+
+    // Bind native date picker execution blocks
+    if (startInput) {
+        startInput.max = getLocalYMD();
+        startInput.addEventListener('click', () => { try { startInput.showPicker(); } catch(e){} });
+        startInput.addEventListener('change', () => {
+            syncDateConstraints(startInput);
+            applyCustomRange();
+            if (startInput.value && endInput && !endInput.value) {
+                setTimeout(() => { try { endInput.showPicker(); } catch(e){} }, 50);
+            }
+        });
+    }
+
+    if (endInput) {
+        endInput.max = getLocalYMD();
+        endInput.addEventListener('click', () => { try { endInput.showPicker(); } catch(e){} });
+        endInput.addEventListener('change', () => {
+            syncDateConstraints(endInput);
+            applyCustomRange();
+        });
+    }
+}
