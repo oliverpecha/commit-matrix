@@ -35,56 +35,20 @@ def process_commit_scoring(work_item, rate_limits, aimd):
                 f"Diff:\n{work_item.commit_parts[4][:8000] if len(work_item.commit_parts) > 4 else ''}\n"
             )
 
-            response = completion(
-                model=work_item.model_name,
-                api_key=os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"),
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-            )
-            aimd.release(success=True)
-
-            usage = response.get("usage", {})
-            rate_limits.record_usage(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+            from backend.services.inference.scoring_call import run_inference
+            result = run_inference(sys_prompt, user_prompt, work_item.model_name, rate_limits, aimd)
             
-            raw_content = response.choices[0].message.content
-            try:
-                result = json.loads(raw_content)
-            except json.JSONDecodeError:
-                import re
-                json_match = re.search(r"\{.*\}", raw_content, re.DOTALL)
-                if not json_match:
-                    raise ValueError("No valid JSON found in LLM response.")
-                result = json.loads(json_match.group(0))
-
-            # Dynamically extract all uppercase single-letter axes from whichever rubric was evaluated
-            axes = {k: int(v) for k, v in result.items() if len(k) == 1 and k.isupper()}
-            if not axes:
-                raise ValueError("Missing rubric axes in response.")
-            
-            total = int(result.get("tot", sum(axes.values())))
-            
-            # Retrofit emojis for UI if missing, based on generic tiers
-            tier_label = str(result.get("tier", "Minor"))
-            if not tier_label.startswith(("🔺", "🟦", "➖")):
-                tier_upper = tier_label.upper()
-                if "PIVOTAL" in tier_upper: tier_label = "🔺 PIVOTAL"
-                elif "CORE" in tier_upper: tier_label = "🟦 CORE"
-                else: tier_label = "➖ MINOR"
-
-            logging.debug(f"Worker scored {hash_short} -> {axes} (total: {total})")
+            logging.debug(f"Worker scored {hash_short} -> {result['axes']} (total: {result['tot']})")
             
             return work_item.topo_id, {
-                "axes": axes,
-                "tot": total,
-                "score_pct": float(result.get("score_pct", round(total / (max(len(axes), 1) * 3) * 100, 1))),
-                "tier": tier_label,
-                "danger_flag": str(result.get("danger_flag", "false")).lower() == "true",
-                "debt_direction": str(result.get("debt_direction", "neutral")),
-                "touches": {k: int(v) if str(v).isdigit() else (1 if str(v).lower() == "true" else 0) 
-                            for k, v in result.items() if k.startswith("touches_")},
+                "axes": result["axes"],
+                "tot": result["tot"],
+                "score_pct": result["score_pct"],
+                "tier": result["tier"],
+                "danger_flag": result["danger_flag"],
+                "debt_direction": result["debt_direction"],
+                "touches": result["touches"],
+                "rubric_version": result["rubric_version"],
                 "success": True
             }
 
