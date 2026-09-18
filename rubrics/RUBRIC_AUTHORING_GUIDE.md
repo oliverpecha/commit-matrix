@@ -19,10 +19,10 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 
 | Field | Type | Constraint |
 |---|---|---|
-| One key per axis | integer | Value must be 1, 2, 3, or 4 — no floats, no 0, no 5 |
+| One key per axis | integer | Value must be 1, 2, or 3 — no floats, no 0, no 4 |
 | `tot` | integer | Must equal the exact sum of all axis scores |
 | `score_pct` | float | Must equal `round(tot / max_score * 100, 1)` where `max_score = axes × 3` |
-| `tier` | string | Must be `"Pivotal"` / `"Core"` / `"Minor"` / `"Trivial"` |
+| `tier` | string | Must be `"Pivotal"` / `"Core"` / `"Minor"`  |
 | `danger_flag` | boolean | Derived from rubric-specific axis combination logic |
 | `debt_direction` | string | Must be `"increases"` / `"neutral"` / `"reduces"` |
 | At least one `touches_*` | boolean | Domain-specific; rubric defines which domains to track |
@@ -33,14 +33,13 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 
 ### Tier Thresholds
 
-**4-axis rubric (max_score = 16):**
+**4-axis rubric (max_score = 12):**
 
 | tot | score_pct | tier |
 |---|---|---|
-| 13–16 | 81–100 | `"Pivotal"` |
-| 8–12 | 50–75 | `"Core"` |
-| 4–7 | 25–43 | `"Minor"` |
-| 3 | 25 | `"Trivial"` |
+| 10–12 | 83–100 | `"Pivotal"` |
+| 7–9 | 58–75 | `"Core"` |
+| 4–6 | 33–50 | `"Minor"` |
 
 **5-axis rubric (max_score = 15):**
 
@@ -49,7 +48,6 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 | 13–15 | 87–100 | `"Pivotal"` |
 | 9–12 | 60–80 | `"Core"` |
 | 5–8 | 33–53 | `"Minor"` |
-| 3–4 | 20–27 | `"Trivial"` |
 
 ### Axis Count
 

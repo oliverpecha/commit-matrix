@@ -29,60 +29,42 @@ def process_commit(
     hash_short = hash_full[:7]
 
     try:
-        from backend.services.inference_pipe.llm_gateway import execute_inference
-        from backend.services.inference_pipe.prompt_assembly import build_prompt
-        from backend.services.inference_pipe.schema_enforcer import enforce_v2_contract
+        from backend.services.inference.schema_enforcer import parse_and_validate, RubricSpec
+        from backend.services.inference.prompt_assembly import build_prompt
+        import json
         
         # 1. PROMPT ASSEMBLY (Arch context is safely preserved here)
         with open(rubric_path, "r", encoding="utf-8") as f:
             sys_prompt = f.read()
 
         user_prompt = build_prompt(arch_context, arch_gen_trail, hash_short, date_str, author, subject, diff)
+        rubric_spec = RubricSpec(sys_prompt)
 
         # 2. INFERENCE CALL
         if str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on"):
-            import random
-            from backend.utils.mock_generator import generate_dynamic_mock_touches
-            import re
-            
-            axes_keys = re.findall(r'"([A-Z])":', sys_prompt)
-            if not axes_keys:
-                axes_keys = ["C", "O", "R", "D"]
-            from backend.utils.mock_generator import generate_mock_axes
-            axes = generate_mock_axes(axes_keys)
+            from backend.utils.mock_generator import generate_dynamic_mock_touches, generate_mock_axes
+            axes = generate_mock_axes(rubric_spec.axes_keys)
             touches = generate_dynamic_mock_touches(sys_prompt)
-            tot_score = sum(axes.values())
-            
-            result = {
+            raw_mock_result = {
                 "axes": axes,
-                "tot": tot_score,
-                "tier": "Pivotal" if tot_score >= 13 else "Core" if tot_score >= 8 else "Minor",
-                "touches": touches
+                "touches": touches,
+                "debt_direction": "neutral"
             }
+            result = parse_and_validate(json.dumps(raw_mock_result), rubric_spec)
             aimd.release(success=True)
         else:
-            raw_content = execute_inference(model_name, sys_prompt, user_prompt, rate_limits, aimd)
-            result = enforce_v2_contract(raw_content)
+            from backend.services.inference.scoring_call import run_inference
+            result = run_inference(sys_prompt, user_prompt, model_name, rate_limits, aimd)
 
         # 3. DATA EXTRACTION
-        axes = result.get("axes", {})
-        touches = result.get("touches", {})
-        total_score = result.get("tot", sum(axes.values()))
-        score_pct = result.get("score_pct", 0.0)
-        danger_flag = result.get("danger_flag", False)
-        debt_direction = result.get("debt_direction", "neutral")
-        tier_label_raw = result.get("tier", "Minor")
-
-        if not axes:
-            import re
-            rubric_keys = re.findall(r'"([A-Z])":', sys_prompt) if 'sys_prompt' in locals() else []
-            axes = {k: 1 for k in rubric_keys} if rubric_keys else {"C": 1, "O": 1, "R": 1, "D": 1}
-
-        tier_label = (
-            "🔺 PIVOTAL" if "critical" in tier_label_raw.lower() or "pivotal" in tier_label_raw.lower() else
-            "🟦 CORE" if "significant" in tier_label_raw.lower() or "core" in tier_label_raw.lower() else
-            "➖ MINOR"
-        )
+        axes = result["axes"]
+        touches = result["touches"]
+        total_score = result["tot"]
+        score_pct = result["score_pct"]
+        danger_flag = result["danger_flag"]
+        debt_direction = result["debt_direction"]
+        tier_label = result["tier"]
+        rubric_version = result.get("rubric_version", "1.0")
 
         import re
         m_type = re.match(r"^([a-zA-Z_-]+)(?:\(([^)]+)\))?:", subject)
@@ -97,12 +79,11 @@ def process_commit(
         deletions = diff.count("\n-") - diff.count("\n---")
 
         # 4. ROW GENERATION (Arch sig and gen safely preserved here for the DB/CSV)
-        headers = ["#", "Date", "Type", "Scope", "Subject", "Tier", "Total", "ScorePct", "Danger", "Debt", "Additions", "Deletions", "Hash", "TreeSig", "ArchGen", "Model"]
-        clean_tier = tier_label.split()[1] if tier_label else tier_label_raw
-        row = [topo_id, date_str, commit_type, commit_scope, subject, clean_tier, total_score, score_pct, str(danger_flag).upper(), debt_direction, f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else "", model_name]
+        headers = ["#", "Date", "Type", "Scope", "Subject", "Tier", "Total", "ScorePct", "Danger", "Debt", "Additions", "Deletions", "Hash", "TreeSig", "ArchGen", "Model", "RubricVersion"]
+        clean_tier = tier_label.split()[1] if tier_label else "MINOR"
+        row = [topo_id, date_str, commit_type, commit_scope, subject, clean_tier, total_score, score_pct, str(danger_flag).upper(), debt_direction, f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else "", model_name, rubric_version]
 
-        import re
-        axes_ordered = re.findall(r'"([A-Z])":', sys_prompt) if 'sys_prompt' in locals() else ["C", "O", "R", "D"]
+        axes_ordered = rubric_spec.axes_keys
         for k in axes_ordered:
             if k in axes:
                 headers.append(k)

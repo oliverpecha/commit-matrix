@@ -77,6 +77,6 @@ def generate_mock_axes(axes_keys):
             
     # Introduce 10% chance for random noise to break uniformity
     if random.random() < 0.1:
-        axes[random.choice(axes_keys)] = random.randint(1, 4)
+        axes[random.choice(axes_keys)] = random.randint(1, 3)
         
     return axes
