@@ -159,13 +159,10 @@ def main():
     _csv_owner = os.environ.get('HOST_REPO_OWNER') or 'local'
     _csv_rubric = os.environ.get('RUBRIC_NAME', 'unknown')
     _is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
-    _mock_suffix = "_mock" if _is_mock else ""
-    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}{_mock_suffix}.csv"
-    _csv_owner = os.environ.get('HOST_REPO_OWNER') or 'local'
-    _csv_rubric = os.environ.get('RUBRIC_NAME', 'unknown')
-    _is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
-    _mock_suffix = "_mock" if _is_mock else ""
-    CSV_PATH = f"data/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}{_mock_suffix}.csv"
+    _mock_suffix = "_mock" if (_is_mock and not _csv_rubric.lower().endswith("_mock")) else ""
+    
+    _base_data = "/app/data" if os.path.exists("/app/data") else "data"
+    CSV_PATH = f"{_base_data}/{_csv_owner}/{repo_label}/db/{repo_label}_ledger_{_csv_rubric}{_mock_suffix}.csv"
     _csv_path = Path(CSV_PATH)
     is_genuine_warm_start = _csv_path.exists() and _csv_path.stat().st_size > 50
 
@@ -264,7 +261,13 @@ def main():
         work_item_iter_ref = iter(_prepped_items)
         active_futures = {}
 
-        print("\n📈 Asynchronous scoring engine starting up [████████████████████████████████████████] 100%\n", flush=True)
+        # Dynamic startup telemetry keeping compatibility with stream_filter.py hook
+        init_workers = min(MAX_WORKERS, len(_prepped_items)) if _prepped_items else 0
+        print(f"\n📈 Asynchronous scoring engine starting up...", flush=True)
+        if _is_mock:
+            print(f"⚡ Dispatched {init_workers} heuristic mock scoring workers (LLM bypassed)...\n", flush=True)
+        else:
+            print(f"⏳ Dispatched {init_workers} parallel scoring requests to {MODEL_NAME} ({len(_prepped_items)} commits queued)... waiting for first token stream...\n", flush=True)
         active_futures, processed_count = seed_initial_batch(
             executor, work_item_iter_ref, MAX_WORKERS, total_unscanned, processed_count,
             "", MODEL_NAME, RUBRIC_PATH, rate_limits, aimd, arch_tree_signature=None, arch_gen=None,
@@ -366,6 +369,8 @@ def main():
                 
                 clean_output = re.sub(r" __TOPO:\d+__", "", output)
                 print(clean_output, flush=True)
+                if m:
+                    print(f"\n[__LEDGER_ROW_FLUSHED__:{m.group(1)}]", flush=True)
 
     try:
         if commits_with_ids:

@@ -1,3 +1,4 @@
+import re
 import glob
 import os
 
@@ -5,11 +6,21 @@ MODEL_NAME = os.environ.get('MATRIX_MODEL', 'gemini/gemini-2.5-flash-lite')
 TARGET_RPM = float(os.environ.get('MATRIX_RPM_LIMIT', os.environ.get('TARGET_RPM', '15.0')))
 MAX_WORKERS = int(os.environ.get('MATRIX_MAX_WORKERS', os.environ.get('MAX_WORKERS', '6')))
 HOST_REPO_NAME = os.environ.get('HOST_REPO_NAME', 'commit-matrix')
-RUBRIC_NAME = os.environ.get('RUBRIC_NAME', 'unknown')
-is_mock = str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
-mock_suffix = "_mock" if is_mock else ""
-CSV_PATH = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_{RUBRIC_NAME}{mock_suffix}.csv"
-RUBRIC_PATH = f'/app/rubrics/{RUBRIC_NAME}.md'
+RAW_RUBRIC = os.environ.get('RUBRIC_NAME', 'unknown')
+is_mock = (
+    str(os.environ.get("MOCK_SCORE", "false")).strip().lower() in ("1", "true", "yes", "on")
+    or RAW_RUBRIC.lower().endswith("_mock")
+)
+if is_mock:
+    os.environ["MOCK_SCORE"] = "true"
+
+BASE_RUBRIC = re.sub(r'_mock$', '', RAW_RUBRIC, flags=re.IGNORECASE).lower()
+RUBRIC_NAME = RAW_RUBRIC
+
+CSV_PATH = f"/app/data/{(os.environ.get('HOST_REPO_OWNER') or 'local')}/{HOST_REPO_NAME}/db/{HOST_REPO_NAME}_ledger_{BASE_RUBRIC}{'_mock' if is_mock else ''}.csv"
+
+_cands = [f'/app/rubrics/{BASE_RUBRIC}.md', f'/app/rubrics/{BASE_RUBRIC.upper()}.md', f'rubrics/{BASE_RUBRIC}.md', f'rubrics/{BASE_RUBRIC.upper()}.md']
+RUBRIC_PATH = next((p for p in _cands if os.path.exists(p)), f'/app/rubrics/{BASE_RUBRIC}.md')
 
 
 def get_csv_path(repo_name: str | None = None, rubric_name: str | None = None) -> str:

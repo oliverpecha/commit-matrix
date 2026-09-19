@@ -126,6 +126,7 @@ def build_scan_docker_cmd(repo: str, rubric: str, owner: str = None, container_n
         "-e", "SUPPRESS_LITELLM_LOGS=True",
         "-e", f"HOST_REPO_NAME={repo}",
         "-e", f"RUBRIC_NAME={rubric}",
+        "-e", f"MOCK_SCORE={'true' if str(rubric).lower().endswith('_mock') or str(os.environ.get('MOCK_SCORE', 'false')).lower() in ('1', 'true', 'yes') else 'false'}",
         "-e", f"HOST_REPO_PATH={target_volume}",
         "commit-matrix-core:latest",
         "sh", "-c", "timeout 3600 python -u /app/backend/commit_pipeline.py --repo /target_repo"
