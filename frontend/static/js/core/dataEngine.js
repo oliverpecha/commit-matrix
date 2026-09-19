@@ -112,16 +112,17 @@ export function processCommits(r) {
     // Stagger same-day commits evenly across 24 hours so bar charts don't eclipse each other
     const dayMap = {};
     out.forEach(c => {
-        const baseDay = Math.floor(c.orig_ts / 86400) * 86400;
+        const baseDay = Math.floor((c.orig_ts || c.ts || 0) / 86400) * 86400;
         if (!dayMap[baseDay]) dayMap[baseDay] = [];
         dayMap[baseDay].push(c);
     });
     Object.values(dayMap).forEach(dayCommits => {
         if (dayCommits.length > 1) {
-            dayCommits.sort((a, b) => a.n - b.n); // Maintain logical sequence
+            dayCommits.sort((a, b) => (a.n || 0) - (b.n || 0));
             const step = 86400 / (dayCommits.length + 1);
             dayCommits.forEach((c, idx) => {
-                c.ts = c.orig_ts + Math.floor(step * (idx + 1));
+                const base = Math.floor((c.orig_ts || c.ts || 0) / 86400) * 86400;
+                c.ts = base + Math.floor(step * (idx + 1));
             });
         }
     });

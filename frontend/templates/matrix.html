@@ -9,8 +9,8 @@ CommitMatrix Console
 
 {% block content %}
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.348"></script>
-<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.348">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js?v=0.1.373"></script>
+<link rel="stylesheet" href="/static/css/matrix.css?v=0.1.373">
 <div class="cm-top-bar" style="position:sticky; top:0; z-index:99999; display:flex; justify-content:space-between; align-items:center; padding:8px 20px; height:48px; box-sizing:border-box; border-bottom:1px solid rgba(255,255,255,0.05); background:#131314;">
   <div style="font-weight:600; font-size:13px; color:#d9d8d5; display:flex; gap:8px; align-items:center; transform: translateY(1px);">
     
@@ -156,7 +156,7 @@ CommitMatrix Console
   </div></div>
 </div>
 
-<div id="cm-alert-float" style="display:none; position:fixed; top:70px; right:24px; z-index:999999; background:rgba(20,20,18,0.95); border:2px solid rgba(255,75,75,0.6); border-radius:8px; padding:12px 18px; align-items:center; justify-content:space-between; gap:24px; box-shadow:0 8px 32px rgba(0,0,0,0.8); backdrop-filter:blur(8px);">
+<div id="cm-alert-float" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:999999; background:rgba(20,20,18,0.95); border:2px solid rgba(255,75,75,0.6); border-radius:8px; padding:12px 18px; align-items:center; justify-content:space-between; gap:24px; box-shadow:0 8px 32px rgba(0,0,0,0.8); backdrop-filter:blur(8px);">
     <div style="cursor:pointer; display:flex; align-items:center; gap:10px; flex:1;" onclick="document.getElementById('cm-alert-modal').style.display='flex';">
         <span style="font-size:16px;">⚠️</span>
         <span style="color:#e0e0e0; font-family:Satoshi, sans-serif; font-size:14px;">Show <strong style="color:#ff4b4b;" id="cm-alert-float-count">0</strong> <span id="cm-alert-float-noun">Scoring Anomalies</span></span>
@@ -251,10 +251,10 @@ window.UI_THEME = {
 <script>
     {% if ledger_path %}console.log("[ENGINE] 📂 MOUNTED LEDGER PATH: {{ ledger_path }}");{% endif %}
 </script>
-<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.348"></script>
-<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.348"></script>
-<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.348"></script>
-<script type="module" src="/static/js/app.js?v=0.1.348"></script>
+<script type="module" src="/static/js/bootstrap/pageBoot.js?v=0.1.373"></script>
+<script type="module" src="/static/js/bootstrap/dashboardBoot.js?v=0.1.373"></script>
+<script type="module" src="/static/js/bootstrap/zeroStateBoot.js?v=0.1.373"></script>
+<script type="module" src="/static/js/app.js?v=0.1.373"></script>
 
 {% endblock %}
 

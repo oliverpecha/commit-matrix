@@ -1,6 +1,6 @@
-import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.348';
-import { UI_STATE } from '../core/state.js?v=0.1.348';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.348';
+import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.373';
+import { UI_STATE } from '../core/state.js?v=0.1.373';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.373';
 
 let lastCommits = [];
 let _transBound = false;
@@ -59,7 +59,9 @@ export function renderHeatmap(commits) {
     lastCommits = commits;
     const svgEl = document.getElementById('cm-heat-svg');
     const container = document.getElementById('cm-heat-body');
-    if (!svgEl || !container || !commits.length) return;
+    if (!svgEl || !container) return;
+    while(svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    if (!commits || !commits.length) return;
 
     if (!_transBound) {
         _transBound = true;
@@ -69,7 +71,6 @@ export function renderHeatmap(commits) {
             }
         });
     }
-    while(svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
     
     const W = container.clientWidth || 600, H = container.clientHeight || 200;
     if (W === 0) return;

@@ -1,7 +1,8 @@
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.348';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.348';
-import { UI_STATE } from '../core/state.js?v=0.1.348';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.348';
+const ChartRegistry = new Map();
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.373';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.373';
+import { UI_STATE } from '../core/state.js?v=0.1.373';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.373';
 
 const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');
@@ -29,8 +30,53 @@ const safeDestroy = (chartInstance) => {
     if (!chartInstance) return;
     const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible');
     const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible');
+    
+    // Extract canvas ID from the instance if available, to clear the registry
+    if (chartInstance.canvas && chartInstance.canvas.id) {
+        ChartRegistry.delete(chartInstance.canvas.id);
+    }
+    
     chartInstance.destroy();
 };
+
+// Intercept Chart constructor to populate registry safely BEFORE canvas binding
+const OriginalChart = window.Chart;
+if (OriginalChart && !window.CM_CHART_INTERCEPTED) {
+    window.CM_CHART_INTERCEPTED = true;
+    window.Chart = class extends OriginalChart {
+        constructor(context, config) {
+            // 1. Resolve Canvas ID BEFORE initializing the new chart
+            let cid = null;
+            if (typeof context === 'string') cid = context;
+            else if (context && context.id) cid = context.id;
+            else if (context && context.canvas && context.canvas.id) cid = context.canvas.id;
+            else if (context && context.length && context[0] && context[0].id) cid = context[0].id;
+
+            // 2. Destroy zombie instances to free the canvas context
+            if (cid) {
+                // Try native Chart.js v3+ registry first (survives module reloads)
+                if (OriginalChart.getChart) {
+                    const existing = OriginalChart.getChart(cid);
+                    if (existing) { const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible'); const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible'); existing.destroy(); }
+                }
+                // Fallback to our local Map registry
+                if (typeof ChartRegistry !== 'undefined' && ChartRegistry.has(cid)) {
+                    { const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible'); const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible'); ChartRegistry.get(cid).destroy(); }
+                    ChartRegistry.delete(cid);
+                }
+            }
+
+            // 3. NOW it is safe to bind the new instance
+            super(context, config);
+
+            // 4. Register the fresh instance
+            if (cid && typeof ChartRegistry !== 'undefined') {
+                ChartRegistry.set(cid, this);
+            }
+        }
+    };
+}
+
 
 const ensureRange = (c) => {
     if (c.length > 1) return c;
@@ -46,8 +92,11 @@ const defRaw = (c) => ({ clip: false, responsive:true, maintainAspectRatio:false
 export function renderTypesChart(rawC) {
     const canvasId = 'cm-c-types';
     let canvasEl = document.getElementById(canvasId);
-    if (charts.types) { safeDestroy(charts.types); delete charts.types; }
-    if (!canvasEl || !rawC || rawC.length === 0) return;
+    if (!canvasEl) return;
+    if (!rawC || rawC.length === 0) {
+        if (charts.types) { safeDestroy(charts.types); charts.types = null; }
+        return;
+    }
 
     const lin = UI_STATE.globalChron;
     const c = lin ? ensureRange(rawC) : rawC;
@@ -178,7 +227,10 @@ export function renderTypesChart(rawC) {
 }
 
 export function renderStackChart(rawC) {
-    if(charts.stack) safeDestroy(charts.stack); 
+    if (!rawC || rawC.length === 0) {
+        if (charts.stack) { safeDestroy(charts.stack); charts.stack = null; }
+        return;
+    }
     const lin=UI_STATE.stack; 
     const c = lin ? ensureRange(rawC) : rawC; 
     const mk=(ax)=>c.map(x=>lin?{x:x.ts,y:x._fake?null:x[ax]}:x[ax]);
@@ -221,6 +273,10 @@ export function renderStackChart(rawC) {
 }
 
 export function renderTrendChart(rawC) {
+    if (!rawC || rawC.length === 0) {
+        if (charts.trend) { safeDestroy(charts.trend); charts.trend = null; }
+        return;
+    }
     const sortedRaw = [...rawC].sort((a, b) => (a.ts || 0) - (b.ts || 0));
     const lin=UI_STATE.trend; const c = lin ? ensureRange(sortedRaw) : sortedRaw;
     const isAvgOff = UI_STATE.avgTrend === 0;
@@ -264,9 +320,7 @@ export function renderTrendChart(rawC) {
             charts.trend.update(); 
             return;
         }
-        safeDestroy(charts.trend);
-        delete charts.trend;
-    }
+        }
 
     const getGrad = (ctx, ca, y, alpha, isF) => {
         if (!ca || !y || typeof y.getPixelForValue !== 'function') return 'transparent';
@@ -408,7 +462,11 @@ export function renderTrendChart(rawC) {
 }
 
 function buildCombo(id, stKey, avgKey, rawC, dFunc, clr) {
-    if(charts[stKey]) safeDestroy(charts[stKey]); const lin=UI_STATE[stKey]; const c = lin ? ensureRange(rawC) : rawC;
+    if (!rawC || rawC.length === 0) {
+        if (charts[stKey]) { safeDestroy(charts[stKey]); charts[stKey] = null; }
+        return;
+    }
+    const lin=UI_STATE[stKey]; const c = lin ? ensureRange(rawC) : rawC;
     const avg=calcMAvg(c.map(dFunc),UI_STATE[avgKey],c,lin);
     const rawVals = c.map(dFunc).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
     const avgVals = avg.map(v=>typeof v==='object'&&v!==null?v.y:v).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
@@ -437,7 +495,11 @@ export function renderRiskCharts(c) {
 }
 
 export function renderConvergenceChart(rawC) {
-    if(charts.conv) safeDestroy(charts.conv); const lin=UI_STATE.conv; const c = lin ? ensureRange(rawC) : rawC;
+    if (!rawC || rawC.length === 0) {
+        if (charts.conv) { safeDestroy(charts.conv); charts.conv = null; }
+        return;
+    }
+    const lin=UI_STATE.conv; const c = lin ? ensureRange(rawC) : rawC;
     const f=c.map(x=>((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)+(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[2]] || 0))/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[3]] || 0)||1)), ch=c.map(x=>(x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[0]] || 0)/((x[(window.CM_ACTIVE_AXES || ['C','O','R','D'])[1]] || 0)||1)), b=c.map(x => { const a = window.CM_ACTIVE_AXES || ['C','O','R','D']; return (x[a[0]] || 1) * (x[a[2] || a[1]] || 1); }); const fT=getTop25(f), cT=getTop25(ch), bT=getTop25(b);
     const nd=c.map((x,i)=>{ const h=(f[i]>=fT?1:0)+(ch[i]>=cT?1:0)+(b[i]>=bT?1:0); if(h>=2&&x.tot>0){const m=Math.max(f[i],ch[i],b[i]);return lin?{x:x.ts,y:x._fake?null:m+1}:m+1;} return lin?{x:x.ts,y:null}:null; });
     const allVals = f.concat(ch, b).filter(v=>typeof v==='number'&&!isNaN(v)&&isFinite(v));
@@ -478,9 +540,11 @@ export function updateKPIs(c) {
 }
 
 export function renderTierChart(rawC) {
-    updateKPIs(rawC);
-    if (charts.tier) { safeDestroy(charts.tier); delete charts.tier; }
-    if (!rawC || rawC.length === 0) return;
+    // updateKPIs(rawC); // Delegated completely to paintKPIs in app.js
+    if (!rawC || rawC.length === 0) {
+        if (charts.tier) { safeDestroy(charts.tier); charts.tier = null; }
+        return;
+    }
     const lin = UI_STATE.globalChron;
     const c = lin ? ensureRange(rawC) : rawC;
 
