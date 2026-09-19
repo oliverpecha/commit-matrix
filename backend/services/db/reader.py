@@ -266,7 +266,7 @@ def get_commit_arch_context(repo_label: str, topo_id: int, db_path: str = None):
         cur.execute("SELECT ac.snapshot_sig, ab.cause_tag, ab.magnitude, ac.run_id, ac.role FROM architecture_commits ac LEFT JOIN architecture_boundaries ab ON ab.boundary_commit_topo_id = ac.topo_id AND ab.run_id = ac.run_id WHERE ac.topo_id = ? ORDER BY ac.run_id DESC LIMIT 1", (topo_id,))
         row = cur.fetchone()
         if not row or not row[0]:
-            cur.execute("SELECT snapshot_sig, 'Stable Implementation Refinement', 'incremental', run_id, 'successive' FROM architecture_commits WHERE snapshot_sig IS NOT NULL ORDER BY topo_id DESC LIMIT 1")
+            cur.execute("SELECT snapshot_sig, 'Stable Implementation Refinement', 'incremental', run_id, 'successive' FROM architecture_commits WHERE snapshot_sig IS NOT NULL AND topo_id <= ? ORDER BY topo_id DESC LIMIT 1", (topo_id,))
             row = cur.fetchone()
             if not row: return None, None, None, None, None
 

@@ -214,10 +214,15 @@ def infer_dir_role(name: str) -> str:
         if keyword in lower:
             return role
     return "supporting module"
-def git_most_changed_files(repo_path: str, top_n: int = 10) -> list[tuple[int, str]]:
+def git_most_changed_files(repo_path: str, top_n: int = 10, commit_sha: str = None) -> list[tuple[int, str]]:
     try:
+        cmd = ["git", "-C", repo_path, "log", "--pretty=format:", "--name-only"]
+        if commit_sha:
+            cmd.insert(4, commit_sha)
+        else:
+            cmd.insert(4, "--all")
         result = subprocess.run(
-            ["git", "-C", repo_path, "log", "--all", "--pretty=format:", "--name-only"],
+            cmd,
             capture_output=True,
             text=True,
             check=True,
@@ -301,8 +306,11 @@ def call_model_with_retry_stub(context: dict) -> tuple[str, int]:
     else:
         lines.append("- no file type data available")
     lines.append("")
-    hotspots = git_most_changed_files(repo_path, top_n=10)
-    lines.append("## Most Changed Files (Git Hotspots)")
+    hotspots = git_most_changed_files(repo_path, top_n=10, commit_sha=commit_sha)
+    if commit_sha:
+        lines.append("## Most Changed Files (Historical Hotspots)")
+    else:
+        lines.append("## Most Changed Files (Present-Day Hotspots)")
     if hotspots:
         for count, fpath in hotspots:
             lines.append(f"- `{fpath}` — {count} commits")
