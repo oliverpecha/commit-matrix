@@ -1,6 +1,7 @@
 export const UI_STATE = {
     globalChron: true,
-    dateFilter: { start: null, end: null, label: 'All history' },
+    dateFilter: { start: null, end: null, label: 'All history', mode: 'preset' },
+    incomingBaselineIds: null,
     stack: true,
     trend: true,
     heat: true,
@@ -39,7 +40,9 @@ window.CM_APP_STATE = window.CM_APP_STATE || APP_STATES.ZERO;
 
 export const EVENTS = {
     SYNC_REQUESTED: "ACTION:REFRESH_LEDGER", // Legacy event name preserved for backend compat
-    CLOSE_REQUESTED: "ACTION:CLOSE_TERMINAL"
+    CLOSE_REQUESTED: "ACTION:CLOSE_TERMINAL",
+    ENTER_INCOMING: "FILTER:ENTER_INCOMING",
+    EXIT_INCOMING: "FILTER:EXIT_INCOMING"
 };
 
 const ICON_SYNC = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px; margin-right:6px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`;

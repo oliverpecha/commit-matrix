@@ -1,13 +1,13 @@
 // v0.1.11
-import { hub } from "../core/eventHub.js?v=0.1.348";
-import { APP_STATES } from "../core/state.js?v=0.1.348";import {
+import { hub } from "../core/eventHub.js?v=0.1.373";
+import { APP_STATES } from "../core/state.js?v=0.1.373";import {
     getAppState,
     setAppState,
     markLedgerSeen,
     hasSeenLedger,
     initAppStateFromLedger,
-} from "../core/appStateCtrl.js?v=0.1.348";
-import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.348";import {
+} from "../core/appStateCtrl.js?v=0.1.373";
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.373";import {
     renderShell,
     appendTerminalChunk,
     showPauseButton,
@@ -15,12 +15,12 @@ import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.348";import {
     setTerminalProcessing,
     setTerminalComplete,
     setTerminalFailed,
-} from "./terminalRenderCtrl.js?v=0.1.348";
+} from "./terminalRenderCtrl.js?v=0.1.373";
 import {
     resetCloseLifecycle,
     scheduleAutoClose,
     cancelAutoClose,
-} from "./terminalLifecycle.js?v=0.1.348";
+} from "./terminalLifecycle.js?v=0.1.373";
 
 function renderShellForCurrentState() {
     const termSlot = setAppState(getAppState());
@@ -35,11 +35,13 @@ hub.on("UI:SHOW_CLI_INSTRUCTIONS", () => {
 
 hub.on("ENGINE:SCAN_REQUESTED", () => {
     resetCloseLifecycle();
+    document.body.classList.add('incoming-boot');
     setAppState(hasSeenLedger() ? APP_STATES.DASHBOARD_STREAMING : APP_STATES.INGESTION_BOOT);
     renderShellForCurrentState();
 });
 
 hub.on("DATA:FIRST_CHUNK_RECEIVED", () => {
+    // Mask strictly stays on until Phase 2 (__LEDGER_ROW_FLUSHED__)
     if (!hasSeenLedger()) {
         setAppState(APP_STATES.INGESTION_STREAMING_FIRST);
         renderShellForCurrentState();
@@ -61,6 +63,8 @@ hub.on("ENGINE:CHUNK_RECEIVED", ({ chunk }) => {
             renderShellForCurrentState();
         }
     }
+
+
 });
 
 hub.on("ENGINE:CONTROL_UPDATED", ({ action, status }) => {

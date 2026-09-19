@@ -1,6 +1,6 @@
-import { UI_STATE } from "../core/state.js?v=0.1.348";
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.348";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll, syncTableHeaders } from "./tableRender.js?v=0.1.348";
+import { UI_STATE } from "../core/state.js?v=0.1.373";
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.373";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll, syncTableHeaders } from "./tableRender.js?v=0.1.373";
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");
     const tbody = document.getElementById("cm-tbody");
@@ -75,12 +75,14 @@ export function renderTable(commits) {
     
     if (displayData.length === 0) {
         const isFilterActive = !!(UI_STATE.dateFilter?.start || UI_STATE.dateFilter?.end || (searchInput && searchInput.value.trim()));
-        const emptyMsg = isFilterActive
-            ? "No commits match the selected filter or search window."
-            : "No commits recorded in this ledger.";
+        const isIncoming = UI_STATE.dateFilter?.mode === 'incoming';
+        const emptyMsg = isIncoming
+            ? "Waiting for incoming commits from the active scan..."
+            : (isFilterActive ? "No commits match the selected filter or search window." : "No commits recorded in this ledger.");
         tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:56px 16px; color:#7a7874; font-size:13px; font-weight:500;">${emptyMsg}</td></tr>`;
     } else {
-        renderTableRowsBatched(displayData, "cm-tbody", 100, true);
+        const batchSize = UI_STATE.dateFilter?.mode === 'incoming' ? Math.max(100, displayData.length) : 100;
+        renderTableRowsBatched(displayData, "cm-tbody", batchSize, true);
     }
     
     const repo = new URLSearchParams(window.location.search).get("repo") || "";

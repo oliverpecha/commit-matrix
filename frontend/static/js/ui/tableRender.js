@@ -1,5 +1,5 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.348';
-import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.348';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.373';
+import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.373';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -139,7 +139,7 @@ export function syncTableHeaders() {
                 else dataKey = `table_tot`;
             }
             // Wrapping text in a span applies the .info-hover border directly under the text, mimicking card headers perfectly.
-            thStyle += " cursor:pointer; user-select:none; position:sticky; top:48px; background:var(--bp-s2); z-index:20; transition: color 0.2s;";
+            thStyle += " cursor:pointer; user-select:none; position:sticky; top:0; background:var(--bp-s2); z-index:20; transition: color 0.2s;";
             trHtml += `<th style="${thStyle}" data-col="${c.key}" data-sort="${isAxis ? c.key : ''}">
                 <span class="info-hover" style="${spanStyle}" data-key="${dataKey}">${label}</span>
                 <span class="sort-icon" style="font-size:10px; margin-left:4px;"></span>

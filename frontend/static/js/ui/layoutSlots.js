@@ -21,6 +21,10 @@ export function ensureSideLayoutSlots() {
     leftCol.id = "cm-left-col";
     leftCol.style.cssText = "display:flex; flex-direction:column; gap:12px; overflow-y:auto; height:100%; padding-right:8px; padding-bottom:16px;";
 
+
+
+
+
     const rightCol = document.createElement("div");
     rightCol.id = "cm-right-col";
     rightCol.className = "cm-right-col";
@@ -48,5 +52,14 @@ export function ensureSideLayoutSlots() {
 
     wrap.appendChild(leftCol);
     wrap.appendChild(rightCol);
+
+    // Inject the boot overlay container
+    let bootOverlay = document.getElementById("cm-boot-overlay");
+    if (!bootOverlay) {
+        bootOverlay = document.createElement("div");
+        bootOverlay.id = "cm-boot-overlay";
+        wrap.appendChild(bootOverlay);
+    }
+    
     return termSlot;
 }

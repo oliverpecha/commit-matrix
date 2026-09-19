@@ -1,11 +1,15 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.348";
-import { hub } from "../core/eventHub.js?v=0.1.348";
-import { contextKey } from "../core/state.js?v=0.1.348";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.373";
+import { hub } from "../core/eventHub.js?v=0.1.373";
+import { contextKey } from "../core/state.js?v=0.1.373";
+import { UI_STATE } from "../core/state.js?v=0.1.373";
+import { EVENTS } from "../core/state.js?v=0.1.373";
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
 
 hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
     if (window.CM_SCAN_IN_FLIGHT) return;
+    window.CM_INCOMING_TOTAL = undefined;
+    window.CM_INCOMING_REMAINING = undefined;
     window.CM_SCAN_IN_FLIGHT = true;
     if (window.setTableStreamMode) {
         window.setTableStreamMode(true, { asc: true });
@@ -24,6 +28,12 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
     window.CM_SCAN_ABORT = abortCtrl;
     window.CM_ENGINE_CONTROLLABLE = false;
 
+    const baselineIds = new Set(
+        (window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD || []).map(c => c.h || c.hash)
+    );
+    UI_STATE.incomingBaselineIds = baselineIds;
+    document.body.classList.add('incoming-boot');
+
     try {
         const endpoint = mode === "native" ? "/api/engine/tail" : "/api/scan";
         const response = await fetch(`${endpoint}?owner=${encodeURIComponent(ownerName)}&repo=${encodeURIComponent(repoName)}&rubric=${encodeURIComponent(rubricName)}&token=${encodeURIComponent(authToken)}`, {
@@ -38,6 +48,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
             window.CM_SCAN_IN_FLIGHT = false;
             window.CM_SCAN_ABORT = null;
             hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+            document.body.classList.remove('incoming-boot');
             if (window.setTableStreamMode) window.setTableStreamMode(false);
             return;
         }
@@ -61,6 +72,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
                     window.CM_SCAN_IN_FLIGHT = false;
                     window.CM_SCAN_ABORT = null;
                     hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+                    document.body.classList.remove('incoming-boot');
                 } else {
                     window.CM_SCAN_IN_FLIGHT = false;
                     window.CM_SCAN_ABORT = null;
@@ -112,11 +124,38 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
             }
 
 
-            if (chunk.includes("Queued for ledger flush")) {
+            // Parse initial queued and remaining incoming commit count
+            const cleanText = chunk.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+            const qMatch = cleanText.match(/\((\d+)\s+commits?\s+queued\)/i);
+            if (qMatch && window.CM_INCOMING_TOTAL === undefined) {
+                window.CM_INCOMING_TOTAL = parseInt(qMatch[1], 10);
+                window.CM_INCOMING_REMAINING = window.CM_INCOMING_TOTAL;
+                hub.emit("DATA:INCOMING_TOTAL_LOCKED", { total: window.CM_INCOMING_TOTAL });
+                if (window.attemptRender && window.UI_STATE && window.UI_STATE.dateFilter?.mode === 'incoming') window.attemptRender();
+            }
+            const rMatch = cleanText.match(/(\d+)\s+commits?\s+remaining/i);
+            if (rMatch) {
+                window.CM_INCOMING_REMAINING = parseInt(rMatch[1], 10);
+                if (window.attemptRender && window.UI_STATE && window.UI_STATE.dateFilter?.mode === 'incoming') window.attemptRender();
+            }
+
+            const isDiskFlushTrigger = chunk.includes("__LEDGER_ROW_FLUSHED__") || chunk.includes("Repository ledger up to date");
+            if (isDiskFlushTrigger) {
+                if (document.body.classList.contains('incoming-boot')) {
+                    document.body.classList.add('incoming-boot-leaving');
+                    hub.emit("FILTER:ENTER_INCOMING");
+                    setTimeout(() => {
+                        document.body.classList.remove('incoming-boot');
+                        document.body.classList.remove('incoming-boot-leaving');
+                    }, 320);
+                }
                 if (window.triggerSilentRefresh) {
                     window.triggerSilentRefresh({ repo: repoName, rubric: rubricName, owner: new URLSearchParams(window.location.search).get('owner') || window.MATRIX_OWNER, force: true, gen: window.CM_RENDER_GEN });
                 }
             }
+
+            // Strip internal synchronization control signals before rendering to terminal
+            chunk = chunk.replace(/\n?\[__LEDGER_ROW_FLUSHED__:\d+\]\n?/g, "");
 
             if (streamBuffer.includes("[__MATRIX_EOF_SUCCESS__]")) {
                 const cleanChunk = chunk.split("[__MATRIX_EOF_SUCCESS__]").join("");
@@ -124,6 +163,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
                 window.CM_SCAN_IN_FLIGHT = false;
                 window.CM_SCAN_ABORT = null;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: true });
+                document.body.classList.remove('incoming-boot');
                 if (window.setTableStreamMode) window.setTableStreamMode(false);
                 break;
             }
@@ -134,6 +174,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
                 window.CM_SCAN_IN_FLIGHT = false;
                 window.CM_SCAN_ABORT = null;
                 hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+                document.body.classList.remove('incoming-boot');
                 break;
             }
 
@@ -150,6 +191,7 @@ hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
         window.CM_SCAN_IN_FLIGHT = false;
         window.CM_SCAN_ABORT = null;
         hub.emit("ENGINE:SCAN_COMPLETE", { success: false });
+        document.body.classList.remove('incoming-boot');
     }
 });
 

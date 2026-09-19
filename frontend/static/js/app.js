@@ -1,20 +1,20 @@
-// v0.1.17
-import { hub } from "./core/eventHub.js?v=0.1.348";
-import "./core/appStateCtrl.js?v=0.1.348";
-import "./engine/repoManager.js?v=0.1.348";
-import "./engine/telemetryStream.js?v=0.1.348";
-import "./engine/engineControl.js?v=0.1.348";
-import "./ui/terminalView.js?v=0.1.348";
+// v0.1.19
+import { hub } from "./core/eventHub.js?v=0.1.373";
+import "./core/appStateCtrl.js?v=0.1.373";
+import "./engine/repoManager.js?v=0.1.373";
+import "./engine/telemetryStream.js?v=0.1.373";
+import "./engine/engineControl.js?v=0.1.373";
+import "./ui/terminalView.js?v=0.1.373";
 
-import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.348';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.348';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.348';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.348';
-import { CM_COLORS } from './constants/colors.js?v=0.1.348';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.348';
-import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.348';
-import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.348';
+import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.373';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.373';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.373';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.373';
+import { CM_COLORS } from './constants/colors.js?v=0.1.373';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.373';
+import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.373';
 window.hub = hub;
+window.UI_STATE = UI_STATE;
 import { initGlobalTooltips } from './ui/tooltips.js';
 initGlobalTooltips();
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
@@ -22,7 +22,10 @@ window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 
 window.CM_RENDER_GEN = 0;
-window.CM_LAST_GOOD_FILTER = { start: null, end: null, label: 'All history' };
+hub.on("ACTION:CLOSE_TERMINAL", () => {
+    hub.emit("FILTER:EXIT_INCOMING");
+});
+window.CM_LAST_GOOD_FILTER = { start: null, end: null, label: 'All history', mode: 'preset' };
 
 function computeKPIs(p) {
     let tot = 0, crit = 0, sig = 0, rout = 0;
@@ -39,11 +42,21 @@ function computeKPIs(p) {
 
 function paintKPIs(k) {
     const kp = document.getElementById('cm-kp');
+    const kpLbl = document.querySelector('[data-key="kpi_tot"]');
     if (!kp) return;
-    if (k.totalAll > k.count) {
-        kp.innerHTML = `${k.count}<span style="opacity:0.5;font-weight:normal;font-size:0.65em;margin-left:4px;">/ ${k.totalAll}</span>`;
+
+    const isIncoming = UI_STATE.dateFilter?.mode === 'incoming';
+    if (isIncoming) {
+        if (kpLbl) kpLbl.textContent = 'INCOMING COMMITS';
+        const total = window.CM_INCOMING_TOTAL !== undefined ? window.CM_INCOMING_TOTAL : (window.CM_INCOMING_REMAINING !== undefined ? (k.count + window.CM_INCOMING_REMAINING) : '—');
+        kp.innerHTML = `${k.count}<span style="opacity:0.5;font-weight:normal;font-size:0.65em;margin-left:4px;">/ ${total}</span>`;
     } else {
-        kp.textContent = k.count;
+        if (kpLbl) kpLbl.textContent = 'Total Commits';
+        if (k.totalAll > k.count) {
+            kp.innerHTML = `${k.count}<span style="opacity:0.5;font-weight:normal;font-size:0.65em;margin-left:4px;">/ ${k.totalAll}</span>`;
+        } else {
+            kp.textContent = k.count;
+        }
     }
     document.getElementById('cm-ka').textContent = k.avg;
     
@@ -110,6 +123,7 @@ function runRenderQueue(steps, gen) {
 
 
 function attemptRender() {
+    window.attemptRender = attemptRender;
     if (!window.MATRIX_PAYLOAD_RAW && window.MATRIX_PAYLOAD && window.MATRIX_PAYLOAD.length) {
         window.MATRIX_PAYLOAD_RAW = window.MATRIX_PAYLOAD;
     }
@@ -124,23 +138,31 @@ function attemptRender() {
 
     // Apply filtering AFTER processCommits normalizes the timestamps to c.ts
     const p_all = p;
-    const df = UI_STATE.dateFilter || { start: null, end: null, label: 'All history' };
-    const filteredP = filterByDateBounds(p, df.start, df.end);
+    const df = UI_STATE.dateFilter || { start: null, end: null, label: 'All history', mode: 'preset' };
+    let filteredP;
+    if (df.mode === 'incoming' && UI_STATE.incomingBaselineIds) {
+        filteredP = p.filter(c => !UI_STATE.incomingBaselineIds.has(c.h || c.hash));
+    } else {
+        filteredP = filterByDateBounds(p, df.start, df.end);
+    }
     window.CM_CURRENT_FILTERED_PAYLOAD = filteredP;
     p = filteredP; // Enforce filtered set downwards through the rendering chain
 
     console.log(`[Data Engine] attemptRender -> rawData: ${sourceData.length}, processed: ${p.length}, filtered: ${filteredP.length}`);
 
+    const activeHashes = new Set(filteredP.map(c => c.h || c.hash));
+    const activeAnomalies = (window.CM_AUDIT_ANOMALIES || []).filter(a => activeHashes.has(a.hash || a.h));
+    
     const floatingAudit = document.getElementById('cm-alert-float');
-    if (window.CM_AUDIT_ANOMALIES && window.CM_AUDIT_ANOMALIES.length > 0) {
+    if (activeAnomalies.length > 0) {
         if (floatingAudit) floatingAudit.style.display = 'flex';
         const floatCount = document.getElementById('cm-alert-float-count');
-        if (floatCount) floatCount.textContent = window.CM_AUDIT_ANOMALIES.length;
+        if (floatCount) floatCount.textContent = activeAnomalies.length;
         const floatNoun = document.getElementById('cm-alert-float-noun');
-        if (floatNoun) floatNoun.textContent = window.CM_AUDIT_ANOMALIES.length === 1 ? 'Scoring Anomaly' : 'Scoring Anomalies';
+        if (floatNoun) floatNoun.textContent = activeAnomalies.length === 1 ? 'Scoring Anomaly' : 'Scoring Anomalies';
         const auditList = document.getElementById('cm-alert-list');
         if (auditList) {
-            auditList.innerHTML = window.CM_AUDIT_ANOMALIES.map(a => `
+            auditList.innerHTML = activeAnomalies.map(a => `
                 <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:8px; color:#8ab4f0;">
                         <span><strong>#${a.num}</strong> <code style="background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px;">${(a.hash||'').substring(0,7)}</code></span>
@@ -167,23 +189,31 @@ function attemptRender() {
         return;
     }
 
+    // The boot state (dark overlay) is handled entirely by terminalView.js and appStateCtrl.js now
+    // We just ensure we clear any legacy classes
+    document.body.classList.remove('incoming-empty');
+
     if (p.length === 0) {
-        showFilteredZeroState({
-            filter: df,
-            allCommits: p_all,
-            lastGoodFilter: window.CM_LAST_GOOD_FILTER,
-            onRevert: () => {
-                const target = window.CM_LAST_GOOD_FILTER || { start: null, end: null, label: 'All history' };
-                if (typeof window.CM_APPLY_DATE_FILTER === 'function') {
-                    window.CM_APPLY_DATE_FILTER(target.start, target.end, target.label);
+        if (df.mode === 'incoming') {
+            hideZeroStates();
+        } else {
+            showFilteredZeroState({
+                filter: df,
+                allCommits: p_all,
+                lastGoodFilter: window.CM_LAST_GOOD_FILTER,
+                onRevert: () => {
+                    const target = window.CM_LAST_GOOD_FILTER || { start: null, end: null, label: 'All history', mode: 'preset' };
+                    if (typeof window.CM_APPLY_DATE_FILTER === 'function') {
+                        window.CM_APPLY_DATE_FILTER(target.start, target.end, target.label);
+                    }
                 }
-            }
-        });
-        return;
+            });
+            return;
+        }
     }
 
     // Track last successful filter that returned active commits
-    window.CM_LAST_GOOD_FILTER = { start: df.start, end: df.end, label: df.label || 'All history' };
+    if (df.mode !== 'incoming') { window.CM_LAST_GOOD_FILTER = { start: df.start, end: df.end, label: df.label || 'All history', mode: df.mode || 'preset' }; }
     hideZeroStates();
 
     // [Patch] Enforce Timeline Mode defaults securely on initial boot
@@ -222,7 +252,7 @@ function attemptRender() {
         if (gen !== window.CM_RENDER_GEN) return;
         try {
             paintKPIs(computeKPIs(p));
-            const steps = buildRenderSteps(p);
+            let steps = buildRenderSteps(p);
             runRenderQueue(steps, gen);
         } catch (err) {
             console.error("MATRIX UI RENDER ERROR:", err);
@@ -241,7 +271,6 @@ window.addEventListener('load', async () => {
     }
 
     initDateFilter();
-    initDateFilter();
     attemptRender();
     if (repo) {
         const currentOwner = new URLSearchParams(window.location.search).get('owner') || (typeof owner !== "undefined" ? owner : window.MATRIX_OWNER || "local");
@@ -259,57 +288,49 @@ window.addEventListener('load', async () => {
 });
 
 window.triggerSilentRefresh = async function(opts = {}) {
+    if (window.CM_CLOSE_IN_PROGRESS) return;
     const myGen = opts.gen || window.CM_RENDER_GEN;
-    try {
-        if (window.CM_CLOSE_IN_PROGRESS) return;
-        const urlParams = new URLSearchParams(window.location.search);
-        const owner = opts.owner || urlParams.get('owner') || window.MATRIX_OWNER || '';
-        const repo = opts.repo || urlParams.get('repo') || '';
-        const token = opts.token || urlParams.get('token') || '';
-        const rubric = opts.rubric || urlParams.get('rubric') || '';
-        const isForce = !!opts.force;
+    const urlParams = new URLSearchParams(window.location.search);
+    const owner = opts.owner || urlParams.get('owner') || window.MATRIX_OWNER || '';
+    const repo = opts.repo || urlParams.get('repo') || '';
+    const token = opts.token || urlParams.get('token') || '';
+    const rubric = opts.rubric || urlParams.get('rubric') || '';
+    const isForce = !!opts.force;
 
-        let urlChanged = false;
-        if (opts.repo && opts.repo !== urlParams.get('repo')) { urlParams.set('repo', opts.repo); urlChanged = true; }
-        if (opts.rubric && opts.rubric !== urlParams.get('rubric')) { urlParams.set('rubric', opts.rubric); urlChanged = true; }
-        if (urlChanged) window.history.replaceState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
+    let urlChanged = false;
+    if (opts.repo && opts.repo !== urlParams.get('repo')) { urlParams.set('repo', opts.repo); urlChanged = true; }
+    if (opts.rubric && opts.rubric !== urlParams.get('rubric')) { urlParams.set('rubric', opts.rubric); urlChanged = true; }
+    if (urlChanged) window.history.replaceState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
 
-        if (!rubric) {
-            if (myGen === window.CM_RENDER_GEN) showTotalZeroState("Please select an available rubric ledger to continue.");
-            return;
-        }
-
-        console.log(`[Data Engine] Loading ledger payload: data/${owner}/${repo}/db/${repo}_ledger_${rubric}.csv`);
-        const res = await fetch(`/api/data?owner=${owner}&repo=${repo}&rubric=${rubric}&token=${token}&force=${isForce ? 'true' : 'false'}&_t=${Date.now()}`);
-        if (!res.ok) {
-            if (myGen === window.CM_RENDER_GEN) showTotalZeroState();
-            return;
-        }
-
-        const newData = await res.json();
-        if (window.CM_CLOSE_IN_PROGRESS) return;
-
-        // Gate: Drop response if generation drifted during our fetch round trip
-        if (myGen !== window.CM_RENDER_GEN) return; 
-
-        console.log(`[Data Engine] Fetched ${repo}/${rubric} | Array Size: ${Array.isArray(newData) ? newData.length : 'Not Array (Err)'}`);
-
-        if (isForce || JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
-            window.MATRIX_PAYLOAD_RAW = newData;
-            window.MATRIX_PAYLOAD_RAW = newData;
-            window.MATRIX_PAYLOAD = newData;
-            window.MATRIX_CHART_PAYLOAD = null;
-
-            if (window.hub) {
-                window.hub.emit("DATA:LEDGER_UPDATED", { gen: myGen }); 
-            } else {
-                attemptRender();
-            }
-        }
-    } catch (e) {
-        console.error("Silent refresh error:", e);
-        if (myGen === window.CM_RENDER_GEN) showTotalZeroState();
+    if (!rubric) {
+        if (myGen === window.CM_RENDER_GEN) showTotalZeroState("Please select an available rubric ledger to continue.");
+        return;
     }
+
+    if (!window._cmFetchQueue) window._cmFetchQueue = Promise.resolve();
+    
+    window._cmFetchQueue = window._cmFetchQueue.then(async () => {
+        if (window.CM_CLOSE_IN_PROGRESS || myGen !== window.CM_RENDER_GEN) return;
+        await new Promise(r => setTimeout(r, 350)); // Allow filesystem/SQLite flush to physically settle
+        try {
+            const res = await fetch(`/api/data?owner=${owner}&repo=${repo}&rubric=${rubric}&token=${token}&force=${isForce ? 'true' : 'false'}&_t=${Date.now()}`);
+            if (!res.ok) return;
+            const newData = await res.json();
+            
+            if (window.CM_CLOSE_IN_PROGRESS || myGen !== window.CM_RENDER_GEN) return;
+            
+            if (isForce || JSON.stringify(newData) !== JSON.stringify(window.MATRIX_PAYLOAD)) {
+                window.MATRIX_PAYLOAD_RAW = newData;
+                window.MATRIX_PAYLOAD = newData;
+                window.MATRIX_CHART_PAYLOAD = null;
+                if (window.hub) window.hub.emit("DATA:LEDGER_UPDATED", { gen: myGen });
+                else attemptRender();
+            }
+        } catch (e) {
+            console.error("Silent refresh error:", e);
+        }
+    });
+    return window._cmFetchQueue;
 };
 
 // --- Standardized Soft-Routing Data Pipeline ---
@@ -362,16 +383,45 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
 });
 
 // --- Date Filtering Controller ---
+
+hub.on("FILTER:ENTER_INCOMING", () => {
+    // Wiping disabled here to preserve boot parsed denominator
+    window.CM_PRE_INCOMING_FILTER = { ...UI_STATE.dateFilter };
+    UI_STATE.dateFilter = { start: null, end: null, label: 'Incoming', mode: 'incoming' };
+    const lbl = document.getElementById('cm-date-label');
+    const toggle = document.getElementById('cm-date-toggle');
+    if (lbl) lbl.textContent = 'Incoming';
+    if (toggle) toggle.classList.add('incoming-live');
+    attemptRender();
+});
+
+hub.on("FILTER:EXIT_INCOMING", () => {
+    window.CM_INCOMING_TOTAL = undefined;
+    window.CM_INCOMING_REMAINING = undefined;
+    if (UI_STATE.dateFilter.mode !== 'incoming') return; // user already overrode manually
+    UI_STATE.incomingBaselineIds = null;
+    UI_STATE.dateFilter = { start: null, end: null, label: 'All history', mode: 'preset' };
+    const lbl = document.getElementById('cm-date-label');
+    const toggle = document.getElementById('cm-date-toggle');
+    if (lbl) lbl.textContent = 'All history';
+    if (toggle) toggle.classList.remove('incoming-live');
+    window.CM_PRE_INCOMING_FILTER = null;
+    document.body.classList.remove('incoming-empty');
+    attemptRender();
+});
+
 function initDateFilter() {
     const toggle = document.getElementById('cm-date-toggle');
     const menu = document.getElementById('cm-date-menu');
+    if (!toggle || !menu) return;
+    if (toggle.__cmDateFilterBound) return;
+    toggle.__cmDateFilterBound = true;
+
     const label = document.getElementById('cm-date-label');
     const customPanel = document.getElementById('cm-date-custom-panel');
     const cancelBtn = document.getElementById('cm-date-cancel-btn');
     const startInput = document.getElementById('cm-date-start');
     const endInput = document.getElementById('cm-date-end');
-
-    if (!toggle || !menu) return;
 
     const fmtShort = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     
@@ -477,15 +527,23 @@ function initDateFilter() {
         });
         menu.innerHTML = html;
 
-        menu.querySelectorAll('.cm-preset-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
+        if (!menu.__cmDelegated) {
+            menu.__cmDelegated = true;
+            menu.addEventListener('click', (e) => {
+                const btn = e.target.closest('.cm-preset-btn');
+                if (!btn) return;
                 const s = btn.dataset.start ? Number(btn.dataset.start) : null;
-                const e = btn.dataset.end ? Number(btn.dataset.end) : null;
-                applyFilter(s, e, btn.dataset.label === 'Clear Filter (All History)' ? 'All history' : btn.dataset.label);
+                const en = btn.dataset.end ? Number(btn.dataset.end) : null;
+                const isClear = btn.dataset.label === 'Clear Filter (All History)' || (!s && !en);
+                if (isClear) {
+                    if (startInput) startInput.value = '';
+                    if (endInput) endInput.value = '';
+                }
+                applyFilter(s, en, isClear ? 'All history' : btn.dataset.label);
                 if (customPanel) customPanel.style.display = 'none';
                 if (toggle) toggle.style.display = 'inline-flex';
             });
-        });
+        }
 
         const customOpt = document.getElementById('cm-date-custom-opt');
         if (customOpt) {
@@ -500,30 +558,41 @@ function initDateFilter() {
                     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                 };
 
+                let earliestTs = null;
+                let latestTs = null;
+                const src = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD;
+                if (src && src.length > 0) {
+                    earliestTs = Math.min(...src.map(c => c.ts || Infinity));
+                    latestTs = Math.max(...src.map(c => c.ts || 0));
+                }
+
                 if (UI_STATE.dateFilter?.start) {
                     startInput.value = tsToYMD(UI_STATE.dateFilter.start);
                 } else {
-                    let earliestTs = null;
-                    const src = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD;
-                    if (src && src.length > 0) earliestTs = Math.min(...src.map(c => c.ts || Infinity));
                     startInput.value = (earliestTs && earliestTs !== Infinity) ? tsToYMD(earliestTs) : '';
                 }
                 
                 if (UI_STATE.dateFilter?.end) {
                     endInput.value = tsToYMD(UI_STATE.dateFilter.end);
                 } else {
-                    endInput.value = getLocalYMD(); // Default to today
+                    endInput.value = (latestTs && latestTs > 0) ? tsToYMD(latestTs) : getLocalYMD();
                 }
-                
-                // Setup bounds based on current state (ensures max-date limits sync up immediately)
+
+                if (earliestTs && earliestTs !== Infinity) startInput.min = tsToYMD(earliestTs);
+                if (latestTs && latestTs > 0) endInput.max = tsToYMD(latestTs);
+
                 syncDateConstraints(null);
             });
         }
     }
 
-    function applyFilter(start, end, labelText) {
-        UI_STATE.dateFilter = { start, end, label: labelText };
+    function applyFilter(start, end, labelText, mode) {
+        const isCustom = mode === 'custom' || (!mode && (labelText.includes(' to ') || labelText.startsWith('From ') || labelText.startsWith('Until ')));
+        UI_STATE.dateFilter = { start, end, label: labelText, mode: isCustom ? 'custom' : 'preset' };
+        window.CM_PRE_INCOMING_FILTER = null; // user override cancels pending restore
         if (label) label.textContent = labelText;
+        const toggle = document.getElementById('cm-date-toggle');
+        if (toggle) toggle.classList.remove('incoming-live');
         menu.style.display = 'none';
         attemptRender();
     }
@@ -536,16 +605,26 @@ function initDateFilter() {
         const sTs = sVal ? Math.floor(new Date(sVal + 'T00:00:00').getTime() / 1000) : null;
         const eTs = eVal ? Math.floor(new Date(eVal + 'T23:59:59').getTime() / 1000) : null;
         const customLabel = sVal && eVal ? `${sVal} to ${eVal}` : (sVal ? `From ${sVal}` : `Until ${eVal}`);
-        applyFilter(sTs, eTs, customLabel);
+        applyFilter(sTs, eTs, customLabel, 'custom');
     }
 
     function syncDateConstraints(changedInput) {
         if (!startInput || !endInput) return;
         const todayStr = getLocalYMD();
+        const src = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD || [];
+        let maxDataStr = todayStr;
+        if (src.length > 0) {
+            const maxTs = Math.max(...src.map(c => c.ts || 0));
+            if (maxTs > 0) {
+                const d = new Date(maxTs * 1000);
+                maxDataStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            }
+        }
+        const effectiveCeiling = maxDataStr < todayStr ? maxDataStr : todayStr;
         
-        // 1. Hard ceiling against selecting future dates
-        startInput.max = startInput.max && startInput.max < todayStr ? startInput.max : todayStr;
-        endInput.max = todayStr;
+        // 1. Hard ceiling against selecting future dates or dates beyond dataset
+        startInput.max = startInput.max && startInput.max < effectiveCeiling ? startInput.max : effectiveCeiling;
+        endInput.max = effectiveCeiling;
 
         // 2. Prevent logical overlapping (End cannot precede Start)
         if (startInput.value && endInput.value) {
@@ -572,9 +651,9 @@ function initDateFilter() {
     });
 
     document.addEventListener('click', (e) => {
-        if (!menu.contains(e.target) && !toggle.contains(e.target)) {
-            menu.style.display = 'none';
-        }
+        if (menu.contains(e.target) || toggle.contains(e.target)) return;
+        if (customPanel && customPanel.contains(e.target)) return;
+        menu.style.display = 'none';
     });
 
     if (cancelBtn) {

@@ -42,8 +42,19 @@
 .bp-hm-cell { transition: opacity .15s; }
 .bp-hm-cell:hover { opacity: .6; cursor: default; }
 
-.cm-tbl-wrap { overflow-x: auto; width: 100%; }
-.cm-tbl-wrap table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.cm-tbl-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 560px;
+  width: 100%;
+  position: relative;
+}
+.cm-tbl-wrap table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+}
 .cm-tbl-wrap th { padding: 7px 10px; text-align: left; font-size: 9.5px; font-weight: 600; color: var(--bp-muted); text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--bp-border); white-space: nowrap; background: rgba(255,255,255,0.015); cursor: pointer; user-select: none; }
 .cm-tbl-wrap th:hover { color: var(--bp-text); }
 .cm-tbl-wrap th .sa { display: inline-block; margin-left: 3px; font-size: 9px; opacity: 0; }
@@ -150,19 +161,16 @@
 
 /* --- Persistent Table Header & Stacking Context Isolation --- */
 #cm-ledger-card {
-  overflow: clip !important;
+  overflow: hidden !important;
   isolation: isolate;
-}
-
-.cm-tbl-wrap {
-  overflow-x: visible;
 }
 
 #cm-thead th {
   position: sticky;
-  top: 48px;
-  background: var(--bp-s2);
+  top: 0;
+  background: #1e1d1b;
   z-index: 20;
+  box-shadow: 0 1px 0 var(--bp-border);
 }
 
 /* Date Filter Dropdown Styles */
@@ -178,6 +186,17 @@
     color: #8ab4f0 !important;
     font-weight: 600;
 }
+#cm-date-toggle.incoming-live {
+    color: #ffb84d !important;
+    border-color: rgba(255, 184, 77, 0.4) !important;
+    background: rgba(255, 184, 77, 0.1) !important;
+    animation: pulse-incoming 2s infinite;
+}
+@keyframes pulse-incoming {
+    0% { box-shadow: 0 0 0 0 rgba(255, 184, 77, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(255, 184, 77, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 184, 77, 0); }
+}
 .cm-date-span {
     font-size: 10px;
     color: var(--bp-muted);
@@ -188,4 +207,93 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     filter: none !important;
     opacity: 0.75;
     cursor: pointer;
+}
+
+
+
+/* Terminal Boot Overlay Redesign (Global Black Mask) */
+#cm-boot-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(4, 5, 8, 0.60);
+    backdrop-filter: none;
+    z-index: 2000000 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 0.3s ease;
+}
+
+body.incoming-boot #cm-boot-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+body.incoming-boot-leaving #cm-boot-overlay {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth Table Row Entry */
+#cm-tbody tr {
+    transition: background-color 0.25s ease, opacity 0.25s ease;
+}
+
+body.incoming-boot #cm-boot-overlay::after {
+    content: 'Waiting for incoming commits from the active scan...';
+    display: block;
+    background: rgba(10,14,20,0.95);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 16px 32px;
+    color: #a38b4f;
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+    transform: translateX(-15vw);
+    animation: heartbeat-v2 3s ease-in-out infinite !important;
+    will-change: transform, box-shadow;
+}
+
+/* Elevate ONLY the terminal above the mask */
+body.incoming-boot #cm-right-col {
+    position: static !important;
+    z-index: auto !important;
+    pointer-events: none !important;
+}
+
+body.incoming-boot #cm-right-col > *:not(#cm-ledger-card) {
+    position: relative !important;
+    z-index: 2000001 !important;
+    pointer-events: auto !important;
+}
+
+/* Explicitly lock down the rest of the UI */
+body.incoming-boot #cm-left-col,
+body.incoming-boot #cm-ledger-card {
+    z-index: auto !important;
+}
+body.incoming-boot #cm-boot-overlay {
+    pointer-events: none; /* Let clicks pass through the dark mask */
+}
+
+/* Nuke legacy pseudo-element masks to prevent visual doubling */
+body.incoming-boot #cm-left-col::before,
+body.incoming-boot #cm-left-col::after,
+body.incoming-boot #cm-ledger-card::before,
+body.incoming-boot #cm-ledger-card::after {
+    display: none !important;
+}
+
+@keyframes heartbeat-v2 {
+    0% { transform: translateX(-15vw) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+    15% { transform: translateX(-15vw) scale(1.05); box-shadow: 0 10px 40px rgba(163, 139, 79, 0.4); }
+    30% { transform: translateX(-15vw) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+    45% { transform: translateX(-15vw) scale(1.05); box-shadow: 0 10px 40px rgba(163, 139, 79, 0.4); }
+    70% { transform: translateX(-15vw) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+    100% { transform: translateX(-15vw) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
 }
