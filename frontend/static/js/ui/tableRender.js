@@ -1,5 +1,5 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.373';
-import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.373';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.427';
+import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.427';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";
@@ -184,7 +184,7 @@ export function syncTableHeaders() {
 }
 
 export function renderTableRows(displayData) {
-    const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible');
+    const infoTt = document.getElementById('info-tt'); if (infoTt && (!window._cmHoverTarget || window._cmHoverTarget.id !== 'cm-tier-cycle-btn')) infoTt.classList.remove('visible');
     const repo = new URLSearchParams(window.location.search).get("repo") || "";
     const axesKeys = window.CM_ACTIVE_AXES || ["C", "O", "R", "D"];
     const colors = ["#5c91e0", "#c99ef0", "#ffb84d", "#ff4b4b", "#4caf50", "#00bcd4"];

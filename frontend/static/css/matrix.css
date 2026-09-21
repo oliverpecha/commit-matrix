@@ -297,3 +297,168 @@ body.incoming-boot #cm-ledger-card::after {
     70% { transform: translateX(-15vw) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
     100% { transform: translateX(-15vw) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
 }
+
+/* --- Revolving Pill Action Buttons (Score Trend & Tier Distribution) --- */
+.cm-pill-btn {
+    font-family: 'Satoshi', sans-serif !important;
+    background: #252629 !important; /* Solid flat color lighter than the card panel */
+    border: none !important;        /* Absolutely no outline or border line */
+    outline: none !important;
+    text-decoration: none !important;
+    color: #92908a !important;
+    border-radius: 9999px !important;
+    padding: 4px 12px !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.01em !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    transition: background 0.15s ease, color 0.15s ease !important;
+    user-select: none !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+}
+.cm-pill-btn span,
+.cm-pill-btn strong {
+    font-family: 'Satoshi', sans-serif !important;
+}
+.cm-pill-btn:hover {
+    background: #303136 !important; /* Slightly lighter on hover */
+    border: none !important;
+    color: #f0eee6 !important;
+    box-shadow: none !important;
+}
+.cm-pill-btn svg {
+    opacity: 0.65;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease;
+}
+.cm-pill-btn:hover svg {
+    opacity: 0.95;
+}
+/* Fixed-width locks to prevent size jumping when labels revolve */
+#cm-tier-cycle-btn {
+    width: 112px !important;
+    min-width: 112px !important;
+    max-width: 112px !important;
+}
+button[data-action="cycleAvg"][data-target="trend"] {
+    width: 122px !important;
+    min-width: 122px !important;
+    max-width: 122px !important;
+}
+
+.cm-avg-card-row {
+    box-sizing: border-box;
+    cursor: default;
+    user-select: none;
+}
+
+.cm-avg-card-row svg {
+    display: block;
+    flex-shrink: 0;
+}
+
+#cm-avg-slots {
+    position: relative;
+}
+
+.cm-avg-card-row {
+    box-sizing: border-box;
+    cursor: default;
+    user-select: none;
+}
+
+.cm-avg-card-row svg {
+    display: block;
+    flex-shrink: 0;
+}
+
+#cm-avg-slots {
+    position: relative;
+}
+.cm-pill-btn.info-hover,
+.cm-pill-btn.info-hover *,
+.cm-pill-btn * {
+    border: none !important;
+    border-bottom: none !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    box-shadow: none !important;
+}
+
+#cm-global-chron-btn {
+    width: 104px !important;
+    min-width: 104px !important;
+    max-width: 104px !important;
+}
+
+.cm-chron-card-row {
+    box-sizing: border-box;
+    cursor: default;
+    user-select: none;
+}
+
+.cm-chron-card-row svg {
+    display: block;
+    flex-shrink: 0;
+}
+
+#cm-chron-slots {
+    position: relative;
+}
+
+/* Capsule Button Adjustments for Date Filter and Sync */
+#cm-sync-btn {
+    padding: 4px 14px !important;
+}
+
+#cm-date-toggle {
+    padding: 4px 12px !important;
+}
+
+#cm-date-toggle svg {
+    opacity: 0.65;
+    transition: opacity 0.15s ease;
+}
+
+#cm-date-toggle:hover svg {
+    opacity: 0.95;
+}
+
+/* Active visual feedback for #cm-date-toggle when filtered */
+#cm-date-toggle.active {
+    background: #36373d !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+
+#cm-date-toggle.active svg {
+    opacity: 1 !important;
+    stroke: #8ab4f0 !important;
+}
+
+#cm-date-toggle.active #cm-date-label {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+
+/* Active visual feedback for #cm-global-chron-btn when in Timeline mode */
+#cm-global-chron-btn.active {
+    background: #36373d !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+
+#cm-global-chron-btn.active svg {
+    opacity: 1 !important;
+    stroke: #8ab4f0 !important;
+}
+
+#cm-global-chron-btn.active .cm-chron-label {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}

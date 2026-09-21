@@ -12,6 +12,10 @@ export const CM_EXPLANATIONS = {
     tierDist: "Proportion of commits divided into priority tiers.\n\nWhy it matters: Helps leadership verify that engineering resources are balanced between high-value feature delivery and minor maintenance.\n\nIdeal state: A healthy mix, typically avoiding >50% minor unless in a dedicated stabilization phase.",
     rubricAxis: "Visual breakdown of each commit's score across the active rubric's dimensions.\n\nWhy it matters: Exposes the specific nature of a commit. A commit scoring high on Risk but low on Impact requires different QA attention than one high on Scope but low on Risk.",
     commitTypes: "Distribution of Conventional Commits tags extracted from subjects.\n\nWhy it matters: Quickly shows the mechanical focus of the team. A spike in 'fix' indicates quality issues, while 'feat' indicates product velocity.",
+        tierDistCycle: "Revolving Tier Distribution Profile.\n\nClick to cycle the scoring boundaries across the entire dashboard:\n• Tight Floor: Minor < 7 · Core 7–13.9 · Pivotal ≥ 14 (Shrinks failure tail, concentrates core)\n• High Bar: Minor < 8 · Core 8–14.9 · Pivotal ≥ 15 (Strict excellence baseline)\n• Asymmetric: Minor < 6.5 · Core 6.5–12.9 · Pivotal ≥ 13 (Low floor, wide corridor)",
+
+    avgTrendCycle: "Revolving Moving Average & Peak Filter.\n\nClick to cycle the trend analysis line between:\n• Off: Raw point scatter\n• Daily Peak: Highest commit score each day\n• 7-day, 14-day, 30-day: Rolling smoothed averages",
+
     scoreTrend: "Chronological progression of total commit scores.\n\nWhy it matters: Visualizes team velocity and the scale of continuous delivery. Identifies sprint crunches or dead zones.\n\nIdeal state: Consistent grouping of high-value commits without massive gaps.",
     heatmap: "Sub-services touched by each commit over time.\n\nWhy it matters: Highlights architectural bottlenecks. If a single service is touched by every commit, it represents tight coupling and high risk.\n\nIdeal state: Distributed touches indicating decoupled architecture.",
     

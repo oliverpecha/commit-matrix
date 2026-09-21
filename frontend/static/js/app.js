@@ -1,3 +1,4 @@
+import { TIER_DISTRIBUTIONS, TIER_DISTRIBUTION_MAP } from './constants/tiers.js?v=0.1.427';
 // v0.1.19
 import { hub } from "./core/eventHub.js?v=0.1.373";
 import "./core/appStateCtrl.js?v=0.1.373";
@@ -15,7 +16,10 @@ import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.373';
 import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.373';
 window.hub = hub;
 window.UI_STATE = UI_STATE;
-import { initGlobalTooltips } from './ui/tooltips.js';
+import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.427';
+import { initTierDistributionRevolving, initAvgSmoothingRevolving, initGlobalChronRevolving } from './ui/revolvingButton.js?v=0.1.427';
+initAvgSmoothingRevolving();
+initGlobalChronRevolving();
 initGlobalTooltips();
 window.triggerLedgerRefresh = () => hub.emit("ACTION:REFRESH_LEDGER");
 window.CM_CLOSE_IN_PROGRESS = window.CM_CLOSE_IN_PROGRESS || false;
@@ -26,6 +30,9 @@ hub.on("ACTION:CLOSE_TERMINAL", () => {
     hub.emit("FILTER:EXIT_INCOMING");
 });
 window.CM_LAST_GOOD_FILTER = { start: null, end: null, label: 'All history', mode: 'preset' };
+
+window.computeKPIs = computeKPIs;
+window.paintKPIs = paintKPIs;
 
 function computeKPIs(p) {
     let tot = 0, crit = 0, sig = 0, rout = 0;
@@ -271,6 +278,8 @@ window.addEventListener('load', async () => {
     }
 
     initDateFilter();
+    initTierDistributionRevolving();
+    initTrendAvgHoverPreview();
     attemptRender();
     if (repo) {
         const currentOwner = new URLSearchParams(window.location.search).get('owner') || (typeof owner !== "undefined" ? owner : window.MATRIX_OWNER || "local");
@@ -336,7 +345,7 @@ window.triggerSilentRefresh = async function(opts = {}) {
 // --- Standardized Soft-Routing Data Pipeline ---
 hub.on("CONTEXT_CHANGED", (payload) => {
     const cmTt = document.getElementById("cm-tt"); if (cmTt) cmTt.classList.remove("visible");
-    const infoTt = document.getElementById("info-tt"); if (infoTt) infoTt.classList.remove("visible");
+    const infoTt = document.getElementById("info-tt"); if (infoTt && (!window._cmHoverTarget || window._cmHoverTarget.id !== "cm-tier-cycle-btn")) infoTt.classList.remove("visible");
     const urlParams = new URLSearchParams(window.location.search);
     const o = (payload && payload.owner) || urlParams.get('owner') || 'Owner';
     const r = (payload && payload.repo) || urlParams.get('repo') || 'Repo';
@@ -424,6 +433,8 @@ function initDateFilter() {
     const endInput = document.getElementById('cm-date-end');
 
     const fmtShort = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const currentLbl = UI_STATE.dateFilter?.label || label?.textContent || 'All history';
+    toggle.classList.toggle('active', currentLbl !== 'All history');
     
     // Calculates reliable local 'YYYY-MM-DD' offset against UTC
     const getLocalYMD = () => {
@@ -589,10 +600,17 @@ function initDateFilter() {
     function applyFilter(start, end, labelText, mode) {
         const isCustom = mode === 'custom' || (!mode && (labelText.includes(' to ') || labelText.startsWith('From ') || labelText.startsWith('Until ')));
         UI_STATE.dateFilter = { start, end, label: labelText, mode: isCustom ? 'custom' : 'preset' };
-        window.CM_PRE_INCOMING_FILTER = null; // user override cancels pending restore
+        if (labelText !== 'Incoming') {
+            window.CM_LAST_ACTIVE_FILTER = { ...UI_STATE.dateFilter };
+        }
+        window.CM_PRE_INCOMING_FILTER = null;
         if (label) label.textContent = labelText;
         const toggle = document.getElementById('cm-date-toggle');
-        if (toggle) toggle.classList.remove('incoming-live');
+        if (toggle) {
+            toggle.classList.remove('incoming-live');
+            const isNonDefault = labelText && labelText !== 'All history';
+            toggle.classList.toggle('active', !!isNonDefault);
+        }
         menu.style.display = 'none';
         attemptRender();
     }
@@ -693,4 +711,53 @@ function initDateFilter() {
             applyCustomRange();
         });
     }
+}
+
+// --- Trend Moving Average Hover-Preview Handler ---
+function initTrendAvgHoverPreview() {
+    const trendBtn = document.querySelector('button[data-action="cycleAvg"][data-target="trend"]');
+    if (!trendBtn || trendBtn.__cmHoverBound) return;
+    trendBtn.__cmHoverBound = true;
+
+    const SVG_ICON = `<svg width="14" height="14" viewBox="0 0 32 32" fill="currentColor" style="display:inline-block; vertical-align:-2px; margin-right:4px;"><path d="M23,24c-3.5991,0-5.0293-4.1758-6.4126-8.2139C15.2764,11.9583,13.92,8,11,8a3.44,3.44,0,0,0-3.0532,2.3215L6.0513,9.6838C6.1016,9.5334,7.3218,6,11,6c4.3491,0,6.0122,4.8547,7.48,9.1379C19.6885,18.6667,20.83,22,23,22a3.44,3.44,0,0,0,3.0532-2.3215l1.8955.6377C27.8984,20.4666,26.6782,24,23,24Z"/><path d="M4,28V17H6V15H4V2H2V28a2,2,0,0,0,2,2H30V28Z"/><rect x="8" y="15" width="2" height="2"/><rect x="12" y="15" width="2" height="2"/><rect x="20" y="15" width="2" height="2"/><rect x="24" y="15" width="2" height="2"/><rect x="28" y="15" width="2" height="2"/></svg>`;
+
+    const modes = [
+        { key: 'peak', label: 'Daily Peak' },
+        { key: 'vol_weighted', label: 'Vol-Weighted' },
+        { key: 'rolling_7', label: '7-Day Smooth' },
+        { key: 'off', label: 'Average Off' }
+    ];
+
+    function getCurrentText() {
+        return trendBtn.textContent.trim();
+    }
+
+    function getNextLabel() {
+        const txt = getCurrentText();
+        const curIdx = modes.findIndex(m => m.label.toLowerCase() === txt.toLowerCase());
+        const nextIdx = curIdx >= 0 ? (curIdx + 1) % modes.length : 1;
+        return modes[nextIdx].label;
+    }
+
+    let savedText = null;
+
+    trendBtn.addEventListener('mouseenter', () => {
+        savedText = getCurrentText();
+        const nextLabel = getNextLabel();
+        trendBtn.innerHTML = `${SVG_ICON} ${nextLabel}`;
+    });
+
+    trendBtn.addEventListener('mouseleave', () => {
+        if (savedText) {
+            trendBtn.innerHTML = `${SVG_ICON} ${savedText}`;
+            savedText = null;
+        }
+    });
+
+    trendBtn.addEventListener('click', () => {
+        // Clear saved text on click so it resets to the new active state
+        setTimeout(() => {
+            savedText = getCurrentText();
+        }, 50);
+    });
 }

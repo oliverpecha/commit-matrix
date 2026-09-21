@@ -1,3 +1,4 @@
+import { getTierFromTotal } from '../constants/tiers.js?v=0.1.427';
 export function filterByDateBounds(commits, startTs, endTs) {
     if (!Array.isArray(commits) || !commits.length) return [];
     if (!startTs && !endTs) return commits;
@@ -67,15 +68,8 @@ export function processCommits(r) {
         c.lines_deleted = Number(c.lines_deleted ?? lc.deletions) || 0;
         c.h = c.h || lc.hash || "";
           
-        let rawTier = String(c.tier || lc.tier || "").toLowerCase();
-        if (rawTier.includes('critical') || rawTier.includes('pivotal')) c.tier = 'Pivotal';
-        else if (rawTier.includes('significant') || rawTier.includes('core')) c.tier = 'Core';
-        else if (rawTier.includes('routine') || rawTier.includes('minor')) c.tier = 'Minor';
-        else {
-            if (c.tot >= 13) c.tier = 'Pivotal';
-            else if (c.tot >= 8) c.tier = 'Core';
-            else c.tier = 'Minor';
-        }
+        // Dynamically compute tier policy from raw total score using active UI strategy
+        c.tier = getTierFromTotal(c.tot, (typeof UI_STATE !== 'undefined' && UI_STATE.tierDistribution) ? UI_STATE.tierDistribution : 'tight_floor');
 
         // Direct integer pass-through for dynamic touches (No Zero-Collapse)
         for (let k in lc) {
@@ -96,11 +90,8 @@ export function processCommits(r) {
         for (let k in lc) {
             if (k.length === 1 && k >= 'A' && k <= 'Z') { mathSum += (Number(lc[k]) || 0); hasAxes = true; }
         }
-        let mathTier = c.tot >= 13 ? 'Pivotal' : (c.tot >= 8 ? 'Core' : 'Minor');
         let anomalyReasons = [];
-        
         if (hasAxes && mathSum !== c.tot) anomalyReasons.push(`Sum of axes (${mathSum}) ≠ Total (${c.tot})`);
-        if (c.tier !== mathTier) anomalyReasons.push(`Tier '${c.tier}' conflicts with Total ${c.tot} (Expected ${mathTier})`);
         
         c.model = lc.model || 'gemini/gemini-2.5-flash-lite (Legacy)';
         if (anomalyReasons.length > 0) {

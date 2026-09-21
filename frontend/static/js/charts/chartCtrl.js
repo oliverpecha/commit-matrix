@@ -1,3 +1,5 @@
+import { TIER_DISTRIBUTION_MAP } from '../constants/tiers.js?v=0.1.427';
+import { AVG_MODES, initAvgSmoothingRevolving } from '../ui/revolvingButton.js?v=0.1.427';
 const ChartRegistry = new Map();
 import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.373';
 import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.373';
@@ -29,7 +31,10 @@ let charts = {};
 const safeDestroy = (chartInstance) => {
     if (!chartInstance) return;
     const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible');
-    const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible');
+    const infoTt = document.getElementById('info-tt'); 
+    if (infoTt && (!window._cmHoverTarget || window._cmHoverTarget.id !== 'cm-tier-cycle-btn')) {
+        infoTt.classList.remove('visible');
+    }
     
     // Extract canvas ID from the instance if available, to clear the registry
     if (chartInstance.canvas && chartInstance.canvas.id) {
@@ -327,25 +332,28 @@ export function renderTrendChart(rawC) {
         const top = ca.top, h = ca.bottom - top;
         const gSt = (v) => Math.max(0, Math.min(1, (y.getPixelForValue(v) - top) / h));
         
-        const s13 = gSt(12.5), s9 = gSt(8.5);
+        const activeDistKey = (typeof UI_STATE !== 'undefined' && UI_STATE.tierDistribution) ? UI_STATE.tierDistribution : 'tight_floor';
+        const dist = (typeof TIER_DISTRIBUTION_MAP !== 'undefined' && TIER_DISTRIBUTION_MAP[activeDistKey]) 
+            ? TIER_DISTRIBUTION_MAP[activeDistKey] 
+            : { pivotal: 14.0, core: 7.0 };
+
+        const sPiv = gSt(dist.pivotal - 0.5);
+        const sCor = gSt(dist.core - 0.5);
         const g = ctx.createLinearGradient(0, top, 0, ca.bottom);
         
         const cP = `rgba(212, 59, 198, ${alpha})`;
         const cC = `rgba(54, 184, 216, ${alpha})`;
-        const cM = `rgba(111, 129, 151, ${alpha})`;
         
+        // For the stroke line: subtle Minor tint; for area fill: fade to pure transparency
+        const cM = isF ? 'rgba(54, 184, 216, 0.0)' : `rgba(111, 129, 151, ${alpha * 0.75})`;
+        const cBase = isF ? 'rgba(0, 0, 0, 0.0)' : `rgba(111, 129, 151, ${alpha * 0.5})`;
+
         g.addColorStop(0, cP);
-        g.addColorStop(Math.max(0, s13 - 0.05), cP); 
-        g.addColorStop(Math.min(1, s13 + 0.1), cC);
-        g.addColorStop(Math.max(0, s9 - 0.05), cC);
-        
-        if (isF) {
-            g.addColorStop(Math.min(1, s9 + 0.1), `rgba(111, 129, 151, ${alpha * 0.4})`);
-            g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        } else {
-            g.addColorStop(Math.min(1, s9 + 0.1), cM);
-            g.addColorStop(1, cM);
-        }
+        g.addColorStop(Math.max(0, sPiv - 0.04), cP); 
+        g.addColorStop(Math.min(1, sPiv + 0.06), cC);
+        g.addColorStop(Math.max(0, sCor - 0.04), cC);
+        g.addColorStop(Math.min(1, sCor + 0.08), cM);
+        g.addColorStop(1, cBase);
         return g;
     };
 
@@ -533,8 +541,8 @@ export function updateKPIs(c) {
     setVal('cm-kr', counts.Minor, counts.Minor > 0 ? CM_COLORS.Minor : '#7a7874');
 
     let avgColor = CM_COLORS.Minor;
-    if (avgScore >= 13) avgColor = CM_COLORS.Pivotal;
-    else if (avgScore >= 9) avgColor = CM_COLORS.Core;
+    if (avgScore >= 14) avgColor = CM_COLORS.Pivotal;
+    else if (avgScore >= 7) avgColor = CM_COLORS.Core;
 
     setVal('cm-ka', avgScore.toFixed(1), totalCommits > 0 ? avgColor : '#7a7874');
 }
@@ -675,6 +683,11 @@ if (!window._cmChartBindingsReady) {
 
         const payload = window.CM_CURRENT_FILTERED_PAYLOAD || window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
 
+        if (action === 'cycleAvg' || action === 'toggleGlobalChron') {
+            // Handled exclusively by revolvingButton.js with FLIP animation
+            return;
+        }
+
         if (action === 'toggleGlobalChron') {
             UI_STATE.globalChron = !UI_STATE.globalChron;
             const isChron = UI_STATE.globalChron;
@@ -693,7 +706,9 @@ if (!window._cmChartBindingsReady) {
                     UI_STATE[avgKey] = isChron ? 2 : 0;
                     const ab = document.querySelector(`button[data-action="cycleAvg"][data-target="${t}"]`);
                     if (ab) { 
-                        ab.innerHTML = `<svg width="14" height="14" viewBox="0 0 32 32" fill="currentColor" style="display:inline-block; vertical-align:-2px; margin-right:4px;"><path d="M23,24c-3.5991,0-5.0293-4.1758-6.4126-8.2139C15.2764,11.9583,13.92,8,11,8a3.44,3.44,0,0,0-3.0532,2.3215L6.0513,9.6838C6.1016,9.5334,7.3218,6,11,6c4.3491,0,6.0122,4.8547,7.48,9.1379C19.6885,18.6667,20.83,22,23,22a3.44,3.44,0,0,0,3.0532-2.3215l1.8955.6377C27.8984,20.4666,26.6782,24,23,24Z"/><path d="M4,28V17H6V15H4V2H2V28a2,2,0,0,0,2,2H30V28Z"/><rect x="8" y="15" width="2" height="2"/><rect x="12" y="15" width="2" height="2"/><rect x="20" y="15" width="2" height="2"/><rect x="24" y="15" width="2" height="2"/><rect x="28" y="15" width="2" height="2"/></svg> ${avgModeNames[UI_STATE[avgKey]]}`; 
+                        const mode = AVG_MODES[UI_STATE[avgKey]] || AVG_MODES[2];
+                        const lbl = ab.querySelector('.cm-avg-label');
+                        if (lbl) lbl.textContent = mode.name;
                         ab.classList.toggle('active', UI_STATE[avgKey] !== 0); 
                     }
                 }
@@ -714,17 +729,6 @@ if (!window._cmChartBindingsReady) {
                 if (m.renderHeatmap) m.renderHeatmap(payload);
             }).catch(err => console.error("Failed to trigger heatmap redraw", err));
 
-        } else if (action === 'cycleAvg') {
-            const avgKey = target === 'trend' ? 'avgTrend' : 'avg' + target.charAt(0).toUpperCase() + target.slice(1);
-            UI_STATE[avgKey] = (UI_STATE[avgKey] + 1) % 6;
-            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 32 32" fill="currentColor" style="display:inline-block; vertical-align:-2px; margin-right:4px;"><path d="M23,24c-3.5991,0-5.0293-4.1758-6.4126-8.2139C15.2764,11.9583,13.92,8,11,8a3.44,3.44,0,0,0-3.0532,2.3215L6.0513,9.6838C6.1016,9.5334,7.3218,6,11,6c4.3491,0,6.0122,4.8547,7.48,9.1379C19.6885,18.6667,20.83,22,23,22a3.44,3.44,0,0,0,3.0532-2.3215l1.8955.6377C27.8984,20.4666,26.6782,24,23,24Z"/><path d="M4,28V17H6V15H4V2H2V28a2,2,0,0,0,2,2H30V28Z"/><rect x="8" y="15" width="2" height="2"/><rect x="12" y="15" width="2" height="2"/><rect x="20" y="15" width="2" height="2"/><rect x="24" y="15" width="2" height="2"/><rect x="28" y="15" width="2" height="2"/></svg> ${avgModeNames[UI_STATE[avgKey]]}`;
-            btn.classList.toggle('active', UI_STATE[avgKey] !== 0);
-
-            if (target === 'trend') renderTrendChart(payload);
-            else if (target === 'frag') renderFragChart(payload);
-            else if (target === 'churn') renderChurnChart(payload);
-            else if (target === 'blast') renderBlastChart(payload);
-            else renderRiskCharts(payload);
         }
     });
 }

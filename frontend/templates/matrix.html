@@ -74,9 +74,15 @@ CommitMatrix Console
 
   <div id="cm-repo-controls" class="cm-action-group" style="display:{% if invalid_repo or system_empty %}none{% else %}flex{% endif %}; gap:12px; align-items:center;">
     
-    <!-- Date Filter Dropdown & Custom Range Inputs -->
+    <!-- 1. Sync Button -->
+    <button id="cm-sync-btn" class="cm-pill-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span>Sync</span>
+    </button>
+
+    <!-- 2. Date Filter Dropdown & Custom Range Inputs -->
     <div style="position:relative; display:inline-block;">
-        <button id="cm-date-toggle" class="cm-fbtn" style="min-width:140px; justify-content:space-between;">
+        <button id="cm-date-toggle" class="cm-pill-btn" style="min-width:136px; justify-content:space-between;">
             <span style="display:inline-flex; align-items:center; gap:6px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                 <span id="cm-date-label">All history</span>
@@ -92,10 +98,11 @@ CommitMatrix Console
         
         <button id="cm-date-cancel-btn" style="background:none; border:none; color:#888; font-size:14px; cursor:pointer; padding:0 2px; line-height:1;" title="Cancel custom range">&times;</button>
     </div>
-        <button  id="cm-sync-btn" class="cm-fbtn">Sync</button>
-    <button id="cm-global-chron-btn" data-action="toggleGlobalChron" class="cm-fbtn active" style="width: 90px; padding: 4px 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px;"><circle cx="5" cy="12" r="4"/><path d="M5 9v3h1.5M9 12h1.5M13.5 12h1M17.5 12h3"/><circle cx="12" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="22" cy="12" r="1.5"/></svg> Timeline
-</button>
+
+    <!-- 3. Timeline/Index Revolving Pill Button -->
+    <button id="cm-global-chron-btn" data-action="toggleGlobalChron" class="cm-pill-btn active info-hover" data-key="globalChronCycle">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px; margin-right:4px;"><circle cx="5" cy="12" r="4"/><path d="M5 9v3h1.5M9 12h1.5M13.5 12h1M17.5 12h3"/><circle cx="12" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="22" cy="12" r="1.5"/></svg> <span class="cm-chron-label">Timeline</span>
+    </button>
   </div>
 </div>
 
@@ -128,7 +135,15 @@ CommitMatrix Console
   </div>
   <div class="cm-row" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);height:240px;">
     <div class="cm-card">
-      <div class="cm-card-hd"><div class="cm-card-title info-hover" data-key="tierDist">Tier Distribution</div></div>
+      <div class="cm-card-hd" style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="cm-card-title info-hover" data-key="tierDist">Tier Distribution</div>
+        <div style="display:flex;gap:8px;">
+          <button id="cm-tier-cycle-btn" class="cm-pill-btn active info-hover" data-key="tierDistCycle" data-action="cycleTierDist">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-1px; margin-right:2px;"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+            <span id="cm-tier-cycle-label">Tight Floor</span>
+          </button>
+        </div>
+      </div>
       <div class="cm-chart-body" style="display:flex; flex-direction:column;">
         <div style="flex:1; position:relative; min-height:0;"><canvas id="cm-c-tier"></canvas></div>
         <div style="display:flex; justify-content:center; gap:12px; padding-top:10px;">
