@@ -9,28 +9,28 @@ Security repositories operate under a uniquely asymmetric failure mode: vulnerab
 
 ## Scoring Axes
 
-### [L] Lock (1–3)
+### [L] Lock (1–4)
 Security posture delta — does this change tighten or loosen the security boundary? This is the only axis in CommitMatrix that scores direction: a score of 1 means the commit actively weakens security.
 
 - **1 (Loosened):** Auth check removed or bypassed, permission scope broadened silently, cryptographic algorithm downgraded, token validity extended, or rate limit loosened. The security boundary is weaker after this commit than before.
 - **2 (Unchanged):** Change does not meaningfully affect the security posture — a new internal utility, a refactor that preserves existing checks, or a UI change behind an authenticated route.
 - **3 (Tightened):** Change explicitly hardens the security boundary — adds a missing auth check, upgrades a cipher, enforces stricter scope validation, reduces token lifetime, or adds a missing rate limit.
 
-### [O] Origin (1–3)
+### [O] Origin (1–4)
 Input trust — are new inputs from untrusted sources properly validated, sanitized, and bounded before they reach security-critical paths?
 
 - **1 (Unvalidated):** New external input (request body, query param, header, webhook payload) accepted in a security-critical path with no sanitization, type coercion, or bounds checking. One crafted input can compromise the system.
 - **2 (Partial):** Basic type validation or length checks present but semantic validation absent — e.g., a JWT is verified for format but its claims are not checked against the expected scope and audience.
 - **3 (Trusted):** All new inputs are fully validated — type, range, format, and semantic correctness. Allowlist-based where possible. Input rejection returns a safe, non-leaking error response.
 
-### [C] Clarity (1–3)
+### [C] Clarity (1–4)
 Threat documentation — is the threat model and defense rationale explained? Security decisions made without documented reasoning cannot be audited, and a future maintainer who doesn't understand the threat may inadvertently reverse it.
 
 - **1 (Undocumented):** No commit body. The security change is made with no explanation of what attack it defends against, what the risk was, or why this specific implementation was chosen.
 - **2 (Partial):** Subject line communicates that a security change was made ("fix(auth): enforce scope check on token validation") but no body explains the threat vector or the decision rationale.
 - **3 (Threat-Modeled):** Body explicitly names the attack vector or vulnerability being addressed, explains why the chosen approach mitigates it, and notes any residual risk or known limitations of the fix.
 
-### [K] Keel (1–3)
+### [K] Keel (1–4)
 Foundational stability — how load-bearing is the component being changed? The deeper a security primitive sits in the stack, the more catastrophic a mistake becomes.
 
 - **1 (Peripheral):** Change affects a non-critical, optional, or easily isolated security component — a utility helper, a logging decorator, an optional feature flag behind auth.
@@ -59,8 +59,7 @@ Calculate `tot` as L + O + C + K. Calculate `score_pct` as `round(tot / 16 * 100
 |---|---|---|
 | 13–16 | 81–100 | `"Pivotal"` |
 | 8–12 | 50–75 | `"Core"` |
-| 4–7 | 25–43 | `"Minor"` |
-| 3 | 25 | `"Trivial"` |
+| 4–7 | 25–44 | `"Minor"` |
 
 ## Scoring Contract
 
@@ -70,7 +69,7 @@ Calculate `tot` as L + O + C + K. Calculate `score_pct` as `round(tot / 16 * 100
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
-- At least one `touches_*` boolean must be present
+- At least one `touches_*` key must be present, scoring a 0-4 integer intensity
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 

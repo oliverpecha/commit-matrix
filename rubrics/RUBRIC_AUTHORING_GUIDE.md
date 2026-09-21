@@ -19,13 +19,13 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 
 | Field | Type | Constraint |
 |---|---|---|
-| One key per axis | integer | Value must be 1, 2, or 3 — no floats, no 0, no 4 |
+| One key per axis | integer | Value must be 1, 2, 3, or 4 — no floats, no 0, no 5 |
 | `tot` | integer | Must equal the exact sum of all axis scores |
-| `score_pct` | float | Must equal `round(tot / max_score * 100, 1)` where `max_score = axes × 3` |
-| `tier` | string | Must be `"Pivotal"` / `"Core"` / `"Minor"`  |
+| `score_pct` | float | Must equal `round(tot / max_score * 100, 1)` where `max_score = axes × 4` |
+| `tier` | string | Must be `"Pivotal"` / `"Core"` / `"Minor"` |
 | `danger_flag` | boolean | Derived from rubric-specific axis combination logic |
 | `debt_direction` | string | Must be `"increases"` / `"neutral"` / `"reduces"` |
-| At least one `touches_*` | boolean | Domain-specific; rubric defines which domains to track |
+| At least one `touches_*` | integer | Intensity from 0 to 4 (0 = untouched, 4 = critical/blast radius) |
 
 ### Why `score_pct` Exists
 
@@ -33,27 +33,27 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 
 ### Tier Thresholds
 
-**4-axis rubric (max_score = 12):**
+**4-axis rubric (max_score = 16):**
 
 | tot | score_pct | tier |
 |---|---|---|
-| 10–12 | 83–100 | `"Pivotal"` |
-| 7–9 | 58–75 | `"Core"` |
-| 4–6 | 33–50 | `"Minor"` |
+| 13–16 | 81–100 | `"Pivotal"` |
+| 8–12 | 50–75 | `"Core"` |
+| 4–7 | 25–44 | `"Minor"` |
 
-**5-axis rubric (max_score = 15):**
+**5-axis rubric (max_score = 20):**
 
 | tot | score_pct | tier |
 |---|---|---|
-| 13–15 | 87–100 | `"Pivotal"` |
-| 9–12 | 60–80 | `"Core"` |
-| 5–8 | 33–53 | `"Minor"` |
+| 16–20 | 80–100 | `"Pivotal"` |
+| 10–15 | 50–75 | `"Core"` |
+| 5–9 | 25–45 | `"Minor"` |
 
 ### Axis Count
 
 - Minimum: **3 axes** | Maximum: **5 axes**
 - Count is derived from the number of genuinely orthogonal measurement dimensions the project type requires — never from word length
-- The rubric header must declare `Axes: N | max_score: N*3`
+- The rubric header must declare `Axes: N | max_score: N*4`
 
 ---
 
@@ -168,9 +168,8 @@ Target distribution for a healthy, active repo:
 | Tier | Target % |
 |---|---|
 | Pivotal | 15–25% |
-| Core | 35–45% |
+| Core | 45–55% |
 | Minor | 25–35% |
-| Trivial | 5–15% |
 
 If your axis definitions do not seem likely to produce this distribution, revisit the 1/2/3 thresholds before proceeding.
 
@@ -186,7 +185,7 @@ Write exactly three fixture scenarios. Each is a bundle of:
 
 **Required fixture types:**
 
-**Fixture 1 — Floor:** Most trivial commit possible. Must produce `tot: 3` or `tot: 4`. If it scores higher, axis floor definitions are too strict.
+**Fixture 1 — Floor:** Most minimal commit possible. Must produce `tot: 4` (all axes at 1). If it scores higher, axis floor definitions are too strict.
 
 **Fixture 2 — Typical:** Representative mid-complexity commit. Should score in the Core tier. Expected output should feel unsurprising.
 
@@ -202,7 +201,7 @@ Standard file structure:
 # CommitMatrix Telemetry: [WORD] Scoring Engine
 # Profile: [Project Type Name]
 # Acronym: [true / false]
-# Axes: [N] | max_score: [N*3]
+# Axes: [N] | max_score: [N*4]
 # Colors: [Comma separated hex codes]
 # Overlay: [Comma separated acronym overlay texts]
 # Best for: [comma-separated concrete repo type examples]
@@ -264,7 +263,7 @@ Calculate `tot` as [Axis1] + [Axis2] + ... Calculate `score_pct` as `round(tot /
 - [ ] Calibration estimate suggests a reasonable distribution (Step 9)
 - [ ] All three validation fixture types present and complete
 - [ ] Fixture 3 (adversarial) triggers `danger_flag: true`
-- [ ] Floor fixture produces `tot` of 3 or 4
+- [ ] Floor fixture produces `tot` of 4 (or 5 for 5-axis)
 
 ---
 

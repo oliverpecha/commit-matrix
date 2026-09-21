@@ -9,7 +9,7 @@ calibration/
 ├── calibrate.py              # Harness entry point
 ├── fixtures/
 │   ├── grid/
-│   │   ├── floor/            # Trivial commit — expects tot 3-4
+│   │   ├── floor/            # Floor commit — expects tot 4
 │   │   ├── typical/          # Representative mid-complexity commit
 │   │   └── adversarial/      # Looks safe, conceals danger_flag
 │   ├── plan/  (same structure)
@@ -69,7 +69,7 @@ A rubric **passes** for a given model if:
 1. All axis scores are integers 1, 2, 3, or 4 — no floats, no 0, no 5
 2. `tot` equals exact sum of axis scores
 3. `score_pct` equals `round(tot / max_score * 100, 1)` where `max_score = axes × 3`
-4. `tier` is one of: `Pivotal` / `Core` / `Minor` / `Trivial`
+4. `tier` is one of: `Pivotal` / `Core` / `Minor`
 5. `danger_flag` is a boolean
 6. `debt_direction` is one of: `increases` / `neutral` / `reduces`
 7. At least one `touches_*` boolean is present

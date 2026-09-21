@@ -9,28 +9,28 @@ Data and ML repositories have a uniquely silent failure mode: a filter condition
 
 ## Scoring Axes
 
-### [F] Fidelity (1–3)
+### [F] Fidelity (1–4)
 Output correctness — does this change preserve, verify, or threaten the accuracy of the data this pipeline produces?
 
 - **1 (Unverified):** Transformation logic changed with no test asserting output correctness, no data validation step, and no before/after comparison. The output may be wrong and nothing will catch it.
 - **2 (Assumed):** Change follows established patterns and is likely correct, but no explicit assertion validates the output distribution, schema, or value ranges against expected bounds.
 - **3 (Validated):** Change includes or updates a test asserting output correctness — either a unit test on the transformation logic, a schema validation step, or a statistical assertion on output distribution (e.g., no nulls in required columns, value range within expected bounds).
 
-### [L] Lineage (1–3)
+### [L] Lineage (1–4)
 Reproducibility and traceability — can the output of this pipeline be recreated exactly, and can its provenance be audited?
 
 - **1 (Unanchored):** Training script or transformation changed with no version pin on the input data, no random seed, no snapshot reference, and no record of what changed. This result cannot be reproduced next week.
 - **2 (Partial):** Some reproducibility anchors present — dependencies versioned but not input data, or random seed set but data snapshot not referenced. Reproduction is possible with effort.
 - **3 (Traceable):** Change explicitly anchors all sources of non-determinism — input data version or snapshot, dependency pins, random seeds, and a commit body that describes what changed and why. This run can be reproduced exactly.
 
-### [U] Upstream (1–3)
+### [U] Upstream (1–4)
 Consumer blast radius — how many downstream systems, models, dashboards, or services depend on what this pipeline produces?
 
 - **1 (Isolated):** Output is consumed by a single internal job or a development-only artifact. A defect here affects one process.
 - **2 (Shared):** Output feeds 2–3 downstream consumers — a model, a dashboard, and an API, for example. A defect here degrades multiple systems.
 - **3 (Broad):** Output feeds many downstream consumers — a production model serving live traffic, multiple analytics dashboards, and external API consumers. A defect here corrupts every system that trusts this data.
 
-### [X] Exposure (1–3)
+### [X] Exposure (1–4)
 Validation coverage — are bad inputs caught before they corrupt outputs? Data pipelines are only as trustworthy as their input gates.
 
 - **1 (Open):** No input validation, schema check, or data quality assertion. Malformed, null-heavy, or out-of-range inputs flow through the pipeline and corrupt outputs silently.
@@ -59,8 +59,7 @@ Calculate `tot` as F + L + U + X. Calculate `score_pct` as `round(tot / 16 * 100
 |---|---|---|
 | 13–16 | 81–100 | `"Pivotal"` |
 | 8–12 | 50–75 | `"Core"` |
-| 4–7 | 25–43 | `"Minor"` |
-| 3 | 25 | `"Trivial"` |
+| 4–7 | 25–44 | `"Minor"` |
 
 ## Scoring Contract
 
@@ -70,7 +69,7 @@ Calculate `tot` as F + L + U + X. Calculate `score_pct` as `round(tot / 16 * 100
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
-- At least one `touches_*` boolean must be present
+- At least one `touches_*` key must be present, scoring a 0-4 integer intensity
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 

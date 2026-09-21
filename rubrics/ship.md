@@ -9,28 +9,28 @@ Mobile repositories operate under a uniquely constrained deployment model — yo
 
 ## Scoring Axes
 
-### [S] Store (1–3)
+### [S] Store (1–4)
 App store compliance risk — does this change affect review guidelines, permission declarations, binary compatibility, or distribution constraints?
 
 - **1 (Safe):** Change has no interaction with app store review criteria — pure business logic, internal utility, or UI change that does not affect permissions, entitlements, or binary metadata.
 - **2 (Adjacent):** Change touches something that reviewers may scrutinize — a new third-party SDK, a UI pattern near permission prompts, or a change to app metadata — but does not violate any explicit guideline.
 - **3 (Review Risk):** Change modifies permission declarations, entitlements, payment flows, content rating relevant features, or patterns explicitly prohibited or restricted by the app store review guidelines. Rejection risk is real.
 
-### [H] Habitat (1–3)
+### [H] Habitat (1–4)
 OS and device compatibility — is this change safe across the entire supported version range and device matrix?
 
 - **1 (Universal):** Change uses only APIs available on the minimum supported OS version, has no device-specific assumptions, and behaves consistently across screen sizes and hardware configurations.
 - **2 (Guarded):** Change uses a newer API but is appropriately guarded by an OS version check. Or: change has a known device-specific behavior difference that is documented and handled.
 - **3 (Fragile):** Change uses APIs without version guards, assumes specific screen dimensions or hardware capabilities, or has untested behavior on the minimum supported OS version. Could crash or silently fail on older devices.
 
-### [I] Intent (1–3)
+### [I] Intent (1–4)
 Platform constraint documentation — are OS-specific decisions, workarounds, and compatibility choices explained? These decisions are almost never documented and become impossible to revisit safely.
 
 - **1 (Opaque):** No commit body. Platform-specific code added with no explanation of the underlying OS constraint, API limitation, or device quirk it addresses. Future engineers will not know whether to keep or remove this.
 - **2 (Labeled):** Commit subject communicates what platform concern was addressed ("fix(ios): guard Camera API behind iOS 16 check") but the body does not explain why the constraint exists or what happens on older versions.
 - **3 (Documented):** Body explains the platform constraint — the OS version that introduced the API, the device behavior being worked around, the fallback behavior on unsupported versions, and any known edge cases.
 
-### [P] Patch (1–3)
+### [P] Patch (1–4)
 Patchability — if this change introduces a defect, how quickly and cleanly can it be fixed given mobile deployment constraints?
 
 - **1 (Release-locked):** Defect requires a full app store release to fix — binary change, native module update, or entitlement modification. Fix is 1–3 days away at minimum, and store rejection could extend that. Users are stuck.
@@ -59,8 +59,7 @@ Calculate `tot` as S + H + I + P. Calculate `score_pct` as `round(tot / 16 * 100
 |---|---|---|
 | 13–16 | 81–100 | `"Pivotal"` |
 | 8–12 | 50–75 | `"Core"` |
-| 4–7 | 25–43 | `"Minor"` |
-| 3 | 25 | `"Trivial"` |
+| 4–7 | 25–44 | `"Minor"` |
 
 ## Scoring Contract
 
@@ -70,7 +69,7 @@ Calculate `tot` as S + H + I + P. Calculate `score_pct` as `round(tot / 16 * 100
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
-- At least one `touches_*` boolean must be present
+- At least one `touches_*` key must be present, scoring a 0-4 integer intensity
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 

@@ -71,7 +71,7 @@ class Spinner:
 
 # ── JSON contract validator ───────────────────────────────────────────────────
 REQUIRED_FIELDS = {"tot", "score_pct", "tier", "danger_flag", "debt_direction"}
-VALID_TIERS     = {"Pivotal", "Core", "Minor", "Trivial"}
+VALID_TIERS     = {"Pivotal", "Core", "Minor"}
 VALID_DEBT_DIRS = {"increases", "neutral", "reduces"}
 
 DEBT_AXIS_CONSISTENCY = {

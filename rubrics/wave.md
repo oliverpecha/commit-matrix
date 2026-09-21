@@ -9,28 +9,28 @@ Frontend repositories render directly in front of every user simultaneously. A s
 
 ## Scoring Axes
 
-### [W] Width (1–3)
+### [W] Width (1–4)
 How much of the UI surface is affected — measures the scope of impact from a single isolated component to the global application experience.
 
 - **1 (Local):** Change affects a single leaf-level component or a route-specific file. One screen or section is affected. A bug here is isolated to a single view.
 - **2 (Shared):** Change affects a reusable component, a layout wrapper, shared state, a utility hook, or a styling token used across multiple views. A bug here degrades multiple screens.
 - **3 (Global):** Change affects the design system foundation, global state management, routing logic, authentication views, or app-level configuration. Every user on every page is affected.
 
-### [A] Access (1–3)
+### [A] Access (1–4)
 Accessibility and UX integrity — does this change serve all users, including those with disabilities, on constrained devices, or using assistive technology?
 
 - **1 (Regressive):** Change removes or ignores accessibility attributes (aria-*, role, label), introduces keyboard traps, breaks focus management, uses color alone to convey meaning, or reduces touch target sizes below 44px. Or: layout change creates overflow or broken states on mobile viewports.
 - **2 (Neutral):** Change does not significantly improve or degrade accessibility or UX integrity. Standard feature work that follows existing patterns without explicit a11y consideration.
 - **3 (Intentional):** Change explicitly improves accessibility — adds aria attributes, improves focus flow, increases contrast ratio, adds skip navigation — or includes responsive behavior tested across viewport sizes.
 
-### [V] Voice (1–3)
+### [V] Voice (1–4)
 Clarity of design rationale — is the UX reasoning documented? Frontend commits are often the least documented; why a change was made is lost the moment it merges.
 
 - **1 (Silent):** No commit body. Change is a visual diff with no explanation of design intent, user story, or UX rationale. The diff shows what pixels changed; nothing explains why.
 - **2 (Labeled):** Conventional commit prefix and a clear subject line ("fix(nav): collapse mobile menu on route change"). The what is clear but the design rationale is absent.
 - **3 (Reasoned):** Body includes the user-facing motivation, references a design spec, issue, or Figma link, or explains the tradeoff between competing approaches.
 
-### [E] Economy (1–3)
+### [E] Economy (1–4)
 Debt direction — does this commit use the design system correctly, or does it accumulate hardcoded values and duplicated logic that future changes will have to untangle?
 
 - **1 (Wasteful):** Hardcodes color, spacing, or typography values that should be design tokens; duplicates component logic that should be extracted; removes or ignores a11y attributes under time pressure.
@@ -63,8 +63,7 @@ Calculate `tot` as W + A + V + E. Calculate `score_pct` as `round(tot / 16 * 100
 |---|---|---|
 | 13–16 | 81–100 | `"Pivotal"` |
 | 8–12 | 50–75 | `"Core"` |
-| 4–7 | 25–43 | `"Minor"` |
-| 3 | 25 | `"Trivial"` |
+| 4–7 | 25–44 | `"Minor"` |
 
 ## Scoring Contract
 
@@ -74,7 +73,7 @@ Calculate `tot` as W + A + V + E. Calculate `score_pct` as `round(tot / 16 * 100
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
-- At least one `touches_*` boolean must be present
+- At least one `touches_*` key must be present, scoring a 0-4 integer intensity
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 

@@ -9,28 +9,28 @@ Infrastructure repositories are the substrate everything else runs on. When they
 
 ## Scoring Axes
 
-### [G] Guard (1–3)
+### [G] Guard (1–4)
 Defensive quality — does this change protect against failure? In infrastructure, an unguarded mutation can silently break entire service stacks.
 
 - **1 (Exposed):** Raw config mutation, service restart, or destructive operation with no validation, rollback path, health check, or fallback. A failure here fails silently and fully.
 - **2 (Partial):** Change includes some defensive pattern — a conditional check, an `|| exit 1` guard, a commented rollback note, or a test stub — but not comprehensively. Happy path is covered; failure path is not.
 - **3 (Defended):** Change is fully guarded. Includes at minimum one of: idempotency guarantee, explicit error handling, health check or validation step, rollback mechanism, or equivalent safety net appropriate to the change type.
 
-### [R] Reach (1–3)
+### [R] Reach (1–4)
 Blast radius — how many independent service or infrastructure domains does this change affect? Cross-referenced against the provided ARCHITECTURE CONTEXT.
 
 - **1 (Contained):** Change affects a single isolated component — one script, one config block, one service's Dockerfile. A failure here is local and bounded.
 - **2 (Shared):** Change touches 2–3 functional domains or a shared utility that multiple services depend on. A failure here degrades multiple paths.
 - **3 (Cross-cutting):** Change affects core infrastructure topology — compose networking, routing logic, secret/env management, proxy layer, or anything that all services depend on. A failure here can bring down the entire stack.
 
-### [I] Intent (1–3)
+### [I] Intent (1–4)
 Clarity of operational reasoning — does the commit explain why this change was made? Infrastructure commits without intent documentation become impossible to audit during incidents.
 
 - **1 (Opaque):** No commit body. Subject describes the diff mechanically ("update config", "fix service"). The operational trigger is absent. An engineer debugging at 2am gets nothing from this.
 - **2 (Partial):** Conventional-commit formatted subject with a meaningful description. Body is absent or minimal, but the subject alone conveys the general motivation.
 - **3 (Documented):** Subject is precise and body explains the operational reason — what broke, what constraint was hit, what the intended behavior is. References an issue, ticket, or prior symptom if applicable.
 
-### [D] Debt (1–3)
+### [D] Debt (1–4)
 Net maintainability direction — does this commit move the infrastructure toward or away from sustainability? This axis can reward positive motion.
 
 - **1 (Accumulates):** Introduces hardcoded values, copy-pasted blocks, commented-out junk, workarounds that bypass the proper system, or undocumented magic numbers. Future maintainers will pay for this.
@@ -63,8 +63,7 @@ Calculate `tot` as G + R + I + D. Calculate `score_pct` as `round(tot / 16 * 100
 |---|---|---|
 | 13–16 | 81–100 | `"Pivotal"` |
 | 8–12 | 50–75 | `"Core"` |
-| 4–7 | 25–43 | `"Minor"` |
-| 3 | 25 | `"Trivial"` |
+| 4–7 | 25–44 | `"Minor"` |
 
 ## Scoring Contract
 
@@ -74,7 +73,7 @@ Calculate `tot` as G + R + I + D. Calculate `score_pct` as `round(tot / 16 * 100
 - `tier` must match the threshold table above
 - `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
-- At least one `touches_*` boolean must be present
+- At least one `touches_*` key must be present, scoring a 0-4 integer intensity
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 
