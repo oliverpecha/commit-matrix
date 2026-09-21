@@ -1,8 +1,59 @@
 import json
 import logging
+import os
 import re
 
 logger = logging.getLogger(__name__)
+
+# =========================================================================
+# Tier Strategy Configuration
+#
+# Option 1: Tight Floor (Recommended / Active Default)
+#   Minor:   [4, 7)   — Shrinks failure to bottom ~8% (scores 4, 5, 6).
+#   Core:    [7, 14)  — Broad cluster holding ~76–84% of standard performers.
+#   Pivotal: [14, 20] — High-effort tier reserved for top ~8–16%.
+#
+# Option 2: High Bar (Strict Excellence)
+#   Minor:   [4, 8)   — Enforces 8 as hard baseline (~15% unachievers).
+#   Core:    [8, 15)  — Bulk performance (~76–81%).
+#   Pivotal: [15, 20] — Restricts top tier to elite top ~4–9%.
+#
+# Option 3: Asymmetric Funnel
+#   Minor:   [4, 6.5) — True non-participation bucket (~5–6%).
+#   Core:    [6.5, 13) — Wide middle corridor (~69–79%).
+#   Pivotal: [13, 20] — Maintains original 13 cutoff while lifting normal output.
+# =========================================================================
+TIER_DISTRIBUTIONS = {
+    "tight_floor": {
+        "name": "Tight Floor",
+        "pivotal": 14.0,
+        "core": 7.0,
+        "comment": "Minor: < 7, Core: [7, 14), Pivotal: >= 14"
+    },
+    "high_bar": {
+        "name": "High Bar",
+        "pivotal": 15.0,
+        "core": 8.0,
+        "comment": "Minor: < 8, Core: [8, 15), Pivotal: >= 15"
+    },
+    "asymmetric": {
+        "name": "Asymmetric",
+        "pivotal": 13.0,
+        "core": 6.5,
+        "comment": "Minor: < 6.5, Core: [6.5, 13), Pivotal: >= 13"
+    }
+}
+
+DEFAULT_TIER_DISTRIBUTION = os.environ.get("TIER_DISTRIBUTION", "tight_floor").strip().lower()
+
+def compute_tier(tot: float, strategy_name: str = None) -> str:
+    key = (strategy_name or DEFAULT_TIER_DISTRIBUTION).lower()
+    strategy = TIER_DISTRIBUTIONS.get(key, TIER_DISTRIBUTIONS["tight_floor"])
+    if tot >= strategy["pivotal"]:
+        return "Pivotal"
+    elif tot >= strategy["core"]:
+        return "Core"
+    return "Minor"
 
 class RubricSpec:
     def __init__(self, sys_prompt: str):
@@ -13,27 +64,39 @@ class RubricSpec:
         if not self.axes_keys:
             self.axes_keys = ["C", "O", "R", "D"]
             
-        self.max_score = self.axis_count * 3
+        self.max_score = self.axis_count * 4
         self.danger_flag_logic = self._parse_danger_flag(sys_prompt)
         
         version_match = re.search(r'\*\*Version:\*\*\s*([\d\.]+)', sys_prompt, re.IGNORECASE)
         self.version = version_match.group(1) if version_match else "1.0"
         
     def _parse_danger_flag(self, text):
-        match = re.search(r'`?danger_flag:\s*true`?\s*if\s*([A-Z])\s*=\s*(\d+)(?:\s*AND\s*([A-Z])\s*=\s*(\d+))?', text, re.IGNORECASE)
+        match = re.search(r'`?danger_flag:\s*true`?\s*if\s*([A-Z])\s*(=|>=)\s*(\d+)(?:\s*AND\s*([A-Z])\s*(=|<=)\s*(\d+))?', text, re.IGNORECASE)
         if match:
-            conds = [(match.group(1).upper(), int(match.group(2)))]
-            if match.group(3):
-                conds.append((match.group(3).upper(), int(match.group(4))))
+            conds = [(match.group(1).upper(), match.group(2), int(match.group(3)))]
+            if match.group(4):
+                conds.append((match.group(4).upper(), match.group(5), int(match.group(6))))
             return conds
         return []
         
     def compute_danger(self, axes_values):
         if not self.danger_flag_logic:
             return False
-        for axis, val in self.danger_flag_logic:
-            if axes_values.get(axis) != val:
+        for axis, op, val in self.danger_flag_logic:
+            actual = axes_values.get(axis)
+            if actual is None:
                 return False
+            if op == ">=" and not (actual >= val):
+                return False
+            elif op == "<=" and not (actual <= val):
+                return False
+            elif op == "=":
+                if val >= 3 and actual < val:
+                    return False
+                elif val <= 1 and actual > val:
+                    return False
+                elif 1 < val < 3 and actual != val:
+                    return False
         return True
 
 def parse_and_validate(raw_content: str, rubric_spec: RubricSpec) -> dict:
@@ -98,19 +161,8 @@ def parse_and_validate(raw_content: str, rubric_spec: RubricSpec) -> dict:
     tot = sum(axes.values())
     score_pct = round(tot / rubric_spec.max_score * 100, 1)
     
-    # Fully application-computed tiers, never trusting model
-    if rubric_spec.axis_count == 4:
-        if tot >= 10: tier = "Pivotal"
-        elif tot >= 7: tier = "Core"
-        else: tier = "Minor"
-    elif rubric_spec.axis_count == 5:
-        if tot >= 13: tier = "Pivotal"
-        elif tot >= 9: tier = "Core"
-        else: tier = "Minor"
-    else:
-        if tot >= 8: tier = "Pivotal"
-        elif tot >= 6: tier = "Core"
-        else: tier = "Minor"
+    # Fully application-computed tiers using configurable strategy (default: tight_floor)
+    tier = compute_tier(tot)
         
     if tier == "Pivotal": tier_label = "🔺 PIVOTAL"
     elif tier == "Core": tier_label = "🟦 CORE"

@@ -59,24 +59,29 @@ def generate_mock_axes(axes_keys):
     # 1. State Transitions (Markov Chain)
     current = _SCORE_STATE["phase"]
     if current == "minor":
-        _SCORE_STATE["phase"] = random.choices(["minor", "core"], weights=[90, 10])[0]
+        # Transition out of minor faster into standard core delivery
+        _SCORE_STATE["phase"] = random.choices(["minor", "core"], weights=[60, 40])[0]
     elif current == "core":
-        _SCORE_STATE["phase"] = random.choices(["minor", "core", "pivotal"], weights=[20, 70, 10])[0]
-    else: # Pivotal states instantly exhaust back to normal work
-        _SCORE_STATE["phase"] = random.choices(["minor", "core"], weights=[80, 20])[0]
+        # Healthy flow: 20% minor chore, 65% sustained core, 15% major architectural spike
+        _SCORE_STATE["phase"] = random.choices(["minor", "core", "pivotal"], weights=[20, 65, 15])[0]
+    else: # pivotal: allow 20% chance to sustain a mini-streak before exhausting back
+        _SCORE_STATE["phase"] = random.choices(["core", "pivotal", "minor"], weights=[70, 20, 10])[0]
         
     phase = _SCORE_STATE["phase"]
     axes = {}
     for k in axes_keys:
         if phase == "minor":
-            axes[k] = random.choices([1, 2, 3, 4], weights=[60, 35, 5, 0])[0]
+            # Baseline small tasks: mostly 1s and 2s (tot: 4–7)
+            axes[k] = random.choices([1, 2, 3, 4], weights=[45, 45, 10, 0])[0]
         elif phase == "core":
-            axes[k] = random.choices([1, 2, 3, 4], weights=[10, 40, 40, 10])[0]
+            # Solid feature delivery: mostly 2s and 3s with occasional 4 (tot: 8–13)
+            axes[k] = random.choices([1, 2, 3, 4], weights=[5, 35, 45, 15])[0]
         else: # pivotal
-            axes[k] = random.choices([1, 2, 3, 4], weights=[0, 10, 40, 50])[0]
+            # Architectural leaps: high concentration of 3s and 4s (tot: 14–16)
+            axes[k] = random.choices([1, 2, 3, 4], weights=[0, 0, 35, 65])[0]
             
     # Introduce 10% chance for random noise to break uniformity
     if random.random() < 0.1:
-        axes[random.choice(axes_keys)] = random.randint(1, 3)
+        axes[random.choice(axes_keys)] = random.randint(1, 4)
         
     return axes
