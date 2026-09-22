@@ -1,4 +1,4 @@
-import { hub } from "../core/eventHub.js?v=0.1.373";
+import { hub } from "../core/eventHub.js?v=0.1.427";
 const UI_THEME = window.UI_THEME;
 
 const showScrollableModal = (title, contentText, color = "#a38b4f") => {
@@ -386,8 +386,111 @@ const initDashboard = async () => {
     }
 };
 
+// --- Layout Diagnostics Suite ---
+export function cmDiagnoseLayout() {
+    console.group("%c🔍 [CommitMatrix Layout Diagnostics]", "color:#ffb84d; font-size:13px; font-weight:bold;");
+    try {
+        const doc = document.documentElement;
+        const body = document.body;
+        const wrap = document.getElementById("main-dashboard-wrap");
+        const ledger = document.getElementById("cm-ledger-card");
+        const tblWrap = document.querySelector(".cm-tbl-wrap");
+        const table = document.getElementById("cm-table");
+        const sentinel = document.getElementById("cm-table-sentinel");
+
+        const scrollY = window.scrollY || window.pageYOffset || 0;
+        const ledgerRect = ledger ? ledger.getBoundingClientRect() : null;
+        const ledgerPageBottom = ledgerRect ? Math.round(ledgerRect.bottom + scrollY) : 0;
+        const docScrollHeight = doc.scrollHeight;
+        const trailingGap = Math.round(docScrollHeight - ledgerPageBottom);
+
+        console.log("%c1. Global Scroll Dimensions:", "color:#4f98a3; font-weight:bold;", {
+            "window.innerHeight": window.innerHeight,
+            "window.scrollY": Math.round(scrollY),
+            "doc.scrollHeight": docScrollHeight,
+            "body.scrollHeight": body.scrollHeight,
+            "ledgerPageBottom": ledgerPageBottom,
+            "trailingExcessGapPx": trailingGap
+        });
+
+        const inspectBox = (el, label) => {
+            if (!el) return { target: label, exists: false };
+            const r = el.getBoundingClientRect();
+            const cs = window.getComputedStyle(el);
+            return {
+                target: label,
+                top: Math.round(r.top),
+                bottom: Math.round(r.bottom),
+                pageBottom: Math.round(r.bottom + scrollY),
+                height: Math.round(r.height),
+                offsetHeight: el.offsetHeight,
+                scrollHeight: el.scrollHeight,
+                display: cs.display,
+                position: cs.position,
+                overflowY: cs.overflowY,
+                minHeight: cs.minHeight,
+                paddingBottom: cs.paddingBottom,
+                marginBottom: cs.marginBottom
+            };
+        };
+
+        console.table([
+            inspectBox(doc, "<html>"),
+            inspectBox(body, "<body>"),
+            inspectBox(wrap, "#main-dashboard-wrap"),
+            inspectBox(ledger, "#cm-ledger-card"),
+            inspectBox(tblWrap, ".cm-tbl-wrap"),
+            inspectBox(table, "#cm-table"),
+            inspectBox(sentinel, "#cm-table-sentinel")
+        ]);
+
+        // Culprit Scanner: Find all non-fixed elements extending past the bottom of #cm-ledger-card
+        const culprits = [];
+        document.querySelectorAll("body *").forEach(el => {
+            if (!el.getBoundingClientRect) return;
+            const cs = window.getComputedStyle(el);
+            if (cs.display === "none" || cs.visibility === "hidden" || cs.position === "fixed") return;
+            const r = el.getBoundingClientRect();
+            const pb = Math.round(r.bottom + scrollY);
+            if (pb > ledgerPageBottom + 2) {
+                const sel = el.id ? `#${el.id}` : (el.className && typeof el.className === "string" ? `.${el.className.trim().split(/\s+/).join('.')}` : el.tagName.toLowerCase());
+                culprits.push({
+                    selector: sel,
+                    tag: el.tagName.toLowerCase(),
+                    pageBottom: pb,
+                    excessPx: pb - ledgerPageBottom,
+                    height: Math.round(r.height),
+                    position: cs.position,
+                    overflow: cs.overflowY,
+                    element: el
+                });
+            }
+        });
+
+        if (culprits.length > 0) {
+            console.warn(`%c⚠️ Detected ${culprits.length} element(s) extending below #cm-ledger-card:`, "color:#ff4b4b; font-weight:bold;");
+            console.table(culprits);
+        } else {
+            console.log("%c✅ No child elements extend past #cm-ledger-card.", "color:#8ed068; font-weight:bold;");
+            if (trailingGap > 5) {
+                console.warn(`%c⚠️ Excess gap of ${trailingGap}px is created by the container or document box model itself (min-height, padding-bottom, or body height).`, "color:#ffb84d; font-weight:bold;");
+            }
+        }
+    } catch (err) {
+        console.error("Layout diagnostic failed:", err);
+    }
+    console.groupEnd();
+}
+window.cmDiagnoseLayout = cmDiagnoseLayout;
+
 if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initDashboard);
+    document.addEventListener("DOMContentLoaded", () => {
+        initDashboard();
+        setTimeout(cmDiagnoseLayout, 800);
+        setTimeout(cmDiagnoseLayout, 2500);
+    });
 } else {
     initDashboard();
+    setTimeout(cmDiagnoseLayout, 800);
+    setTimeout(cmDiagnoseLayout, 2500);
 }

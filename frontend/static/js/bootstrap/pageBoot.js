@@ -1,12 +1,13 @@
 
-import { hub } from "../core/eventHub.js?v=0.1.373";
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.373";
+import { hub } from "../core/eventHub.js?v=0.1.427";
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.427";
 // Hydrate header button
 document.addEventListener("DOMContentLoaded", () => {
     const syncBtn = document.getElementById("cm-sync-btn");
     if (syncBtn) {
         syncBtn.innerHTML = UI_LABELS.SYNC_BTN_ACTIVE;
-        syncBtn.addEventListener("click", () => {
+        syncBtn.addEventListener("click", (e) => {
+            if (e) e.preventDefault();
             syncBtn.innerHTML = UI_LABELS.SYNC_BTN_LOADING;
             hub.emit(EVENTS.SYNC_REQUESTED);
             setTimeout(() => syncBtn.innerHTML = UI_LABELS.SYNC_BTN_ACTIVE, 3000);
@@ -140,19 +141,19 @@ commit-matrix</code></pre>
 
     // --- Listen to Context Changes & Init Observers ---
     try {
-        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.1.373");
+        const { initInfiniteScroll } = await import("../ui/tableRender.js?v=0.1.427");
         if (!window.MATRIX_SYSTEM_EMPTY && !window.MATRIX_INVALID_REPO) {
             const p = new URLSearchParams(window.location.search);
             initInfiniteScroll(p.get("repo") || "commit-matrix", 100);
         }
 
-        const { hub } = await import("../core/eventHub.js?v=0.1.373");
+        const { hub } = await import("../core/eventHub.js?v=0.1.427");
         window.hub = hub; // Ensure inline handlers like (Add Repo) retain access
         
         hub.on("CONTEXT_CHANGED", (payload) => {
         console.log(`[CommitMatrix] 🔄 Context rotated to ${payload.repo}. State sync delegated to app.js...`);
     });
     } catch (e) {
-        console.error("[CommitMatrix] Failed to hook Event Hub in pageBoot.js?v=0.1.373", e);
+        console.error("[CommitMatrix] Failed to hook Event Hub in pageBoot.js?v=0.1.427", e);
     }
 })();

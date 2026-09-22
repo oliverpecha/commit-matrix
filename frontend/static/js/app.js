@@ -1,19 +1,19 @@
 import { TIER_DISTRIBUTIONS, TIER_DISTRIBUTION_MAP } from './constants/tiers.js?v=0.1.427';
 // v0.1.19
-import { hub } from "./core/eventHub.js?v=0.1.373";
-import "./core/appStateCtrl.js?v=0.1.373";
-import "./engine/repoManager.js?v=0.1.373";
-import "./engine/telemetryStream.js?v=0.1.373";
-import "./engine/engineControl.js?v=0.1.373";
-import "./ui/terminalView.js?v=0.1.373";
+import { hub } from "./core/eventHub.js?v=0.1.427";
+import "./core/appStateCtrl.js?v=0.1.427";
+import "./engine/repoManager.js?v=0.1.427";
+import "./engine/telemetryStream.js?v=0.1.427";
+import "./engine/engineControl.js?v=0.1.427";
+import "./ui/terminalView.js?v=0.1.427";
 
-import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.373';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.373';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.373';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.373';
-import { CM_COLORS } from './constants/colors.js?v=0.1.373';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.373';
-import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.373';
+import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.427';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.427';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.427';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.427';
+import { CM_COLORS } from './constants/colors.js?v=0.1.427';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.427';
+import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.427';
 window.hub = hub;
 window.UI_STATE = UI_STATE;
 import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.427';
@@ -42,7 +42,7 @@ function computeKPIs(p) {
         else if (c.tier === 'Core') sig++;
         else if (c.tier === 'Minor') rout++;
     }
-    const rawData = window.MATRIX_PAYLOAD_RAW || window.MATRIX_PAYLOAD || [];
+    const rawData = window.MATRIX_PAYLOAD_RAW || (window.MATRIX_CHART_PAYLOAD && window.MATRIX_CHART_PAYLOAD.length ? window.MATRIX_CHART_PAYLOAD : window.MATRIX_PAYLOAD) || [];
     const totalAll = rawData.length || p.length;
     return { count: p.length, totalAll, avg: p.length > 0 ? (tot / p.length).toFixed(1) : "0.0", crit, sig, rout };
 }
@@ -133,6 +133,10 @@ function attemptRender() {
     window.attemptRender = attemptRender;
     if (!window.MATRIX_PAYLOAD_RAW && window.MATRIX_PAYLOAD && window.MATRIX_PAYLOAD.length) {
         window.MATRIX_PAYLOAD_RAW = window.MATRIX_PAYLOAD;
+    }
+    // Ensure full dataset is preserved across renders and never collapsed to 100-slice
+    if (!window.MATRIX_PAYLOAD_RAW && window.MATRIX_CHART_PAYLOAD && window.MATRIX_CHART_PAYLOAD.length) {
+        window.MATRIX_PAYLOAD_RAW = window.MATRIX_CHART_PAYLOAD;
     }
     const sourceData = window.MATRIX_PAYLOAD_RAW || window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
     
@@ -394,8 +398,13 @@ hub.on("DATA:LEDGER_UPDATED", (payload = {}) => {
 // --- Date Filtering Controller ---
 
 hub.on("FILTER:ENTER_INCOMING", () => {
-    // Wiping disabled here to preserve boot parsed denominator
-    window.CM_PRE_INCOMING_FILTER = { ...UI_STATE.dateFilter };
+    // Preserve prior filter only if currently not already in incoming mode
+    if (UI_STATE.dateFilter && UI_STATE.dateFilter.mode !== 'incoming') {
+        window.CM_PRE_INCOMING_FILTER = { ...UI_STATE.dateFilter };
+        if (UI_STATE.dateFilter.label && UI_STATE.dateFilter.label !== 'Incoming') {
+            window.CM_LAST_ACTIVE_FILTER = { ...UI_STATE.dateFilter };
+        }
+    }
     UI_STATE.dateFilter = { start: null, end: null, label: 'Incoming', mode: 'incoming' };
     const lbl = document.getElementById('cm-date-label');
     const toggle = document.getElementById('cm-date-toggle');
@@ -407,16 +416,42 @@ hub.on("FILTER:ENTER_INCOMING", () => {
 hub.on("FILTER:EXIT_INCOMING", () => {
     window.CM_INCOMING_TOTAL = undefined;
     window.CM_INCOMING_REMAINING = undefined;
-    if (UI_STATE.dateFilter.mode !== 'incoming') return; // user already overrode manually
+    if (UI_STATE.dateFilter?.mode !== 'incoming') return; // user already overrode manually
     UI_STATE.incomingBaselineIds = null;
-    UI_STATE.dateFilter = { start: null, end: null, label: 'All history', mode: 'preset' };
-    const lbl = document.getElementById('cm-date-label');
-    const toggle = document.getElementById('cm-date-toggle');
-    if (lbl) lbl.textContent = 'All history';
-    if (toggle) toggle.classList.remove('incoming-live');
+
+    // Restore the user's previous filter state, preferring CM_PRE_INCOMING_FILTER or CM_LAST_ACTIVE_FILTER
+    const restored = window.CM_PRE_INCOMING_FILTER || window.CM_LAST_ACTIVE_FILTER || { start: null, end: null, label: 'All history', mode: 'preset' };
     window.CM_PRE_INCOMING_FILTER = null;
+
+    const toggle = document.getElementById('cm-date-toggle');
+    if (toggle) toggle.classList.remove('incoming-live');
     document.body.classList.remove('incoming-empty');
-    attemptRender();
+
+    if (typeof window.CM_APPLY_DATE_FILTER === 'function') {
+        window.CM_APPLY_DATE_FILTER(restored.start, restored.end, restored.label || 'All history', restored.mode);
+        // If restored filter was custom, update custom panel inputs
+        const startInput = document.getElementById('cm-date-start');
+        const endInput = document.getElementById('cm-date-end');
+        const customPanel = document.getElementById('cm-date-custom-panel');
+        if (restored.mode === 'custom' && customPanel) {
+            customPanel.style.display = 'inline-flex';
+            const tsToYMD = (ts) => {
+                const d = new Date(ts * 1000);
+                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            };
+            if (startInput && restored.start) startInput.value = tsToYMD(restored.start);
+            if (endInput && restored.end) endInput.value = tsToYMD(restored.end);
+        }
+    } else {
+        UI_STATE.dateFilter = { ...restored };
+        const lbl = document.getElementById('cm-date-label');
+        if (lbl) lbl.textContent = UI_STATE.dateFilter.label || 'All history';
+        if (toggle) {
+            const isNonDefault = UI_STATE.dateFilter.label && UI_STATE.dateFilter.label !== 'All history';
+            toggle.classList.toggle('active', !!isNonDefault);
+        }
+        attemptRender();
+    }
 });
 
 function initDateFilter() {

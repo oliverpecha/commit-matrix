@@ -1,13 +1,13 @@
 // v0.1.11
-import { hub } from "../core/eventHub.js?v=0.1.373";
-import { APP_STATES } from "../core/state.js?v=0.1.373";import {
+import { hub } from "../core/eventHub.js?v=0.1.427";
+import { APP_STATES } from "../core/state.js?v=0.1.427";import {
     getAppState,
     setAppState,
     markLedgerSeen,
     hasSeenLedger,
     initAppStateFromLedger,
-} from "../core/appStateCtrl.js?v=0.1.373";
-import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.373";import {
+} from "../core/appStateCtrl.js?v=0.1.427";
+import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.427";import {
     renderShell,
     appendTerminalChunk,
     showPauseButton,
@@ -15,12 +15,12 @@ import { renderCliOverlay } from "./terminalCliOverlay.js?v=0.1.373";import {
     setTerminalProcessing,
     setTerminalComplete,
     setTerminalFailed,
-} from "./terminalRenderCtrl.js?v=0.1.373";
+} from "./terminalRenderCtrl.js?v=0.1.427";
 import {
     resetCloseLifecycle,
     scheduleAutoClose,
     cancelAutoClose,
-} from "./terminalLifecycle.js?v=0.1.373";
+} from "./terminalLifecycle.js?v=0.1.427";
 
 function renderShellForCurrentState() {
     const termSlot = setAppState(getAppState());

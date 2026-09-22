@@ -1,5 +1,5 @@
-import { hub } from "../core/eventHub.js?v=0.1.373";
-import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.1.373";
+import { hub } from "../core/eventHub.js?v=0.1.427";
+import { showAutoCloseToast, clearAutoCloseToast } from "./autoCloseToast.js?v=0.1.427";
 let closeInFlight = false;
 let closeTimer = null;
 
@@ -23,7 +23,73 @@ export function closeTerminalPanel() {
     window.CM_CLOSE_IN_PROGRESS = true;
     clearCloseTimer();
     clearAutoCloseToast(document.getElementById("cm-terminal-toast-slot"));
-    window.location.reload();
+    
+    // 1. Emit the close event to restore the Date Filter state
+    hub.emit("ACTION:CLOSE_TERMINAL");
+    
+    // 2. Gracefully hide the terminal UI and restore DOM layout
+    setTimeout(() => {
+        const slots = ["cm-terminal-slot", "cm-native-terminal-slot", "cm-terminal-overlay"];
+        slots.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+        document.body.classList.remove("incoming-boot", "incoming-boot-leaving");
+        
+        // Inline robust layout restoration
+        const wrap = document.getElementById("main-dashboard-wrap");
+        const leftCol = document.getElementById("cm-left-col");
+        const rightCol = document.getElementById("cm-right-col");
+        
+        if (wrap && leftCol && rightCol) {
+            wrap.dataset.layout = "";
+            wrap.style.display = "";
+            wrap.style.gridTemplateColumns = "";
+            wrap.style.alignItems = "";
+            wrap.style.gap = "";
+            wrap.style.height = "";
+            wrap.style.overflow = "";
+            
+            const allChildren = [...Array.from(leftCol.children), ...Array.from(rightCol.children)];
+            allChildren.forEach(child => {
+                if (child.id === "cm-native-terminal-slot") {
+                    child.remove(); // Safely discard terminal UI slot
+                } else {
+                    if (child.id === "cm-ledger-card") {
+                        child.style.flex = "";
+                        child.style.minHeight = "";
+                        child.style.height = "";
+                        child.style.display = "";
+                        child.style.flexDirection = "";
+                        const tblWrap = child.querySelector(".cm-tbl-wrap");
+                        if (tblWrap) {
+                            tblWrap.style.flex = "";
+                            tblWrap.style.height = "";
+                            tblWrap.style.maxHeight = "";
+                            tblWrap.style.overflowY = "";
+                        }
+                    }
+                    wrap.appendChild(child); // Push back to main container
+                }
+            });
+            leftCol.remove();
+            rightCol.remove();
+            
+            // Force charts to adapt to their new full-width containers
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                if (typeof window.attemptRender === 'function') {
+                    window.attemptRender();
+                }
+            }, 50); // Yield a frame for the DOM to settle
+        }
+
+        // Un-flag so future syncs work on the same page
+        setTimeout(() => {
+            window.CM_CLOSE_IN_PROGRESS = false;
+            closeInFlight = false;
+        }, 300);
+    }, 150);
 }
 
 export function cancelAutoClose() {

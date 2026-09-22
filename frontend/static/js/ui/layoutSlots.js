@@ -38,10 +38,12 @@ export function ensureSideLayoutSlots() {
     const children = Array.from(wrap.children);
     children.forEach(child => {
         if (child.id === "cm-ledger-card") {
-            child.style.cssText = "flex:1; min-height:0; display:flex; flex-direction:column;";
+            child.style.cssText = "flex:0 0 auto; min-height:0; height:fit-content; display:flex; flex-direction:column;";
             const tblWrap = child.querySelector(".cm-tbl-wrap");
             if (tblWrap) {
-                tblWrap.style.flex = "1";
+                tblWrap.style.flex = "0 0 auto";
+                tblWrap.style.height = "fit-content";
+                tblWrap.style.maxHeight = "560px";
                 tblWrap.style.overflowY = "auto";
             }
             rightCol.appendChild(child);

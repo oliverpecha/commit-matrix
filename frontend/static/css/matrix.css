@@ -45,6 +45,7 @@
 .cm-tbl-wrap {
   overflow-x: auto;
   overflow-y: auto;
+  height: fit-content;
   max-height: 560px;
   width: 100%;
   position: relative;
@@ -163,6 +164,9 @@
 #cm-ledger-card {
   overflow: hidden !important;
   isolation: isolate;
+  height: fit-content !important;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
 }
 
 #cm-thead th {

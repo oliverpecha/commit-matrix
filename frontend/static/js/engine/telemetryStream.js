@@ -1,12 +1,13 @@
-import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.373";
-import { hub } from "../core/eventHub.js?v=0.1.373";
-import { contextKey } from "../core/state.js?v=0.1.373";
-import { UI_STATE } from "../core/state.js?v=0.1.373";
-import { EVENTS } from "../core/state.js?v=0.1.373";
+import { formatTerminalChunk } from "../ui/terminalFormatter.js?v=0.1.427";
+import { hub } from "../core/eventHub.js?v=0.1.427";
+import { contextKey } from "../core/state.js?v=0.1.427";
+import { UI_STATE } from "../core/state.js?v=0.1.427";
+import { EVENTS } from "../core/state.js?v=0.1.427";
 window.CM_ENGINE_CONTROLLABLE = window.CM_ENGINE_CONTROLLABLE || false;
 window.CM_SCAN_IN_FLIGHT = window.CM_SCAN_IN_FLIGHT || false;
 
 hub.on("ENGINE:SCAN_REQUESTED", async ({ repo, token, mode } = {}) => {
+    console.log("[Trace] ENGINE:SCAN_REQUESTED triggered. Current UI_STATE.dateFilter:", JSON.stringify(window.UI_STATE?.dateFilter));
     if (window.CM_SCAN_IN_FLIGHT) return;
     window.CM_INCOMING_TOTAL = undefined;
     window.CM_INCOMING_REMAINING = undefined;

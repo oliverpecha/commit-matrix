@@ -1,16 +1,16 @@
 import { TIER_DISTRIBUTION_MAP } from '../constants/tiers.js?v=0.1.427';
 import { AVG_MODES, initAvgSmoothingRevolving } from '../ui/revolvingButton.js?v=0.1.427';
 const ChartRegistry = new Map();
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.373';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.373';
-import { UI_STATE } from '../core/state.js?v=0.1.373';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.373';
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.427';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.427';
+import { UI_STATE } from '../core/state.js?v=0.1.427';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.427';
 
 const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');
 ghostCanvas.width = 600;
 ghostCanvas.height = 200;
-ghostCanvas.style.cssText = 'position:absolute;visibility:hidden;width:600px;height:200px;';
+ghostCanvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;visibility:hidden;width:600px;height:200px;pointer-events:none;';
 document.body.appendChild(ghostCanvas);
 
 const ghostSync = { id: 'ghostSync', afterLayout(chart) {
@@ -62,11 +62,11 @@ if (OriginalChart && !window.CM_CHART_INTERCEPTED) {
                 // Try native Chart.js v3+ registry first (survives module reloads)
                 if (OriginalChart.getChart) {
                     const existing = OriginalChart.getChart(cid);
-                    if (existing) { const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible'); const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible'); existing.destroy(); }
+                    if (existing) { const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible'); existing.destroy(); }
                 }
                 // Fallback to our local Map registry
                 if (typeof ChartRegistry !== 'undefined' && ChartRegistry.has(cid)) {
-                    { const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible'); const infoTt = document.getElementById('info-tt'); if (infoTt) infoTt.classList.remove('visible'); ChartRegistry.get(cid).destroy(); }
+                    { const cmTt = document.getElementById('cm-tt'); if (cmTt) cmTt.classList.remove('visible'); ChartRegistry.get(cid).destroy(); }
                     ChartRegistry.delete(cid);
                 }
             }
