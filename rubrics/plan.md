@@ -64,12 +64,9 @@ Calculate `tot` as P + L + A + N. Calculate `score_pct` as `round(tot / 16 * 100
 ## Scoring Contract
 
 - All axes score integer **1, 2, 3, or 4** — no floats, no 0, no 5
-- `tot` must equal the exact sum of all axis scores
-- `score_pct` must equal `round(tot / max_score * 100, 1)` where `max_score = 16`
-- `tier` must match the threshold table above
-- `danger_flag` is derived from the specific axis combination defined in this rubric
 - `debt_direction` must be one of: `"increases"` | `"neutral"` | `"reduces"`
 - At least one `touches_*` key must be present, scoring a 0-4 integer intensity
+- Do NOT calculate or include `tot`, `score_pct`, `tier`, or `danger_flag` (these are computed by application code)
 - Respond STRICTLY in valid JSON. No markdown, no explanation, no text outside the JSON object.
 
 

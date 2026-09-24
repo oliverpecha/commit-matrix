@@ -70,7 +70,7 @@ class Spinner:
 
 
 # ── JSON contract validator ───────────────────────────────────────────────────
-REQUIRED_FIELDS = {"tot", "score_pct", "tier", "danger_flag", "debt_direction"}
+REQUIRED_FIELDS = {"debt_direction"}
 VALID_TIERS     = {"Pivotal", "Core", "Minor"}
 VALID_DEBT_DIRS = {"increases", "neutral", "reduces"}
 
@@ -85,8 +85,9 @@ def validate_contract(payload: dict, rubric_name: str = "") -> list:
         if f not in payload:
             violations.append(f"missing field: {f}")
 
-    if "tier" in payload and payload["tier"] not in VALID_TIERS:
-        violations.append(f"invalid tier: {payload['tier']!r}")
+    has_touch = any(k.startswith("touches_") or k == "touches" for k in payload)
+    if not has_touch:
+        violations.append("missing touches_* intensity field")
 
     if "debt_direction" in payload and payload["debt_direction"] not in VALID_DEBT_DIRS:
         violations.append(f"invalid debt_direction: {payload['debt_direction']!r}")

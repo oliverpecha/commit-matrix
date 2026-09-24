@@ -20,10 +20,8 @@ Every rubric, regardless of project type or axis design, must produce a JSON res
 | Field | Type | Constraint |
 |---|---|---|
 | One key per axis | integer | Value must be 1, 2, 3, or 4 — no floats, no 0, no 5 |
-| `tot` | integer | Must equal the exact sum of all axis scores |
-| `score_pct` | float | Must equal `round(tot / max_score * 100, 1)` where `max_score = axes × 4` |
-| `tier` | string | Must be `"Pivotal"` / `"Core"` / `"Minor"` |
-| `danger_flag` | boolean | Derived from rubric-specific axis combination logic |
+| `debt_direction` | string | Must be `"increases"` / `"neutral"` / `"reduces"` |
+| (Derived fields) | computed | `tot`, `score_pct`, `tier`, and `danger_flag` are computed in application code |
 | `debt_direction` | string | Must be `"increases"` / `"neutral"` / `"reduces"` |
 | At least one `touches_*` | integer | Intensity from 0 to 4 (0 = untouched, 4 = critical/blast radius) |
 
