@@ -1,23 +1,23 @@
-import { TIER_DISTRIBUTIONS, TIER_DISTRIBUTION_MAP } from './constants/tiers.js?v=0.1.427';
+import { TIER_DISTRIBUTIONS, TIER_DISTRIBUTION_MAP } from './constants/tiers.js?v=0.1.431';
 // v0.1.19
-import { hub } from "./core/eventHub.js?v=0.1.427";
-import "./core/appStateCtrl.js?v=0.1.427";
-import "./engine/repoManager.js?v=0.1.427";
-import "./engine/telemetryStream.js?v=0.1.427";
-import "./engine/engineControl.js?v=0.1.427";
-import "./ui/terminalView.js?v=0.1.427";
+import { hub } from "./core/eventHub.js?v=0.1.431";
+import "./core/appStateCtrl.js?v=0.1.431";
+import "./engine/repoManager.js?v=0.1.431";
+import "./engine/telemetryStream.js?v=0.1.431";
+import "./engine/engineControl.js?v=0.1.431";
+import "./ui/terminalView.js?v=0.1.431";
 
-import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.427';
-import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.427';
-import { renderHeatmap } from './ui/heatmap.js?v=0.1.427';
-import { renderTable } from './ui/tableCtrl.js?v=0.1.427';
-import { CM_COLORS } from './constants/colors.js?v=0.1.427';
-import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.427';
-import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.427';
+import { processCommits, filterByDateBounds } from './core/dataEngine.js?v=0.1.431';
+import { renderTypesChart, renderStackChart, renderTrendChart, renderRiskCharts, renderConvergenceChart, renderTierChart } from './charts/chartCtrl.js?v=0.1.431';
+import { renderHeatmap } from './ui/heatmap.js?v=0.1.431';
+import { renderTable } from './ui/tableCtrl.js?v=0.1.431';
+import { CM_COLORS } from './constants/colors.js?v=0.1.431';
+import { UI_STATE, bumpGeneration } from './core/state.js?v=0.1.431';
+import { showTotalZeroState, showFilteredZeroState, hideZeroStates } from './ui/zeroStateCtrl.js?v=0.1.431';
 window.hub = hub;
 window.UI_STATE = UI_STATE;
-import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.427';
-import { initTierDistributionRevolving, initAvgSmoothingRevolving, initGlobalChronRevolving } from './ui/revolvingButton.js?v=0.1.427';
+import { initGlobalTooltips } from './ui/tooltips.js?v=0.1.431';
+import { initTierDistributionRevolving, initAvgSmoothingRevolving, initGlobalChronRevolving } from './ui/revolvingButton.js?v=0.1.431';
 initAvgSmoothingRevolving();
 initGlobalChronRevolving();
 initGlobalTooltips();
@@ -131,12 +131,12 @@ function runRenderQueue(steps, gen) {
 
 function attemptRender() {
     window.attemptRender = attemptRender;
-    if (!window.MATRIX_PAYLOAD_RAW && window.MATRIX_PAYLOAD && window.MATRIX_PAYLOAD.length) {
-        window.MATRIX_PAYLOAD_RAW = window.MATRIX_PAYLOAD;
-    }
-    // Ensure full dataset is preserved across renders and never collapsed to 100-slice
-    if (!window.MATRIX_PAYLOAD_RAW && window.MATRIX_CHART_PAYLOAD && window.MATRIX_CHART_PAYLOAD.length) {
-        window.MATRIX_PAYLOAD_RAW = window.MATRIX_CHART_PAYLOAD;
+    if (!window.MATRIX_PAYLOAD_RAW) {
+        if (window.MATRIX_CHART_PAYLOAD && window.MATRIX_CHART_PAYLOAD.length >= (window.MATRIX_PAYLOAD?.length || 0)) {
+            window.MATRIX_PAYLOAD_RAW = window.MATRIX_CHART_PAYLOAD;
+        } else if (window.MATRIX_PAYLOAD && window.MATRIX_PAYLOAD.length) {
+            window.MATRIX_PAYLOAD_RAW = window.MATRIX_PAYLOAD;
+        }
     }
     const sourceData = window.MATRIX_PAYLOAD_RAW || window.MATRIX_CHART_PAYLOAD || window.MATRIX_PAYLOAD || [];
     

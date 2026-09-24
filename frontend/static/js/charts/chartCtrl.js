@@ -1,10 +1,10 @@
-import { TIER_DISTRIBUTION_MAP } from '../constants/tiers.js?v=0.1.427';
-import { AVG_MODES, initAvgSmoothingRevolving } from '../ui/revolvingButton.js?v=0.1.427';
+import { TIER_DISTRIBUTION_MAP } from '../constants/tiers.js?v=0.1.431';
+import { AVG_MODES, initAvgSmoothingRevolving } from '../ui/revolvingButton.js?v=0.1.431';
 const ChartRegistry = new Map();
-import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.427';
-import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.427';
-import { UI_STATE } from '../core/state.js?v=0.1.427';
-import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.427';
+import { CM_COLORS, BP_AXC_BASE, SC_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.431';
+import { calcMAvg, getTop25, processCommits } from '../core/dataEngine.js?v=0.1.431';
+import { UI_STATE } from '../core/state.js?v=0.1.431';
+import { monthDiv, customTooltip, getXConf, MD_TOP } from './plugins.js?v=0.1.431';
 
 const SVCS_GHOST = ['Metrics','Preflight','Tests','Docs','Dashboard','Config','Scripts','Proxy'];
 const ghostCanvas = document.createElement('canvas');

@@ -1,6 +1,6 @@
-import { UI_STATE } from "../core/state.js?v=0.1.427";
-import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.427";
-import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll, syncTableHeaders } from "./tableRender.js?v=0.1.427";
+import { UI_STATE } from "../core/state.js?v=0.1.431";
+import { getLiveSort, setLiveSort, syncHeaderCarets } from "./tableState.js?v=0.1.431";
+import { getTableColumns, normalizeCommits, sortDisplayData, renderTableRowsBatched, initInfiniteScroll, syncTableHeaders } from "./tableRender.js?v=0.1.431";
 export function renderTable(commits) {
     const thead = document.getElementById("cm-thead");
     const tbody = document.getElementById("cm-tbody");

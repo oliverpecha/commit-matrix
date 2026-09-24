@@ -1,7 +1,7 @@
-import { TIER_DISTRIBUTIONS, TIER_DISTRIBUTION_MAP } from '../constants/tiers.js?v=0.1.427';
-import { UI_STATE } from '../core/state.js?v=0.1.427';
-import { processCommits, filterByDateBounds } from '../core/dataEngine.js?v=0.1.427';
-import { renderTierChart, renderTrendChart, renderStackChart, renderConvergenceChart, renderTypesChart, renderFragChart, renderChurnChart, renderBlastChart, renderRiskCharts } from '../charts/chartCtrl.js?v=0.1.427';
+import { TIER_DISTRIBUTIONS, TIER_DISTRIBUTION_MAP } from '../constants/tiers.js?v=0.1.431';
+import { UI_STATE } from '../core/state.js?v=0.1.431';
+import { processCommits, filterByDateBounds } from '../core/dataEngine.js?v=0.1.431';
+import { renderTierChart, renderTrendChart, renderStackChart, renderConvergenceChart, renderTypesChart, renderFragChart, renderChurnChart, renderBlastChart, renderRiskCharts } from '../charts/chartCtrl.js?v=0.1.431';
 
 const REVOLVE_ICON_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-1px; margin-right:6px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
 const PILL_ICON_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-1px; margin-right:2px;"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>`;

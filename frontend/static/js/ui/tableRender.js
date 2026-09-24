@@ -1,5 +1,5 @@
-import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.427';
-import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.427';
+import { TYPE_COLORS, SCOPE_COLORS } from '../constants/colors.js?v=0.1.431';
+import { filterByDateBounds } from '../core/dataEngine.js?v=0.1.431';
 
 const formatTableDate = (ts) => {
     if (!ts) return "Unknown";

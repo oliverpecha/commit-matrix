@@ -144,7 +144,7 @@ async def index(request: Request, owner: str = None, repo: str = None, rubric: s
     # 3. Normal Load
     ledger = fetch_ledger(repo, rubric=rubric, owner=request.query_params.get("owner", "local"))
     chart_data = [{k: v for k, v in c.items()} for c in ledger]
-    table_data = ledger[:100]
+    table_data = ledger
 
     # Resolve physical path for browser console logging
     # import glob, os  # fixed UnboundLocalError
