@@ -56,42 +56,13 @@ def process_commit(
             from backend.services.inference.scoring_call import run_inference
             result = run_inference(sys_prompt, user_prompt, model_name, rate_limits, aimd)
 
-        # 3. DATA EXTRACTION
+        # 3. DATA EXTRACTION & ROW GENERATION (Via unified inference_pipe)
+        from backend.services.inference.scoring_call import format_commit_row
+        headers, row = format_commit_row(topo_id, parts, result, rubric_spec, model_name, arch_tree_signature, arch_gen)
         axes = result["axes"]
         touches = result["touches"]
         total_score = result["tot"]
-        score_pct = result["score_pct"]
-        danger_flag = result["danger_flag"]
-        debt_direction = result["debt_direction"]
         tier_label = result["tier"]
-        rubric_version = result.get("rubric_version", "1.0")
-
-        import re
-        m_type = re.match(r"^([a-zA-Z_-]+)(?:\(([^)]+)\))?:", subject)
-        if m_type:
-            commit_type = m_type.group(1).lower()
-            commit_scope = m_type.group(2) or ""
-        else:
-            commit_type = "chore"
-            commit_scope = ""
-
-        additions = diff.count("\n+") - diff.count("\n+++")
-        deletions = diff.count("\n-") - diff.count("\n---")
-
-        # 4. ROW GENERATION (Arch sig and gen safely preserved here for the DB/CSV)
-        headers = ["#", "Date", "Type", "Scope", "Subject", "Tier", "Total", "ScorePct", "Danger", "Debt", "Additions", "Deletions", "Hash", "TreeSig", "ArchGen", "Model", "RubricVersion"]
-        clean_tier = tier_label.split()[1] if tier_label else "MINOR"
-        row = [topo_id, date_str, commit_type, commit_scope, subject, clean_tier, total_score, score_pct, str(danger_flag).upper(), debt_direction, f"+{additions}", f"-{deletions}", hash_short, arch_tree_signature or "", arch_gen if arch_gen is not None else "", model_name, rubric_version]
-
-        axes_ordered = rubric_spec.axes_keys
-        for k in axes_ordered:
-            if k in axes:
-                headers.append(k)
-                row.append(axes[k])
-            
-        for k in sorted(touches.keys()):
-            headers.append(k)
-            row.append(touches[k])
 
         # 5. UI GENERATION (Delegated safely)
         safe_total = max(1, total_unscanned)

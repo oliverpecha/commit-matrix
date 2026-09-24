@@ -325,6 +325,7 @@ def write_architecture_run(db_path: str, payload: dict, rubric_name: str = None)
 
 def write_snapshot_meta(repo_path: str, snapshot_sig: str, meta: dict, rubric_name: str = None) -> None:
     rubric_name = rubric_name or __import__("os").environ.get("RUBRIC_NAME", "unknown")
+    
     """Write a single snapshot's metadata to the DB.
 
     Called by arch_builder.py after each architecture generation.

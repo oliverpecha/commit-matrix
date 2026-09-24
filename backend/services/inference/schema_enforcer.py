@@ -123,10 +123,17 @@ def parse_and_validate(raw_content: str, rubric_spec: RubricSpec) -> dict:
         v = raw_axes[k]
         if isinstance(v, bool):
             raise ValueError(f"Axis {k} is a boolean, must be integer.")
+        if isinstance(v, float):
+            raise ValueError(f"Axis {k} is a float ({v}), must be integer.")
+        if v is None:
+            raise ValueError(f"Axis {k} is null, must be integer.")
         try:
-            v_int = int(v)
+            v_str = str(v).strip()
+            if "." in v_str:
+                raise ValueError
+            v_int = int(v_str)
         except (ValueError, TypeError):
-            raise ValueError(f"Axis {k} must be integer, got {type(v)}: {v}")
+            raise ValueError(f"Axis {k} must be integer, got {type(v).__name__}: {v}")
             
         if not (1 <= v_int <= 4):
             raise ValueError(f"Axis {k} value {v_int} out of bounds (1-4).")
@@ -136,13 +143,20 @@ def parse_and_validate(raw_content: str, rubric_spec: RubricSpec) -> dict:
     touches = {}
     def _validate_touch(val, key_name):
         if isinstance(val, bool):
-            return 1 if val else 0
+            raise ValueError(f"touches field {key_name} is boolean ({val}), must be integer intensity (0-4).")
+        if isinstance(val, float):
+            raise ValueError(f"touches field {key_name} is float ({val}), must be integer intensity (0-4).")
+        if val is None:
+            raise ValueError(f"touches field {key_name} is null, must be integer intensity (0-4).")
         try:
-            v_int = int(val)
+            val_str = str(val).strip()
+            if "." in val_str:
+                raise ValueError
+            v_int = int(val_str)
         except (ValueError, TypeError):
-            raise ValueError(f"touches field {key_name} must be integer intensity (0-4), got {type(val)}: {val}")
+            raise ValueError(f"touches field {key_name} must be integer intensity (0-4), got {type(val).__name__}: {val}")
         if not (0 <= v_int <= 4):
-            raise ValueError(f"touches field {key_name} value {v_int} out of bounds (0-4)")
+            raise ValueError(f"touches field {key_name} value {v_int} out of bounds (0-4).")
         return v_int
 
     for k, v in result.items():
@@ -178,5 +192,6 @@ def parse_and_validate(raw_content: str, rubric_spec: RubricSpec) -> dict:
         "danger_flag": danger_flag,
         "debt_direction": debt_direction,
         "touches": touches,
+        "rationale": result.get("rationale", ""),
         "rubric_version": rubric_spec.version
     }
