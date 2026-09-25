@@ -16,6 +16,104 @@ def get_commit_diff(commit_hash, repo_path):
     cmd = f'git show {commit_hash} --pretty="" --unified=0'
     return run_cmd(cmd, cwd=repo_path)
 
+EXCLUDED_FILE_PATTERNS = [
+    r'package-lock\.json$', r'yarn\.lock$', r'pnpm-lock\.yaml$',
+    r'Cargo\.lock$', r'poetry\.lock$', r'Pipfile\.lock$',
+    r'vendor/', r'node_modules/', r'\.min\.(js|css)$',
+    r'\.map$', r'\.svg$', r'\.png$', r'\.jpg$'
+]
+
+def score_file_risk(filename: str) -> int:
+    fn = filename.lower()
+    if any(k in fn for k in ["migration", "schema", "auth", "security", "permission", "deploy", "ci", ".github/workflows"]):
+        return 100
+    if any(fn.endswith(ext) for ext in [".py", ".ts", ".js", ".go", ".rs", ".sql"]):
+        return 50
+    if any(k in fn for k in ["test", "spec", "fixture", "mock"]):
+        return 20
+    if any(fn.endswith(ext) for ext in [".md", ".txt", ".rst", ".doc"]):
+        return 10
+    return 30
+
+def parse_diff_files(diff_text: str):
+    raw_files = diff_text.split("diff --git ")
+    parsed = []
+    for chunk in raw_files:
+        if not chunk.strip():
+            continue
+        lines = chunk.splitlines()
+        first_line = lines[0]
+        pts = first_line.split(" ")
+        raw_name = pts[-1] if len(pts) >= 2 else "unknown"
+        filename = raw_name[2:] if raw_name.startswith("b/") else raw_name
+        parsed.append({"filename": filename, "content": "diff --git " + chunk})
+    return parsed
+
+def budget_commit_diff(diff_text: str, max_chars: int = 8000) -> tuple[str, dict]:
+    """B3/B4/B5 Diff budgeter prioritizing high-risk hunks and emitting coverage manifest."""
+    files = parse_diff_files(diff_text)
+    if not files:
+        return diff_text[:max_chars], {"included_files": [], "excluded_files": [], "truncated_files": []}
+
+    included = []
+    excluded = []
+    truncated = []
+
+    eligible = []
+    for f in files:
+        fn = f["filename"]
+        if any(re.search(pat, fn, re.IGNORECASE) for pat in EXCLUDED_FILE_PATTERNS):
+            excluded.append(fn)
+        else:
+            eligible.append(f)
+
+    # Sort files by risk score descending
+    eligible.sort(key=lambda x: score_file_risk(x["filename"]), reverse=True)
+
+    result_chunks = []
+    current_len = 0
+    trunc_marker = chr(10) * 2 + "... [TRUNCATED HUNKS RETAINED HEAD+TAIL] ..." + chr(10) * 2
+
+    for f in eligible:
+        fn = f["filename"]
+        content = f["content"]
+        if current_len + len(content) <= max_chars:
+            result_chunks.append(content)
+            current_len += len(content)
+            included.append(fn)
+        else:
+            remaining = max_chars - current_len
+            if remaining > 300:
+                half = remaining // 2
+                head = content[:half]
+                tail = content[-half:]
+                hunk = head + trunc_marker + tail
+                result_chunks.append(hunk)
+                current_len += len(hunk)
+                truncated.append(fn)
+            else:
+                excluded.append(fn)
+
+    manifest = {
+        "included_files": included,
+        "excluded_files": excluded,
+        "truncated_files": truncated
+    }
+    return chr(10).join(result_chunks), manifest
+
+def sanitize_injection_delimiters(val: str) -> str:
+    """B8 Prompt injection defense: sanitize raw text boundary markers."""
+    if not val:
+        return ""
+    markers = [
+        "=== COMMIT_DATA_START ===", "=== COMMIT_DATA_END ===",
+        "=== SYSTEM_INSTRUCTION_OVERRIDE ===", "<|im_start|>", "<|im_end|>"
+    ]
+    cleaned = str(val)
+    for m in markers:
+        cleaned = cleaned.replace(m, f"[ESCAPED_TOKEN:{m}]")
+    return cleaned
+
 def get_architecture_context(repo_path):
     """Generate repository architecture context."""
     tree = run_cmd('git ls-tree -r --name-only HEAD', cwd=repo_path)

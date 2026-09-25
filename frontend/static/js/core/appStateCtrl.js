@@ -1,6 +1,6 @@
-import { APP_STATES } from "./state.js?v=0.1.431";
-import { applyLayout } from "../ui/layoutCtrl.js?v=0.1.431";
-import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.1.431";
+import { APP_STATES } from "./state.js?v=0.1.436";
+import { applyLayout } from "../ui/layoutCtrl.js?v=0.1.436";
+import { deriveLayout, hasLedgerData } from "./layoutPolicy.js?v=0.1.436";
 window.CM_APP_STATE = window.CM_APP_STATE || APP_STATES.ZERO;
 
 function isEffectivelyEmpty() {

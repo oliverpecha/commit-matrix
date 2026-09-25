@@ -1,4 +1,4 @@
-import { getTierFromTotal } from '../constants/tiers.js?v=0.1.431';
+import { getTierFromTotal } from '../constants/tiers.js?v=0.1.436';
 export function filterByDateBounds(commits, startTs, endTs) {
     if (!Array.isArray(commits) || !commits.length) return [];
     if (!startTs && !endTs) return commits;

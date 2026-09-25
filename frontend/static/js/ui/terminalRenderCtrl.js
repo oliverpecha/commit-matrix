@@ -1,4 +1,4 @@
-import { renderTerminalShell } from "./terminalShell.js?v=0.1.431";
+import { renderTerminalShell } from "./terminalShell.js?v=0.1.436";
 export function captureShellSnapshot() {
     return {
         bodyHtml: document.getElementById("cm-terminal-body")?.innerHTML || "",

@@ -1,6 +1,6 @@
-import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.431';
-import { UI_STATE } from '../core/state.js?v=0.1.431';
-import { MD_TOP } from '../charts/plugins.js?v=0.1.431';
+import { SCOPE_COLORS, TYPE_COLORS } from '../constants/colors.js?v=0.1.436';
+import { UI_STATE } from '../core/state.js?v=0.1.436';
+import { MD_TOP } from '../charts/plugins.js?v=0.1.436';
 
 let lastCommits = [];
 let _transBound = false;

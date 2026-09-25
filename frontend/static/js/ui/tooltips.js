@@ -1,7 +1,7 @@
 
-import { getRevolvingTierCardHTML } from './revolvingButton.js?v=0.1.431';
+import { getRevolvingTierCardHTML } from './revolvingButton.js?v=0.1.436';
 
-import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.431';
+import { CM_EXPLANATIONS } from '../constants/explanations.js?v=0.1.436';
 
 export function initGlobalTooltips() {
     const infoTtEl = document.getElementById('info-tt');

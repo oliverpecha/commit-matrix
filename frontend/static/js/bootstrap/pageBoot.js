@@ -1,6 +1,6 @@
 
-import { hub } from "../core/eventHub.js?v=0.1.431";
-import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.431";
+import { hub } from "../core/eventHub.js?v=0.1.436";
+import { EVENTS, UI_LABELS } from "../core/state.js?v=0.1.436";
 // Hydrate header button
 document.addEventListener("DOMContentLoaded", () => {
     const syncBtn = document.getElementById("cm-sync-btn");
@@ -141,13 +141,13 @@ commit-matrix</code></pre>
 
     // --- Listen to Context Changes & Event Delegation ---
     try {
-        const { hub } = await import("../core/eventHub.js?v=0.1.431");
+        const { hub } = await import("../core/eventHub.js?v=0.1.436");
         window.hub = hub; // Ensure inline handlers like (Add Repo) retain access
         
         hub.on("CONTEXT_CHANGED", (payload) => {
         console.log(`[CommitMatrix] 🔄 Context rotated to ${payload.repo}. State sync delegated to app.js...`);
     });
     } catch (e) {
-        console.error("[CommitMatrix] Failed to hook Event Hub in pageBoot.js?v=0.1.431", e);
+        console.error("[CommitMatrix] Failed to hook Event Hub in pageBoot.js?v=0.1.436", e);
     }
 })();

@@ -20,16 +20,73 @@ def execute_commit_inference(
     aimd,
     rubric_spec: Optional[RubricSpec] = None,
 ) -> dict:
-    """Canonical single-source inference-and-validation pipeline.
-    
-    Executes model inference via llm_gateway and validates through schema_enforcer,
-    computing all derived fields (tot, score_pct, tier, danger_flag) application-side.
-    """
+    """Canonical single-source inference-and-validation pipeline."""
     if rubric_spec is None:
         rubric_spec = RubricSpec(sys_prompt)
+        
+    touch_keys = sorted(list(set(re.findall(r'touches_[a-z0-9_]+', sys_prompt.lower()))))
+    touches_props = {k: {"type": "integer"} for k in touch_keys}
+    axes_props = {k: {"type": "integer"} for k in rubric_spec.axes_keys}
     
-    raw_content = execute_inference(model_name, sys_prompt, user_prompt, rate_limits, aimd)
-    return parse_and_validate(raw_content, rubric_spec)
+    schema = {
+        "type": "object",
+        "properties": {
+            "axes": {
+                "type": "object",
+                "properties": axes_props,
+                "required": rubric_spec.axes_keys,
+                "additionalProperties": False
+            },
+            "touches": {
+                "type": "object",
+                "properties": touches_props,
+                "required": touch_keys,
+                "additionalProperties": False
+            },
+            "debt_direction": {
+                "type": "string",
+                "enum": ["increases", "neutral", "reduces"]
+            },
+            "rationale": {
+                "type": "string",
+                "description": "Brief 1-2 sentence explanation of architectural scores."
+            }
+        },
+        "required": ["axes", "touches", "debt_direction", "rationale"],
+        "additionalProperties": False
+    }
+    
+    # B8 Pre-scan quarantine gate for prompt injection patterns
+    injection_patterns = [
+        r"ignore\s+(all\s+)?previous\s+instructions",
+        r"disregard\s+all\s+(prior|above)\s+instructions",
+        r"system\s*:\s*override",
+        r"<\|im_start\|>",
+        r"you\s+are\s+now\s+in\s+developer\s+mode"
+    ]
+    is_suspicious = any(re.search(pat, user_prompt, re.IGNORECASE) for pat in injection_patterns)
+    if is_suspicious:
+        logger.warning(f"[B8 Defense] Commit user prompt contains suspected injection marker. Quarantining commit.")
+        return {
+            "axes": {k: 1 for k in rubric_spec.axes_keys},
+            "tot": len(rubric_spec.axes_keys),
+            "score_pct": 25.0,
+            "tier": "⚠️ QUARANTINED",
+            "danger_flag": True,
+            "debt_direction": "neutral",
+            "touches": {},
+            "rationale": "QUARANTINED: Prompt injection markers detected during pre-scan.",
+            "rubric_version": rubric_spec.version,
+            "quarantined": True
+        }
+
+    raw_content = execute_inference(
+        model_name, sys_prompt, user_prompt, rate_limits, aimd, 
+        response_schema=schema, max_tokens=1024, timeout=30
+    )
+    validated = parse_and_validate(raw_content, rubric_spec)
+    validated["quarantined"] = False
+    return validated
 
 
 # Canonical alias
